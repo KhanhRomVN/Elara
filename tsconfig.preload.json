@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.base.json",
+  "include": ["src/preload"],
+  "compilerOptions": {
+    "outDir": "out/preload",
+    "lib": ["DOM", "ESNext"],
+    "module": "ESNext" // Preload often needs CommonJS or is bundled specifically
+  }
+}
