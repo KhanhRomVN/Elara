@@ -140,82 +140,65 @@ export const setupAccountsHandlers = () => {
 
       const url =
         provider === 'Claude' ? 'https://claude.ai/login' : 'https://chat.deepseek.com/login';
-      authWindow.loadURL(url);
 
-      // For DeepSeek, inject script to capture email from login request
+      // For DeepSeek, intercept POST request to capture email from body
       let capturedEmail: string | null = null;
       if (provider === 'DeepSeek') {
-        authWindow.webContents.on('did-finish-load', () => {
-          console.log('[DeepSeek] Injecting email capture script...');
-          authWindow.webContents
-            .executeJavaScript(
-              `
-            (function() {
-              console.log('[DeepSeek Intercept] Script injected successfully');
-              const originalFetch = window.fetch;
-              const originalXHR = XMLHttpRequest.prototype.send;
-              
-              // Intercept fetch
-              window.fetch = function(...args) {
-                const [url, options] = args;
-                if (url && url.includes('/api/v0/users/login') && options?.body) {
-                  console.log('[DeepSeek Intercept] Login request detected (fetch)');
-                  try {
-                    const body = JSON.parse(options.body);
-                    console.log('[DeepSeek Intercept] Request body:', body);
-                    if (body.request) {
-                      const requestData = JSON.parse(body.request);
-                      console.log('[DeepSeek Intercept] Request data:', requestData);
-                      if (requestData.email) {
-                        window.__capturedEmail = requestData.email;
-                        console.log('[DeepSeek Intercept] ✅ Captured email:', requestData.email);
-                      } else {
-                        console.log('[DeepSeek Intercept] ⚠️ No email field in request data');
-                      }
-                    }
-                  } catch (e) {
-                    console.error('[DeepSeek Intercept] Error parsing request:', e);
+        console.log('[DeepSeek] Setting up webRequest interceptor...');
+
+        authSession.webRequest.onBeforeRequest(
+          { urls: ['https://chat.deepseek.com/api/v0/users/login'] },
+          (details, callback) => {
+            console.log('[DeepSeek] =====================================');
+            console.log('[DeepSeek] Intercepted login request');
+            console.log('[DeepSeek] Method:', details.method);
+            console.log('[DeepSeek] URL:', details.url);
+            console.log('[DeepSeek] Has uploadData:', !!details.uploadData);
+            console.log('[DeepSeek] uploadData:', details.uploadData);
+
+            if (details.method === 'POST' && details.uploadData) {
+              try {
+                console.log('[DeepSeek] uploadData length:', details.uploadData.length);
+                console.log('[DeepSeek] First uploadData item:', details.uploadData[0]);
+
+                // Get the request body from uploadData
+                const uploadItem = details.uploadData[0];
+                if (uploadItem.bytes) {
+                  const bodyString = Buffer.from(uploadItem.bytes).toString('utf-8');
+                  console.log('[DeepSeek] Request body captured, length:', bodyString.length);
+                  console.log('[DeepSeek] Body preview:', bodyString.substring(0, 200));
+
+                  const parsed = JSON.parse(bodyString);
+                  console.log('[DeepSeek] Parsed body keys:', Object.keys(parsed));
+
+                  // Email is at top level, not in a nested 'request' field
+                  if (parsed.email) {
+                    capturedEmail = parsed.email;
+                    console.log(`[DeepSeek] ✅ Successfully captured email: ${capturedEmail}`);
+                  } else {
+                    console.log('[DeepSeek] ⚠️ No email field in request body');
+                    console.log(
+                      '[DeepSeek] Body structure:',
+                      JSON.stringify(parsed, null, 2).substring(0, 300),
+                    );
                   }
+                } else if (uploadItem.file) {
+                  console.log('[DeepSeek] uploadData is a file, not bytes');
                 }
-                return originalFetch.apply(this, args);
-              };
-              
-              // Intercept XMLHttpRequest
-              XMLHttpRequest.prototype.send = function(body) {
-                if (this._url && this._url.includes('/api/v0/users/login') && body) {
-                  console.log('[DeepSeek Intercept] Login request detected (XHR)');
-                  try {
-                    const parsedBody = JSON.parse(body);
-                    console.log('[DeepSeek Intercept] Request body:', parsedBody);
-                    if (parsedBody.request) {
-                      const requestData = JSON.parse(parsedBody.request);
-                      console.log('[DeepSeek Intercept] Request data:', requestData);
-                      if (requestData.email) {
-                        window.__capturedEmail = requestData.email;
-                        console.log('[DeepSeek Intercept] ✅ Captured email:', requestData.email);
-                      } else {
-                        console.log('[DeepSeek Intercept] ⚠️ No email field in request data');
-                      }
-                    }
-                  } catch (e) {
-                    console.error('[DeepSeek Intercept] Error parsing request:', e);
-                  }
-                }
-                return originalXHR.apply(this, arguments);
-              };
-              
-              const originalOpen = XMLHttpRequest.prototype.open;
-              XMLHttpRequest.prototype.open = function(method, url) {
-                this._url = url;
-                return originalOpen.apply(this, arguments);
-              };
-            })();
-          `,
-            )
-            .then(() => console.log('[DeepSeek] Email capture script injected'))
-            .catch((e) => console.error('[DeepSeek] Failed to inject script:', e));
-        });
+              } catch (e) {
+                console.error('[DeepSeek] Error parsing request body:', e);
+              }
+            } else {
+              console.log('[DeepSeek] ⚠️ Not a POST request or no uploadData');
+            }
+            console.log('[DeepSeek] =====================================');
+
+            callback({});
+          },
+        );
       }
+
+      authWindow.loadURL(url);
 
       // Poll for credentials
       const interval = setInterval(async () => {
@@ -267,21 +250,7 @@ export const setupAccountsHandlers = () => {
                   clearInterval(interval);
                   const bearerToken = `Bearer ${tokenObj.value}`;
                   console.log('[DeepSeek] Token found, fetching profile...');
-
-                  // Try to get captured email from intercepted request first
-                  capturedEmail = await authWindow.webContents
-                    .executeJavaScript('window.__capturedEmail || null')
-                    .catch(() => null);
-
-                  console.log('[DeepSeek] Captured email check:', capturedEmail);
-
-                  if (capturedEmail) {
-                    console.log(
-                      `[DeepSeek] ✅ Successfully captured email from login request: ${capturedEmail}`,
-                    );
-                  } else {
-                    console.log('[DeepSeek] ⚠️ Failed to capture email from login request');
-                  }
+                  console.log('[DeepSeek] Captured email from webRequest:', capturedEmail);
 
                   // Fetch profile via API
                   let profile = await fetchDeepSeekProfile(bearerToken);
@@ -292,6 +261,8 @@ export const setupAccountsHandlers = () => {
                     profile.email = capturedEmail;
                   } else if (capturedEmail) {
                     console.log('[DeepSeek] ⚠️ Captured email is masked, will prompt user');
+                  } else {
+                    console.log('[DeepSeek] ⚠️ No email was captured from request');
                   }
 
                   // Fallback: Try to scrape from DOM if still no email
