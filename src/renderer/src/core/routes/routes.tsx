@@ -1,6 +1,7 @@
 import { RouteObject } from 'react-router-dom';
 import MainLayout from '../layouts/MainLayout';
 import DashboardPage from '../../features/dashboard';
+import AccountsPage from '../../features/accounts';
 
 export const routes: RouteObject[] = [
   {
@@ -10,6 +11,10 @@ export const routes: RouteObject[] = [
       {
         path: '',
         element: <DashboardPage />,
+      },
+      {
+        path: 'accounts',
+        element: <AccountsPage />,
       },
       {
         path: 'analytics',

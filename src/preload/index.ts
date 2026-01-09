@@ -1,9 +1,13 @@
 import { contextBridge } from 'electron';
 import { electronAPI } from '@electron-toolkit/preload';
 import { appAPI } from './api';
+import { accountsAPI } from './api/accounts';
+import { serverAPI } from './api/server';
 
 const api = {
   app: appAPI,
+  accounts: accountsAPI,
+  server: serverAPI,
 };
 
 if (process.contextIsolated) {

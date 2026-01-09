@@ -1,0 +1,161 @@
+import express from 'express';
+import cors from 'cors';
+import { app } from 'electron';
+import fs from 'fs';
+import path from 'path';
+import { Account } from '../ipc/accounts';
+import { chatCompletionStream } from './deepseek';
+
+const DATA_FILE = path.join(app.getPath('userData'), 'accounts.json');
+
+let server: any = null;
+const API_PORT = 11434; // Using Ollama-like port or ANY unused port
+
+const expressApp = express();
+expressApp.use(cors());
+expressApp.use(express.json());
+
+expressApp.get('/v1/models', (_req, res) => {
+  res.json({
+    object: 'list',
+    data: [
+      { id: 'deepseek-chat', object: 'model', created: 1677610602, owned_by: 'deepseek' },
+      { id: 'claude-3-opus', object: 'model', created: 1677610602, owned_by: 'anthropic' },
+    ],
+  });
+});
+
+expressApp.post('/v1/chat/completions', async (req, res) => {
+  try {
+    const { model, messages, stream } = req.body;
+
+    // Priority: Headers -> Query Params
+    const authHeader = req.headers.authorization;
+    const providerHeader = req.headers['x-provider'] as string;
+    const emailHeader = req.headers['x-email'] as string;
+
+    // Read from query params
+    const providerQuery = req.query.provider as string;
+    const emailQuery = req.query.email as string;
+
+    const targetProvider = providerHeader || providerQuery;
+    const targetEmail = emailHeader || emailQuery;
+
+    console.log(`[Server] Request: ${model} | Provider: ${targetProvider} | Email: ${targetEmail}`);
+
+    if (!fs.existsSync(DATA_FILE)) {
+      return res.status(500).json({ error: 'Accounts database not found' });
+    }
+
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+
+    let account: Account | undefined;
+
+    // Strategy 1: Look up by Account ID in Bearer Token
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      account = accounts.find((a) => a.id === token);
+    }
+
+    // Strategy 2: Look up by Provider + Email
+    if (!account && targetProvider && targetEmail) {
+      account = accounts.find(
+        (a) =>
+          a.provider.toLowerCase() === targetProvider.toLowerCase() &&
+          a.email.toLowerCase() === targetEmail.toLowerCase(),
+      );
+    }
+
+    // Strategy 3: Default to first active account of requested model's provider
+    if (!account) {
+      const inferredProvider = model.includes('deepseek') ? 'DeepSeek' : 'Claude';
+      const finalProvider = targetProvider || inferredProvider;
+      account = accounts.find((a) => a.provider === finalProvider && a.status === 'Active');
+    }
+
+    if (!account) {
+      return res.status(401).json({ error: 'No valid account found for this request' });
+    }
+
+    console.log(`[Server] Using Account: ${account.email} (${account.provider})`);
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    if (account.provider === 'DeepSeek') {
+      await chatCompletionStream(
+        account.credential,
+        { model, messages, stream: true },
+        account.userAgent,
+        {
+          onContent: (content) => {
+            const response = {
+              id: 'chatcmpl-' + Math.random().toString(36).substr(2, 9),
+              object: 'chat.completion.chunk',
+              created: Date.now(),
+              model: model,
+              choices: [{ delta: { content }, index: 0, finish_reason: null }],
+            };
+            res.write(`data: ${JSON.stringify(response)}\n\n`);
+          },
+          onDone: () => {
+            const response = {
+              id: 'chatcmpl-' + Math.random().toString(36).substr(2, 9),
+              object: 'chat.completion.chunk',
+              created: Date.now(),
+              model: model,
+              choices: [{ delta: {}, index: 0, finish_reason: 'stop' }],
+            };
+            res.write(`data: ${JSON.stringify(response)}\n\n`);
+            res.write('data: [DONE]\n\n');
+            res.end();
+          },
+          onError: (err) => {
+            console.error('[Server] DeepSeek Error:', err);
+            const errorResponse = { error: err.message };
+            res.write(`data: ${JSON.stringify(errorResponse)}\n\n`);
+            res.end();
+          },
+        },
+      );
+    } else {
+      res.write(`data: {"error": "Claude provider not yet implemented in backend"}\n\n`);
+      res.end();
+    }
+  } catch (error: any) {
+    console.error('[Server] Error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+});
+
+export const startServer = () => {
+  if (server) return { success: true, port: API_PORT, message: 'Server already running' };
+
+  return new Promise((resolve) => {
+    server = expressApp.listen(API_PORT, () => {
+      console.log(`[Server] Listening on port ${API_PORT}`);
+      resolve({ success: true, port: API_PORT });
+    });
+    server.on('error', (e: any) => {
+      if (e.code === 'EADDRINUSE') {
+        console.log(`[Server] Port ${API_PORT} in use, assuming existing server.`);
+        resolve({ success: true, port: API_PORT, message: 'Joined existing server' });
+      } else {
+        console.error('[Server] Start Error:', e);
+        resolve({ success: false, error: e.message });
+      }
+    });
+  });
+};
+
+export const stopServer = () => {
+  if (!server) return { success: false, message: 'Server not running' };
+
+  server.close();
+  server = null;
+  console.log('[Server] Stopped');
+  return { success: true };
+};
