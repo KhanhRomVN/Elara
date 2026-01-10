@@ -5,6 +5,8 @@ import { setupEventHandlers } from './core/events';
 import { setupAccountsHandlers } from './ipc/accounts';
 import { setupServerHandlers } from './ipc/server';
 import { setupLogsHandlers } from './ipc/logs';
+import { setupCommandsHandlers } from './ipc/commands';
+import { startCLIServer, stopCLIServer } from './core/cli-server';
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
@@ -25,6 +27,10 @@ app.whenReady().then(() => {
   setupAccountsHandlers();
   setupServerHandlers();
   setupLogsHandlers();
+  setupCommandsHandlers();
+
+  // Start CLI server
+  startCLIServer();
 
   // Create main window
   windowManager.createMainWindow();
@@ -43,6 +49,12 @@ app.whenReady().then(() => {
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
+    stopCLIServer();
     app.quit();
   }
+});
+
+// Clean up CLI server before quitting
+app.on('before-quit', () => {
+  stopCLIServer();
 });

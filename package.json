@@ -5,6 +5,9 @@
     "access": "public"
   },
   "description": "Electron application created with @khanhromvn/create-electron-app",
+  "bin": {
+    "elara": "./bin/cli.js"
+  },
   "files": [
     "bin",
     "src",
@@ -16,7 +19,7 @@
   "main": "./out/main/index.js",
   "author": "KhanhRomVN",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "node scripts/dev-setup.js && electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
@@ -28,10 +31,13 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "postinstall": "electron-builder install-app-deps",
+    "postinstall": "electron-builder install-app-deps && node scripts/dev-setup.js",
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "npm run build && electron-builder --mac",
     "build:linux": "npm run build && electron-builder --linux",
+    "install-cli": "node scripts/install-cli.js",
+    "uninstall-cli": "node scripts/uninstall-cli.js",
+    "setup-cli": "node scripts/dev-setup.js",
     "prepare": "husky"
   },
   "dependencies": {

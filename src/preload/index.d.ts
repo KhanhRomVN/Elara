@@ -23,6 +23,12 @@ interface API {
     start: () => Promise<{ success: boolean; port?: number; error?: string }>;
     stop: () => Promise<{ success: boolean; message?: string }>;
   };
+  commands: {
+    getAll: () => Promise<any[]>;
+    add: (command: any) => Promise<boolean>;
+    update: (id: string, updates: any) => Promise<boolean>;
+    delete: (id: string) => Promise<boolean>;
+  };
 }
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface ElectronIpcRenderer {}

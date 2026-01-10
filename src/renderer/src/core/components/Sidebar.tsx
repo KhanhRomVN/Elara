@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, Users, MessageSquare, Terminal } from 'lucide-react';
 import { cn } from '../../shared/lib/utils';
 
 const Sidebar = () => {
@@ -18,6 +18,11 @@ const Sidebar = () => {
       title: 'Playground',
       href: '/playground',
       icon: MessageSquare,
+    },
+    {
+      title: 'Commands',
+      href: '/commands',
+      icon: Terminal,
     },
   ];
 

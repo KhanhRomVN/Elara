@@ -4,12 +4,14 @@ import { appAPI } from './api';
 import { accountsAPI } from './api/accounts';
 import { serverAPI } from './api/server';
 import { logsAPI } from './api/logs';
+import { commandsAPI } from './api/commands';
 
 const api = {
   app: appAPI,
   accounts: accountsAPI,
   server: serverAPI,
   logs: logsAPI,
+  commands: commandsAPI,
 };
 
 if (process.contextIsolated) {

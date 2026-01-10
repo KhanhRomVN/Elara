@@ -4,6 +4,7 @@ import DashboardPage from '../../features/dashboard';
 import AccountsPage from '../../features/accounts';
 import AccountDetails from '../../features/accounts/components/AccountDetails';
 import PlaygroundPage from '../../features/playground';
+import CommandsPage from '../../features/commands/CommandsPage';
 
 export const routes: RouteObject[] = [
   {
@@ -25,6 +26,10 @@ export const routes: RouteObject[] = [
       {
         path: 'playground',
         element: <PlaygroundPage />,
+      },
+      {
+        path: 'commands',
+        element: <CommandsPage />,
       },
       {
         path: 'analytics',
