@@ -6,7 +6,6 @@ import AccountsPage from '../../features/accounts';
 import PlaygroundPage from '../../features/playground';
 import CommandsPage from '../../features/commands';
 import TutorialPage from '../../features/tutorial';
-import WorkflowPage from '../../features/workflow';
 
 export const routes: RouteObject[] = [
   {
@@ -33,10 +32,6 @@ export const routes: RouteObject[] = [
       {
         path: 'tutorial',
         element: <TutorialPage />,
-      },
-      {
-        path: 'workflow',
-        element: <WorkflowPage />,
       },
       {
         path: 'analytics',

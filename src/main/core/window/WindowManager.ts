@@ -24,7 +24,6 @@ export class WindowManager {
         sandbox: false,
         nodeIntegration: false,
         contextIsolation: true,
-        webviewTag: true,
       },
     });
 
