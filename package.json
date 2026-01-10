@@ -19,7 +19,7 @@
   "main": "./out/main/index.js",
   "author": "KhanhRomVN",
   "scripts": {
-    "dev": "node scripts/dev-setup.js && electron-vite dev",
+    "dev": "fuser -k 5678/tcp || true && node scripts/dev-setup.js && electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
@@ -54,9 +54,11 @@
     "electron-updater": "^6.1.7",
     "express": "^5.2.1",
     "lucide-react": "^0.294.0",
+    "n8n": "^2.2.6",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.20.0",
+    "reactflow": "^11.11.4",
     "tailwind-merge": "^2.0.0",
     "tailwindcss-animate": "^1.0.7"
   },

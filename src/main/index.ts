@@ -8,6 +8,8 @@ import { setupServerHandlers } from './ipc/server';
 import { setupCommandsHandlers } from './ipc/commands';
 import { setupStatsHandlers } from './ipc/stats';
 import { startCLIServer, stopCLIServer } from './core/cli-server';
+import { startN8nServer, stopN8nServer } from './core/n8n-manager';
+import { setupSecurityHandlers } from './core/security';
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
@@ -31,8 +33,14 @@ app.whenReady().then(() => {
   setupCommandsHandlers();
   setupStatsHandlers();
 
+  // Setup security handlers (strip headers for n8n)
+  setupSecurityHandlers();
+
   // Start CLI server
   startCLIServer();
+
+  // Start n8n server
+  startN8nServer();
 
   // Create main window
   windowManager.createMainWindow();
@@ -52,6 +60,7 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     stopCLIServer();
+    stopN8nServer();
     app.quit();
   }
 });
@@ -59,4 +68,5 @@ app.on('window-all-closed', () => {
 // Clean up CLI server before quitting
 app.on('before-quit', () => {
   stopCLIServer();
+  stopN8nServer();
 });
