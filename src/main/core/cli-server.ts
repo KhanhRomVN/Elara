@@ -81,10 +81,25 @@ async function generateCommitMessage(diff: string, account: Account): Promise<st
       messages: [
         {
           role: 'user',
-          content: `Generate a single concise git commit message (Conventional Commits format) for the following changes.
-Strictly output ONLY the message (e.g., "feat: add new feature").
-Do NOT include any conversational text, reasoning, markdown code blocks, or explanations.
-Do NOT output multiple lines.
+          content: `Generate a detailed git commit message for the following changes.
+Structure format:
+<emoji> <type>: <concise title>
+- <bullet point 1>
+- <bullet point 2>
+...
+
+Example:
+✨ feat: add new feature
+- implement core logic
+- update api endpoints
+
+Return the result as a JSON object with a single key "message".
+Example JSON Output:
+{
+  "message": "✨ feat: add feature...\n- details..."
+}
+
+Strictly output ONLY the JSON object. Do not explain.
 
 Changes:
 ${diff}`,
@@ -93,29 +108,38 @@ ${diff}`,
       stream: true,
     };
 
-    // Extract token (remove "Bearer " if present, but the API expects it in Authorization header,
-    // and deepseek.ts might expect just the token?
-    // deepseek.ts: req.setHeader('Authorization', token);
-    // accounts.ts saves Bearer token. So we pass it as is.
-
-    // Note: deepseek.ts chatCompletionStream takes (token, payload, userAgent, callbacks)
-
-    chatCompletionStream(
-      account.credential,
-      payload,
-      account['userAgent'], // Account interface in this file doesn't have userAgent but actual data does
-      {
-        onContent: (content) => {
-          fullResponse += content;
-        },
-        onDone: () => {
-          resolve(fullResponse.trim());
-        },
-        onError: (error) => {
-          reject(error);
-        },
+    chatCompletionStream(account.credential, payload, account['userAgent'], {
+      onContent: (content) => {
+        fullResponse += content;
       },
-    );
+      onDone: () => {
+        // Parse JSON from response (handling potential thinking text/markdown wrappers)
+        let finalMessage = fullResponse;
+        try {
+          // Find first '{' and last '}'
+          const start = fullResponse.indexOf('{');
+          const end = fullResponse.lastIndexOf('}');
+          if (start !== -1 && end !== -1) {
+            const jsonStr = fullResponse.substring(start, end + 1);
+            const parsed = JSON.parse(jsonStr);
+            if (parsed.message) {
+              finalMessage = parsed.message;
+            }
+          }
+        } catch (e) {
+          console.error('Failed to parse AI JSON:', e);
+          // Fallback: cleanup raw text if not JSON
+          finalMessage = fullResponse
+            .replace(/```json/g, '')
+            .replace(/```/g, '')
+            .trim();
+        }
+        resolve(finalMessage.trim());
+      },
+      onError: (error) => {
+        reject(error);
+      },
+    });
   });
 }
 
@@ -213,24 +237,35 @@ export function startCLIServer(): void {
                 );
 
                 // 3. Generate Message
-                const message = await generateCommitMessage(diff, account);
-
-                // Clean up message (remove quotes if any)
-                const cleanMessage = message.replace(/^"|"$/g, '').replace(/^`|`$/g, '');
-
-                // 4. Commit and Push
-                await execAsync(`git commit -m "${cleanMessage.replace(/"/g, '\\"')}"`, { cwd });
                 socket.write(
                   JSON.stringify({
                     type: 'execution-result',
-                    output: `✅ Committed: ${cleanMessage}`,
+                    output: `\n🤖 \x1b[36mAI is generating commit message...\x1b[0m`,
+                  }),
+                );
+
+                const message = await generateCommitMessage(diff, account);
+
+                // 4. Commit and Push
+                socket.write(
+                  JSON.stringify({
+                    type: 'execution-result',
+                    output: `\n📝 \x1b[32mCommit Message:\x1b[0m\n\x1b[2m${message}\x1b[0m\n`,
+                  }),
+                );
+
+                await execAsync(`git commit -m "${message.replace(/"/g, '\\"')}"`, { cwd });
+                socket.write(
+                  JSON.stringify({
+                    type: 'execution-result',
+                    output: `✅ \x1b[32mCommitted successfully\x1b[0m`,
                   }),
                 );
 
                 socket.write(
                   JSON.stringify({
                     type: 'execution-result',
-                    output: `Pushing to remote...`,
+                    output: `\n🚀 \x1b[36mPushing to remote...\x1b[0m`,
                   }),
                 );
 
@@ -239,7 +274,7 @@ export function startCLIServer(): void {
                 socket.write(
                   JSON.stringify({
                     type: 'execution-result',
-                    output: `🚀 Successfully pushed to remote!`,
+                    output: `✅ \x1b[32mSuccessfully pushed!\x1b[0m\n`,
                   }),
                 );
               } catch (err: any) {
