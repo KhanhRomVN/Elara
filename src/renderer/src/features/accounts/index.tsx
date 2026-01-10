@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { cn } from '../../../shared/lib/utils';
+
+import { cn } from '../../shared/lib/utils';
 import { Copy, RefreshCw, Plus, Download, Trash2, Wifi, WifiOff } from 'lucide-react';
-import { AddAccountDialog } from './AddAccountDialog';
+import { AddAccountDialog } from './components/AddAccountDialog';
 
 interface Account {
   id: string;
@@ -10,14 +10,18 @@ interface Account {
   email: string;
   credential: string;
   status: 'Active' | 'Rate Limit' | 'Error';
-  usage: string;
+  // New Stats
+  totalRequests?: number;
+  successfulRequests?: number;
+  totalDuration?: number;
+  tokensToday?: number;
+  statsDate?: string;
   lastActive?: string;
   name?: string;
   picture?: string;
 }
 
 export const Accounts = () => {
-  const navigate = useNavigate();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -87,14 +91,13 @@ export const Accounts = () => {
   };
 
   const copyApiUrl = (account: Account) => {
-    if (serverRunning && serverPort) {
-      const url = `http://localhost:${serverPort}/v1/chat/completions?email=${encodeURIComponent(account.email)}&provider=${account.provider.toLowerCase()}`;
-      navigator.clipboard.writeText(url);
-    }
+    const port = serverPort || 11434;
+    const url = `http://localhost:${port}/v1/chat/completions?email=${encodeURIComponent(account.email)}&provider=${account.provider.toLowerCase()}`;
+    navigator.clipboard.writeText(url);
   };
 
   return (
-    <div className="p-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold tracking-tight text-foreground">Accounts</h2>
@@ -151,11 +154,20 @@ export const Accounts = () => {
             <thead className="[&_tr]:border-b">
               <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
                 <th className="h-12 px-4 align-middle font-medium text-muted-foreground">Email</th>
-                <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
-                  API Endpoint
+                <th className="h-12 px-4 align-middle font-medium text-muted-foreground text-nowrap">
+                  Last Used
+                </th>
+                <th className="h-12 px-4 align-middle font-medium text-muted-foreground text-nowrap">
+                  Success(%)
+                </th>
+                <th className="h-12 px-4 align-middle font-medium text-muted-foreground text-nowrap">
+                  Avg Response
+                </th>
+                <th className="h-12 px-4 align-middle font-medium text-muted-foreground text-nowrap">
+                  Tokens Today
                 </th>
                 <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
-                  Today's Tokens
+                  API Endpoint
                 </th>
                 <th className="h-12 px-4 align-middle font-medium text-muted-foreground text-right w-[100px]">
                   Actions
@@ -165,7 +177,7 @@ export const Accounts = () => {
             <tbody className="[&_tr:last-child]:border-0">
               {accounts.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={4} className="h-24 text-center text-muted-foreground">
+                  <td colSpan={7} className="h-24 text-center text-muted-foreground">
                     No accounts found. Add one to get started.
                   </td>
                 </tr>
@@ -173,8 +185,7 @@ export const Accounts = () => {
               {accounts.map((account) => (
                 <tr
                   key={account.id}
-                  onClick={() => navigate(`/accounts/${account.id}`)}
-                  className="border-b transition-colors hover:bg-muted/50 cursor-pointer data-[state=selected]:bg-muted"
+                  className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
                 >
                   <td className="p-4 align-middle">
                     <div className="flex items-center gap-3">
@@ -205,22 +216,33 @@ export const Accounts = () => {
                       </div>
                     </div>
                   </td>
+                  <td className="p-4 align-middle text-nowrap">
+                    {account.lastActive ? new Date(account.lastActive).toLocaleString() : 'Never'}
+                  </td>
+                  <td className="p-4 align-middle text-nowrap">
+                    {account.totalRequests && account.totalRequests > 0
+                      ? `${(((account.successfulRequests || 0) / account.totalRequests) * 100).toFixed(1)}%`
+                      : 'N/A'}
+                  </td>
+                  <td className="p-4 align-middle text-nowrap">
+                    {account.totalRequests && account.totalRequests > 0
+                      ? `${((account.totalDuration || 0) / account.totalRequests).toFixed(0)}ms`
+                      : 'N/A'}
+                  </td>
+                  <td className="p-4 align-middle font-mono text-nowrap">
+                    {(account.tokensToday || 0).toLocaleString()}
+                  </td>
                   <td className="p-4 align-middle group relative">
                     <code
                       className={cn(
-                        'relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-xs break-all selection:bg-primary/20 block',
-                        serverRunning &&
-                          'cursor-pointer hover:bg-muted/80 hover:text-primary transition-colors',
+                        'relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-xs break-all selection:bg-primary/20 block cursor-pointer hover:bg-muted/80 hover:text-primary transition-colors',
                       )}
                       onClick={() => copyApiUrl(account)}
-                      title={serverRunning ? 'Click to copy full URL' : 'Start backend first'}
+                      title={'Click to copy full URL'}
                     >
-                      {serverRunning
-                        ? `?email=${encodeURIComponent(account.email)}&provider=${account.provider.toLowerCase()}`
-                        : 'Start Backend to see'}
+                      {`?email=${encodeURIComponent(account.email)}&provider=${account.provider.toLowerCase()}`}
                     </code>
                   </td>
-                  <td className="p-4 align-middle font-mono">{account.usage}</td>
                   <td className="p-4 align-middle text-right">
                     <div className="flex justify-end gap-2">
                       <button

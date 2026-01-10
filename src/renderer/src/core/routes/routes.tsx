@@ -2,9 +2,10 @@ import { RouteObject } from 'react-router-dom';
 import MainLayout from '../layouts/MainLayout';
 import DashboardPage from '../../features/dashboard';
 import AccountsPage from '../../features/accounts';
-import AccountDetails from '../../features/accounts/components/AccountDetails';
+
 import PlaygroundPage from '../../features/playground';
-import CommandsPage from '../../features/commands/CommandsPage';
+import CommandsPage from '../../features/commands';
+import TutorialPage from '../../features/tutorial';
 
 export const routes: RouteObject[] = [
   {
@@ -19,10 +20,7 @@ export const routes: RouteObject[] = [
         path: 'accounts',
         element: <AccountsPage />,
       },
-      {
-        path: 'accounts/:id',
-        element: <AccountDetails />,
-      },
+
       {
         path: 'playground',
         element: <PlaygroundPage />,
@@ -30,6 +28,10 @@ export const routes: RouteObject[] = [
       {
         path: 'commands',
         element: <CommandsPage />,
+      },
+      {
+        path: 'tutorial',
+        element: <TutorialPage />,
       },
       {
         path: 'analytics',

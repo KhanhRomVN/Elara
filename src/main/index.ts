@@ -4,8 +4,9 @@ import { windowManager } from './core/window';
 import { setupEventHandlers } from './core/events';
 import { setupAccountsHandlers } from './ipc/accounts';
 import { setupServerHandlers } from './ipc/server';
-import { setupLogsHandlers } from './ipc/logs';
+
 import { setupCommandsHandlers } from './ipc/commands';
+import { setupStatsHandlers } from './ipc/stats';
 import { startCLIServer, stopCLIServer } from './core/cli-server';
 
 // This method will be called when Electron has finished
@@ -26,8 +27,9 @@ app.whenReady().then(() => {
   setupEventHandlers();
   setupAccountsHandlers();
   setupServerHandlers();
-  setupLogsHandlers();
+
   setupCommandsHandlers();
+  setupStatsHandlers();
 
   // Start CLI server
   startCLIServer();

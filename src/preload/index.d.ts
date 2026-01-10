@@ -29,6 +29,13 @@ interface API {
     update: (id: string, updates: any) => Promise<boolean>;
     delete: (id: string) => Promise<boolean>;
   };
+  stats: {
+    getStats: () => Promise<{
+      todayRequests: number;
+      todayTokens: number;
+      history: Array<{ date: string; requests: number; tokens: number }>;
+    }>;
+  };
 }
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface ElectronIpcRenderer {}

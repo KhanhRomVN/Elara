@@ -5,6 +5,7 @@ import { accountsAPI } from './api/accounts';
 import { serverAPI } from './api/server';
 import { logsAPI } from './api/logs';
 import { commandsAPI } from './api/commands';
+import { statsAPI } from './api/stats';
 
 const api = {
   app: appAPI,
@@ -12,6 +13,7 @@ const api = {
   server: serverAPI,
   logs: logsAPI,
   commands: commandsAPI,
+  stats: statsAPI,
 };
 
 if (process.contextIsolated) {

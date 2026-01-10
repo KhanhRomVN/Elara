@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Terminal, Trash2, Edit2, Play, AlertCircle } from 'lucide-react';
+import { Plus, Terminal, Trash2, Edit2, AlertCircle } from 'lucide-react';
 import { cn } from '../../shared/lib/utils';
 
 interface Command {

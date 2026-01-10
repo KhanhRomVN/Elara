@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Send } from 'lucide-react';
-import { cn } from '../../../shared/lib/utils';
+import { cn } from '../../shared/lib/utils';
 
 interface Message {
   id: string;
@@ -24,7 +24,6 @@ export const PlaygroundPage = () => {
   const [selectedProvider, setSelectedProvider] = useState<'Claude' | 'DeepSeek' | ''>('');
   const [selectedAccount, setSelectedAccount] = useState<string>('');
   const [loading, setLoading] = useState(false);
-  const [serverPort, setServerPort] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchAccounts = async () => {
@@ -68,7 +67,6 @@ export const PlaygroundPage = () => {
       }
 
       const port = serverStatus.port;
-      setServerPort(port);
 
       const account = accounts.find((acc) => acc.id === selectedAccount);
       if (!account) throw new Error('Account not found');

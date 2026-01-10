@@ -11,18 +11,26 @@ if (!fs.existsSync(DATA_FILE)) {
   fs.writeFileSync(DATA_FILE, JSON.stringify([], null, 2));
 }
 
-export interface Account {
   id: string;
   provider: 'Claude' | 'DeepSeek';
   email: string;
   credential: string; // cookie or api key
   status: 'Active' | 'Rate Limit' | 'Error';
-  usage: string;
+  usage: string; // This might be legacy string usage, but we'll keep it for now or replace usage of it. User wanted "Total Token (Input+Output) Today" column. Usage field seems to be "0" originally.
+  // New Stats
+  // Lifetime Stats
+  totalRequests: number;
+  successfulRequests: number;
+  totalDuration: number;
+  // Today Stats
+  tokensToday: number;
+  statsDate: string; // YYYY-MM-DD
   lastActive?: string;
   userAgent?: string;
   name?: string;
   picture?: string;
 }
+
 
 const USER_AGENTS = [
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -287,18 +295,23 @@ export const setupAccountsHandlers = () => {
 
               console.log('[Claude] Profile found:', profile);
 
-              const newAccount: Account = {
                 id: crypto.randomUUID(),
                 provider: 'Claude',
                 email: email,
                 credential: sessionKey,
                 status: 'Active',
                 usage: '0',
+                totalRequests: 0,
+                successfulRequests: 0,
+                totalDuration: 0,
+                tokensToday: 0,
+                statsDate: new Date().toISOString().split('T')[0],
                 lastActive: new Date().toISOString(),
                 userAgent,
                 name: profile.name || undefined,
                 picture: profile.picture || undefined,
               };
+
 
               saveAccount(newAccount);
               authWindow.close();
@@ -355,18 +368,23 @@ export const setupAccountsHandlers = () => {
 
                   if (!profile.email) profile.email = 'deepseek@user.com';
 
-                  const newAccount: Account = {
                     id: crypto.randomUUID(),
                     provider: 'DeepSeek',
                     email: profile.email,
                     credential: bearerToken,
                     status: 'Active',
                     usage: '0',
+                    totalRequests: 0,
+                    successfulRequests: 0,
+                    totalDuration: 0,
+                    tokensToday: 0,
+                    statsDate: new Date().toISOString().split('T')[0],
                     lastActive: new Date().toISOString(),
                     userAgent,
                     name: profile.name || undefined,
                     picture: profile.picture || undefined,
                   };
+
 
                   console.log('[DeepSeek] Final account data:', {
                     email: newAccount.email,
