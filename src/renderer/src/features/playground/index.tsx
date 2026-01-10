@@ -1,8 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Plus, Upload, User, MoreHorizontal, ChevronDown } from 'lucide-react';
+import {
+  Send,
+  Plus,
+  Upload,
+  User,
+  MoreHorizontal,
+  ChevronDown,
+  Lightbulb,
+  Search,
+} from 'lucide-react';
 import { cn } from '../../shared/lib/utils';
 import claudeIcon from '../../assets/provider_icons/claude.svg';
 import deepseekIcon from '../../assets/provider_icons/deepseek.svg';
+import { Switch } from '../../core/components/Switch';
 
 interface Message {
   id: string;
@@ -112,6 +122,8 @@ export const PlaygroundPage = () => {
   const [selectedAccount, setSelectedAccount] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [sloganIndex, setSloganIndex] = useState(0);
+  const [thinkingEnabled, setThinkingEnabled] = useState(true);
+  const [searchEnabled, setSearchEnabled] = useState(false);
 
   const slogans = [
     'Feel Free Chat Free!!',
@@ -208,6 +220,8 @@ export const PlaygroundPage = () => {
             },
           ],
           stream: true,
+          thinking: account.provider === 'DeepSeek' ? thinkingEnabled : undefined,
+          search: account.provider === 'DeepSeek' ? searchEnabled : undefined,
         }),
       });
 
@@ -344,7 +358,7 @@ export const PlaygroundPage = () => {
   }));
 
   const renderDropdowns = () => (
-    <div className="flex gap-3 justify-start">
+    <div className="flex gap-3 justify-start items-center">
       <div className="w-[180px]">
         <CustomSelect
           value={selectedProvider}
@@ -372,6 +386,27 @@ export const PlaygroundPage = () => {
           disabled={!selectedProvider}
         />
       </div>
+      {selectedProvider === 'DeepSeek' && (
+        <>
+          <div className="flex items-center gap-2 ml-2 p-2 rounded-md bg-accent/30 border border-border">
+            <Lightbulb
+              className={cn(
+                'w-4 h-4',
+                thinkingEnabled ? 'text-yellow-500 fill-current' : 'text-muted-foreground',
+              )}
+            />
+            <span className="text-sm font-medium">Thinking</span>
+            <Switch checked={thinkingEnabled} onCheckedChange={setThinkingEnabled} />
+          </div>
+          <div className="flex items-center gap-2 ml-2 p-2 rounded-md bg-accent/30 border border-border">
+            <Search
+              className={cn('w-4 h-4', searchEnabled ? 'text-blue-500' : 'text-muted-foreground')}
+            />
+            <span className="text-sm font-medium">Search</span>
+            <Switch checked={searchEnabled} onCheckedChange={setSearchEnabled} />
+          </div>
+        </>
+      )}
     </div>
   );
 
@@ -474,10 +509,10 @@ export const PlaygroundPage = () => {
           {activeChatId ? (
             /* Active Chat View */
             <div className="flex flex-col h-full bg-background">
-              {/* Header / Top bar with Selectors - HIDDEN in active chat per user request */}
-              {/* <div className="border-b p-3 flex justify-between items-center bg-background/95 backdrop-blur z-10">
+              {/* Header / Top bar with Selectors */}
+              <div className="border-b p-3 flex justify-between items-center bg-background/95 backdrop-blur z-10">
                 {renderDropdowns()}
-              </div> */}
+              </div>
 
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4">

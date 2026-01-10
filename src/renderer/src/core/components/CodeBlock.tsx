@@ -31,6 +31,8 @@ interface CodeBlockProps {
   wordWrap?: 'off' | 'on' | 'wordWrapColumn' | 'bounded';
   showLineNumbers?: boolean;
   onEditorMounted?: (editor: any) => void;
+  readOnly?: boolean;
+  onChange?: (value: string) => void;
 }
 
 const SYSTEMA_THEME = {
@@ -57,6 +59,8 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
   wordWrap = 'on',
   showLineNumbers = false,
   onEditorMounted,
+  readOnly = true,
+  onChange,
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const editorInstance = useRef<any>(null);
@@ -99,7 +103,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
           value: code,
           language: language,
           theme: themeName,
-          readOnly: true,
+          readOnly: readOnly,
           minimap: { enabled: false },
           scrollBeyondLastLine: false,
           fontSize: 12,
@@ -113,6 +117,12 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
         // Expose editor instance
         if (onEditorMounted) {
           onEditorMounted(editorInstance.current);
+        }
+
+        if (onChange) {
+          editorInstance.current.onDidChangeModelContent(() => {
+            onChange(editorInstance.current.getValue());
+          });
         }
       } catch (error) {
         console.error('Failed to create monaco editor instance:', error);

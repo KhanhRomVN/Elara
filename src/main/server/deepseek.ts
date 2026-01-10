@@ -1,3 +1,5 @@
+/// <reference lib="webworker" />
+
 import { net, app } from 'electron';
 import crypto from 'crypto';
 import * as fs from 'fs';
@@ -13,6 +15,8 @@ export interface ChatPayload {
   messages: ChatMessage[];
   stream?: boolean;
   temperature?: number;
+  thinking?: boolean;
+  search?: boolean;
 }
 
 interface PoWChallenge {
@@ -280,16 +284,14 @@ export async function chatCompletionStream(
     // 4. Send Chat Completion
     console.log('[API] Sending Completion Request...');
 
-    const clientStreamId = `${new Date().toISOString().slice(0, 10).replace(/-/g, '')}${crypto.randomBytes(8).toString('hex')}`;
-
     // Payload matching deepseek4free
     const webPayload = {
       chat_session_id: sessionId,
       parent_message_id: null,
       prompt: payload.messages[payload.messages.length - 1].content,
       ref_file_ids: [],
-      thinking_enabled: true, // Force thinking enabled for now, or make it configurable
-      search_enabled: false,
+      thinking_enabled: payload.thinking ?? true, // Map our 'thinking' param to DeepSeek's 'thinking_enabled'
+      search_enabled: payload.search ?? false, // Map our 'search' param to DeepSeek's 'search_enabled'
     };
 
     const request = net.request({

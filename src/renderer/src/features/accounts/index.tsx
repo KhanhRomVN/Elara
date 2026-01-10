@@ -8,8 +8,6 @@ import {
   Plus,
   Download,
   Trash2,
-  Wifi,
-  WifiOff,
   Search,
   FlipVertical,
   Upload,
@@ -73,6 +71,18 @@ export const Accounts = () => {
 
   useEffect(() => {
     fetchAccounts();
+    // Auto-start server
+    const startServer = async () => {
+      // @ts-ignore
+      const res = await window.api.server.start();
+      if (res.success && res.port) {
+        setServerRunning(true);
+        setServerPort(res.port);
+      } else {
+        console.error('Failed to auto-start server:', res.error);
+      }
+    };
+    startServer();
   }, []);
 
   const handleDelete = async (id: string) => {
@@ -119,26 +129,6 @@ export const Accounts = () => {
       (acc.name && acc.name.toLowerCase().includes(searchQuery.toLowerCase())),
   );
 
-  const toggleServer = async () => {
-    if (serverRunning) {
-      // @ts-ignore
-      const res = await window.api.server.stop();
-      if (res.success) {
-        setServerRunning(false);
-        setServerPort(null);
-      }
-    } else {
-      // @ts-ignore
-      const res = await window.api.server.start();
-      if (res.success && res.port) {
-        setServerRunning(true);
-        setServerPort(res.port);
-      } else {
-        alert('Failed to start server: ' + res.error);
-      }
-    }
-  };
-
   const copyApiUrl = (account: Account) => {
     const port = serverPort || 11434;
     const url = `http://localhost:${port}/v1/chat/completions?email=${encodeURIComponent(account.email)}&provider=${account.provider.toLowerCase()}`;
@@ -166,23 +156,6 @@ export const Accounts = () => {
 
         {/* Right: Actions */}
         <div className="flex gap-2 items-center">
-          <button
-            onClick={toggleServer}
-            className={cn(
-              'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 h-9 px-4 py-2 border shadow-sm',
-              serverRunning
-                ? 'bg-green-100 text-green-900 border-green-200 hover:bg-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800'
-                : 'bg-background hover:bg-accent hover:text-accent-foreground border-input',
-            )}
-          >
-            {serverRunning ? (
-              <Wifi className="mr-2 h-4 w-4" />
-            ) : (
-              <WifiOff className="mr-2 h-4 w-4" />
-            )}
-            {serverRunning ? `Backend On (: ${serverPort})` : 'Backend Off'}
-          </button>
-
           <button
             onClick={() => setDialogOpen(true)}
             className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-3 text-white"

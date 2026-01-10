@@ -1,181 +1,219 @@
-import { useState, useEffect } from 'react';
-import { Plus, Terminal, Trash2, Edit2, AlertCircle } from 'lucide-react';
-import { cn } from '../../shared/lib/utils';
+import { useEffect } from 'react';
+import { Terminal } from 'lucide-react';
+import { CommandConfig } from './types';
 
-interface Command {
-  id: string;
-  trigger: string;
-  name: string;
-  description: string;
-  type: 'ai-completion' | 'shell';
-  action: string;
-}
+// Hardcoded commands
+const commands: CommandConfig[] = [
+  {
+    name: 'Commit Message Generator',
+    trigger: 'commit-message',
+    description: 'Generate a conventional commit message from staged changes',
+    emoji: '📝',
+    prompt: `
+You are an expert developer. Please analyze the following git diff and generate a concise, conventional commit message.
+Wrap the commit message in <commit-message> tags.
+
+Format:
+<commit-message>
+<icon> <type>: <title>
+- <sub title 1>
+- <sub title 2>
+- <sub title 3>
+</commit-message>
+
+Rules:
+- Use appropriate emojis for icons (e.g., ✨ for feat, 🐛 for fix, 📝 for docs)
+- Keep the title under 50 characters if possible
+- Use bullet points for details if necessary
+
+Diff:
+{{diff}}
+`,
+    handler: async (_output: any, { shell, prompt }: any) => {
+      try {
+        // 1. Check for staged changes (excluding lockfiles to avoid huge diffs)
+        const status = await shell.execute(
+          "git diff --cached -- . ':(exclude)package-lock.json' ':(exclude)yarn.lock' ':(exclude)pnpm-lock.yaml'",
+        );
+        if (!status || !status.trim()) {
+          return '⚠️  No staged changes found. Please stage your changes first using `git add`.';
+        }
+
+        // 2. Fetch Accounts
+        // @ts-ignore
+        const accounts = await window.api.accounts.getAll();
+        if (!accounts || accounts.length === 0) {
+          return '⚠️  No accounts found. Please add an account in the app first.';
+        }
+
+        // 3. Select Account (Prioritize DeepSeek, then Active)
+        const deepseekAccount = accounts.find(
+          (acc: any) => acc.provider === 'DeepSeek' && acc.status === 'Active',
+        );
+        const otherAccount = accounts.find((acc: any) => acc.status === 'Active');
+        const selectedAccount = deepseekAccount || otherAccount || accounts[0];
+
+        if (!selectedAccount) {
+          return '⚠️  No active accounts found. Please check your account status.';
+        }
+
+        // 4. Start Local Server
+        // @ts-ignore
+        const serverStatus = await window.api.server.start();
+        if (!serverStatus.success) {
+          return `⚠️  Failed to start local proxy server: ${serverStatus.error}`;
+        }
+        const port = serverStatus.port;
+
+        // 5. Generate AI Message
+        const diff = status.slice(0, 6000); // Limit diff size
+        const promptText = `
+You are an expert developer. Please analyze the following git diff and generate a concise, conventional commit message.
+Wrap the commit message in <commit-message> tags.
+
+Format:
+<commit-message>
+<icon> <type>: <title>
+- <sub title 1>
+- <sub title 2>
+</commit-message>
+
+Rules:
+- Use appropriate emojis for icons (e.g., ✨ for feat, 🐛 for fix, 📝 for docs)
+- Keep the title under 50 characters if possible
+- Use bullet points for details if necessary
+
+Diff:
+${diff}
+`;
+
+        const response = await fetch(
+          `http://localhost:${port}/v1/chat/completions?email=${encodeURIComponent(
+            selectedAccount.email,
+          )}&provider=${selectedAccount.provider.toLowerCase()}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model:
+                selectedAccount.provider === 'Claude'
+                  ? 'claude-3-5-sonnet-20241022'
+                  : 'deepseek-chat',
+              messages: [{ role: 'user', content: promptText }],
+              stream: false, // Simple non-streaming request
+              thinking: false, // Disable thinking for commit messages
+            }),
+          },
+        );
+
+        if (!response.ok) {
+          return `⚠️  AI API request failed: ${response.status} ${response.statusText}`;
+        }
+
+        const data = await response.json();
+        const aiContent = data.choices?.[0]?.message?.content;
+
+        if (!aiContent) {
+          return '⚠️  AI returned empty response.';
+        }
+
+        // 6. Extract Commit Message
+        const match = aiContent.match(/<commit-message>([\s\S]*?)<\/commit-message>/);
+        if (!match) {
+          return `⚠️  Could not parse commit message from AI response.\nResponse:\n${aiContent}`;
+        }
+
+        const commitMsg = match[1].trim();
+
+        // 7. Interactive Confirmation
+        const answer = await prompt(
+          `\n\nGenerated Message:\n------------------\n${commitMsg}\n------------------\n\nDo you want to commit with this message?`,
+        );
+
+        if (answer.toLowerCase() !== 'y' && answer.toLowerCase() !== 'yes') {
+          return '❌ Commit cancelled by user.';
+        }
+
+        // 8. Execute Git Commit & Push
+        const escapedMsg = commitMsg.replace(/"/g, '\\"');
+        await shell.execute(`git commit -m "${escapedMsg}"`);
+        await shell.execute('git push');
+
+        return `✅ Commit & Push Successful!\n\nMessage: ${commitMsg}`;
+      } catch (error: any) {
+        return `❌ Error: ${error.message}`;
+      }
+    },
+  },
+];
 
 const CommandsPage = () => {
-  const [commands, setCommands] = useState<Command[]>([]);
-  const [isEditing, setIsEditing] = useState(false);
-  const [currentCommand, setCurrentCommand] = useState<Partial<Command>>({});
-  const [showForm, setShowForm] = useState(false);
-
   useEffect(() => {
-    loadCommands();
+    // Listen for execution requests from main process (CLI)
+    const removeListener = window.api.on(
+      'command:execute-request',
+      async (_event: any, { requestId, trigger }: any) => {
+        console.log(`Received execution request for: ${trigger}`);
+
+        // Find the command
+        const command = commands.find((c) => c.trigger === trigger);
+
+        if (command && command.handler) {
+          try {
+            // Mock tools
+            const tools = {
+              shell: {
+                execute: async (cmd: string) => {
+                  return await window.api.shell.execute(cmd);
+                },
+              },
+              prompt: async (msg: string) => {
+                return await window.api.commands.prompt(msg);
+              },
+            };
+
+            // Execute handler
+            // Providing empty string for output as CLI integration doesn't support pre-generation yet without new API.
+            // Command handlers should be robust or we'll add AI support later.
+            const result = await command.handler('', tools);
+
+            // Send response
+            window.api.send('command:execute-response', {
+              requestId,
+              response: { output: result || `Executed ${trigger} successfully` },
+            });
+          } catch (e: any) {
+            console.error('Command execution failed:', e);
+            window.api.send('command:execute-response', {
+              requestId,
+              response: { error: e.message },
+            });
+          }
+        } else {
+          window.api.send('command:execute-response', {
+            requestId,
+            response: { error: 'Command not found in renderer' },
+          });
+        }
+      },
+    );
+
+    return () => {
+      removeListener();
+    };
   }, []);
 
-  const loadCommands = async () => {
-    try {
-      const data = await window.api.commands.getAll();
-      setCommands(data);
-    } catch (error) {
-      console.error('Failed to load commands:', error);
+  useEffect(() => {
+    if (commands.length > 0) {
+      // Register with main process
+      const simpleCommands = commands.map((c) => ({
+        name: c.name,
+        trigger: c.trigger,
+        description: c.description,
+      }));
+      window.api.send('commands:register', simpleCommands);
     }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this command?')) {
-      await window.api.commands.delete(id);
-      loadCommands();
-    }
-  };
-
-  const handleEdit = (command: Command) => {
-    setCurrentCommand(command);
-    setIsEditing(true);
-    setShowForm(true);
-  };
-
-  const handleAddNew = () => {
-    setCurrentCommand({
-      type: 'ai-completion',
-      action: '',
-      description: '',
-      name: '',
-      trigger: '',
-    });
-    setIsEditing(false);
-    setShowForm(true);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentCommand.trigger || !currentCommand.name) return;
-
-    try {
-      if (isEditing && currentCommand.id) {
-        await window.api.commands.update(currentCommand.id, currentCommand);
-      } else {
-        await window.api.commands.add({
-          ...currentCommand,
-          id: crypto.randomUUID(),
-        } as Command);
-      }
-      setShowForm(false);
-      loadCommands();
-    } catch (error) {
-      console.error('Failed to save command:', error);
-    }
-  };
-
-  if (showForm) {
-    return (
-      <div className="p-6 max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <p className="text-2xl font-bold text-white">
-            {isEditing ? 'Edit Command' : 'New Command'}
-          </p>
-          <button
-            onClick={() => setShowForm(false)}
-            className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
-          >
-            Cancel
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-muted-foreground">Name</label>
-              <input
-                required
-                className="w-full px-3 py-2 bg-secondary/50 border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
-                placeholder="Auto Commit"
-                value={currentCommand.name || ''}
-                onChange={(e) => setCurrentCommand({ ...currentCommand, name: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-muted-foreground">Trigger</label>
-              <div className="relative">
-                <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">elara</span>
-                <input
-                  required
-                  className="w-full pl-14 px-3 py-2 bg-secondary/50 border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
-                  placeholder="auto-commit"
-                  value={currentCommand.trigger || ''}
-                  onChange={(e) =>
-                    setCurrentCommand({ ...currentCommand, trigger: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-muted-foreground">Description</label>
-            <input
-              className="w-full px-3 py-2 bg-secondary/50 border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
-              placeholder="What does this command do?"
-              value={currentCommand.description || ''}
-              onChange={(e) =>
-                setCurrentCommand({ ...currentCommand, description: e.target.value })
-              }
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-muted-foreground">Type</label>
-            <select
-              className="w-full px-3 py-2 bg-secondary/50 border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
-              value={currentCommand.type || 'ai-completion'}
-              onChange={(e) =>
-                setCurrentCommand({ ...currentCommand, type: e.target.value as any })
-              }
-            >
-              <option value="ai-completion">AI Completion (Generative)</option>
-              {/* <option value="shell">Shell Script</option> */}
-            </select>
-            <p className="text-xs text-muted-foreground">
-              Currently only AI Completion is supported for safety.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-muted-foreground">Prompt Template</label>
-            <p className="text-xs text-muted-foreground mb-2">
-              Available variables: <code className="bg-muted px-1 rounded">{'{{diff}}'}</code>,{' '}
-              <code className="bg-muted px-1 rounded">{'{{file_content}}'}</code>
-            </p>
-            <textarea
-              required
-              rows={8}
-              className="w-full px-3 py-2 bg-secondary/50 border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary font-mono text-sm"
-              placeholder="Generate a commit message for..."
-              value={currentCommand.action || ''}
-              onChange={(e) => setCurrentCommand({ ...currentCommand, action: e.target.value })}
-            />
-          </div>
-
-          <div className="flex justify-end pt-4">
-            <button
-              type="submit"
-              className="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors font-medium"
-            >
-              Save Command
-            </button>
-          </div>
-        </form>
-      </div>
-    );
-  }
+  }, []); // commands is constant now
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -184,46 +222,23 @@ const CommandsPage = () => {
           <h1 className="text-2xl font-bold text-foreground">CLI Commands</h1>
           <p className="text-muted-foreground mt-1">Manage custom commands for the Elara CLI</p>
         </div>
-        <button
-          onClick={handleAddNew}
-          className="text-white flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          New Command
-        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {commands.map((command) => (
+        {commands.map((command, index) => (
           <div
-            key={command.id}
+            key={index}
             className="group relative bg-card border border-border rounded-lg p-5 hover:border-primary/50 transition-colors"
           >
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-2">
-                <div className="p-2 bg-primary/10 rounded-md text-primary">
-                  <Terminal className="w-5 h-5" />
-                </div>
+                <div className="text-2xl">{command.emoji || <Terminal className="w-6 h-6" />}</div>
                 <div>
                   <h3 className="font-semibold text-foreground">{command.name}</h3>
                   <code className="text-xs text-primary bg-primary/5 px-1.5 py-0.5 rounded">
                     elara {command.trigger}
                   </code>
                 </div>
-              </div>
-              <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                <button
-                  onClick={() => handleEdit(command)}
-                  className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-md"
-                >
-                  <Edit2 className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => handleDelete(command.id)}
-                  className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
               </div>
             </div>
 
@@ -236,7 +251,7 @@ const CommandsPage = () => {
         {commands.length === 0 && (
           <div className="col-span-full py-12 text-center border border-dashed border-border rounded-lg text-muted-foreground">
             <Terminal className="w-12 h-12 mx-auto mb-4 opacity-50" />
-            <p>No commands found. Create one to get started!</p>
+            <p>No commands found.</p>
           </div>
         )}
       </div>

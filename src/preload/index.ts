@@ -1,11 +1,11 @@
 import { contextBridge } from 'electron';
 import { electronAPI } from '@electron-toolkit/preload';
+import { ipcRenderer } from 'electron';
 import { appAPI } from './api';
 import { accountsAPI } from './api/accounts';
 import { serverAPI } from './api/server';
 import { logsAPI } from './api/logs';
 import { commandsAPI } from './api/commands';
-import { statsAPI } from './api/stats';
 
 const api = {
   app: appAPI,
@@ -13,7 +13,18 @@ const api = {
   server: serverAPI,
   logs: logsAPI,
   commands: commandsAPI,
-  stats: statsAPI,
+  stats: {
+    getStats: (): Promise<any> => ipcRenderer.invoke('stats:get'),
+  },
+  shell: {
+    execute: (command: string): Promise<string> => ipcRenderer.invoke('shell:execute', command),
+  },
+  on: (channel: string, listener: (event: any, ...args: any[]) => void) => {
+    const subscription = (_event: any, ...args: any[]) => listener(_event, ...args);
+    ipcRenderer.on(channel, subscription);
+    return () => ipcRenderer.removeListener(channel, subscription);
+  },
+  send: (channel: string, ...args: any[]) => ipcRenderer.send(channel, ...args),
 };
 
 if (process.contextIsolated) {

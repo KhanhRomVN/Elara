@@ -27,19 +27,18 @@ class CommandStorage {
       if (fs.existsSync(this.filePath)) {
         const data = fs.readFileSync(this.filePath, 'utf-8');
         this.commands = JSON.parse(data);
+
+        // Cleanup legacy commands requested by user
+        const legacyNames = ['Auto Commit Message', 'Explain Code'];
+        const initialLength = this.commands.length;
+        this.commands = this.commands.filter((c) => !legacyNames.includes(c.name));
+
+        if (this.commands.length !== initialLength) {
+          this.save();
+        }
       } else {
         // Default commands
-        this.commands = [
-          {
-            id: 'default-1',
-            trigger: 'auto-commit',
-            name: 'Auto Commit Message',
-            description: 'Generate a commit message based on staged changes',
-            type: 'ai-completion',
-            action:
-              'Generate a concise and conventional git commit message for the following changes:\n\n{{diff}}',
-          },
-        ];
+        this.commands = [];
         this.save();
       }
     } catch (error) {

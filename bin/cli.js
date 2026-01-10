@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const net = require('net');
-const os = require('os');
+const readline = require('readline');
 
 const SOCKET_PATH = process.platform === 'win32' ? '\\\\.\\pipe\\elara-cli' : '/tmp/elara.sock';
 
@@ -72,9 +72,49 @@ function displayAppInfo(info) {
   console.log('');
 }
 
+function processMessage(client, message) {
+  try {
+    const info = JSON.parse(message);
+
+    if (info.error) {
+      console.error(`${colors.red}Error: ${info.error}${colors.reset}`);
+      // Don't exit immediately on error if it's part of a stream, but typically error ends it.
+      // For now, let's allow server to close connection.
+    } else if (info.type === 'execution-result') {
+      process.stdout.write(info.output); // Use write to avoid extra newlines if output has them
+    } else if (info.type === 'prompt') {
+      // Interactive Prompt
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+
+      rl.question(`${colors.yellow}${info.query} (y/n):${colors.reset} `, (answer) => {
+        rl.close();
+        client.write(
+          JSON.stringify({
+            type: 'input',
+            content: answer.trim(),
+          }),
+        );
+      });
+    } else if (info.type === 'info') {
+      displayAppInfo(info);
+    } else {
+      // Fallback
+      console.log(message);
+    }
+  } catch (error) {
+    // If not JSON, print as raw text
+    if (message.trim()) {
+      console.log(message);
+    }
+  }
+}
+
 function connectToApp() {
   const client = new net.Socket();
-  let responseData = '';
+  let buffer = '';
   const args = process.argv.slice(2);
   const command = args[0];
   const commandArgs = args.slice(1);
@@ -97,29 +137,30 @@ function connectToApp() {
   });
 
   client.on('data', (data) => {
-    responseData += data.toString();
+    buffer += data.toString();
+
+    // Process newlines as message delimiters
+    let boundary = buffer.indexOf('\n');
+    while (boundary !== -1) {
+      const message = buffer.substring(0, boundary).trim();
+      buffer = buffer.substring(boundary + 1);
+
+      if (message) {
+        processMessage(client, message);
+      }
+
+      boundary = buffer.indexOf('\n');
+    }
+
+    // Attempt to parse remainder if it looks like complete JSON (optimization/fallback)
+    // But standard protocol will be newline delimited JSON.
+    // Ideally server sends \n after every JSON.
   });
 
   client.on('end', () => {
-    try {
-      const info = JSON.parse(responseData);
-
-      if (info.error) {
-        console.error(`${colors.red}Error: ${info.error}${colors.reset}`);
-        process.exit(1);
-      } else if (info.type === 'execution-result') {
-        console.log(info.output);
-      } else {
-        displayAppInfo(info);
-      }
-    } catch (error) {
-      // If not JSON, just print it (might be raw output)
-      if (responseData.trim()) {
-        console.log(responseData);
-      } else {
-        console.error(`${colors.red}Failed to parse response from app${colors.reset}`);
-        process.exit(1);
-      }
+    // Process remaining buffer
+    if (buffer.trim()) {
+      processMessage(client, buffer.trim());
     }
   });
 

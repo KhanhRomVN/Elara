@@ -15,4 +15,9 @@ export const commandsAPI = {
   update: (id: string, updates: Partial<Command>): Promise<boolean> =>
     ipcRenderer.invoke('commands:update', { id, updates }),
   delete: (id: string): Promise<boolean> => ipcRenderer.invoke('commands:delete', id),
+  readFile: (filePath: string): Promise<string> =>
+    ipcRenderer.invoke('commands:read-file', filePath),
+  writeFile: (filePath: string, content: string): Promise<boolean> =>
+    ipcRenderer.invoke('commands:write-file', { filePath, content }),
+  prompt: (message: string): Promise<string> => ipcRenderer.invoke('commands:prompt', message),
 };

@@ -1,4 +1,5 @@
 import { ElectronAPI } from '@electron-toolkit/preload';
+import { IpcRendererEvent } from 'electron';
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface API {
@@ -29,6 +30,9 @@ interface API {
     add: (command: any) => Promise<boolean>;
     update: (id: string, updates: any) => Promise<boolean>;
     delete: (id: string) => Promise<boolean>;
+    readFile: (filePath: string) => Promise<string>;
+    writeFile: (filePath: string, content: string) => Promise<boolean>;
+    prompt: (message: string) => Promise<string>;
   };
   stats: {
     getStats: () => Promise<{
@@ -37,6 +41,12 @@ interface API {
       history: Array<{ date: string; requests: number; tokens: number }>;
     }>;
   };
+  shell: {
+    execute: (command: string) => Promise<string>;
+  };
+  // General IPC methods
+  on: (channel: string, listener: (event: IpcRendererEvent, ...args: any[]) => void) => () => void;
+  send: (channel: string, ...args: any[]) => void;
 }
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface ElectronIpcRenderer {}
