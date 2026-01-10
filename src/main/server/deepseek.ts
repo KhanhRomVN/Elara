@@ -1,7 +1,6 @@
 /// <reference lib="webworker" />
 
 import { net, app } from 'electron';
-import crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 

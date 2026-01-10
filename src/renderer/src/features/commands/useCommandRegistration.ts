@@ -1,9 +1,7 @@
 import { useEffect } from 'react';
-import { Terminal } from 'lucide-react';
-import { CommandConfig } from './types';
 
-// Hardcoded commands
-const commands: CommandConfig[] = [
+// Import commands from the commands page
+const commands = [
   {
     name: 'Commit Message Generator',
     trigger: 'commit-message',
@@ -11,20 +9,13 @@ const commands: CommandConfig[] = [
     emoji: '📝',
     prompt: `
 You are an expert developer. Please analyze the following git diff and generate a concise, conventional commit message.
-Wrap the commit message in <commit-message> tags.
 
 Format:
 <commit-message>
-<icon> <type>: <title>
-- <sub title 1>
-- <sub title 2>
-- <sub title 3>
+[emoji] [type]: [concise title]
+- [bullet point 1]
+- [bullet point 2]
 </commit-message>
-
-Rules:
-- Use appropriate emojis for icons (e.g., ✨ for feat, 🐛 for fix, 📝 for docs)
-- Keep the title under 50 characters if possible
-- Use bullet points for details if necessary
 
 Diff:
 {{diff}}
@@ -40,51 +31,39 @@ Diff:
         }
 
         // 2. Fetch Accounts
-        // @ts-ignore
         const accounts = await window.api.accounts.getAll();
         if (!accounts || accounts.length === 0) {
-          return '⚠️  No accounts found. Please add an account in the app first.';
+          return '⚠️  No accounts found. Please add an account first.';
         }
 
-        // 3. Select Account (Prioritize DeepSeek, then Active)
+        // 3. Select Account (DeepSeek priority)
         const deepseekAccount = accounts.find(
-          (acc: any) => acc.provider === 'DeepSeek' && acc.status === 'Active',
+          (acc) => acc.provider === 'DeepSeek' && acc.status === 'Active',
         );
-        const otherAccount = accounts.find((acc: any) => acc.status === 'Active');
-        const selectedAccount = deepseekAccount || otherAccount || accounts[0];
+        const activeAccount = accounts.find((acc) => acc.status === 'Active');
+        const selectedAccount = deepseekAccount || activeAccount || accounts[0];
 
-        if (!selectedAccount) {
-          return '⚠️  No active accounts found. Please check your account status.';
-        }
-
-        // 4. Start Local Server
-        // @ts-ignore
+        // 4. Start Server
         const serverStatus = await window.api.server.start();
         if (!serverStatus.success) {
-          return `⚠️  Failed to start local proxy server: ${serverStatus.error}`;
+          return '⚠️  Failed to start local server.';
         }
         const port = serverStatus.port;
 
         // 5. Generate AI Message
-        const diff = status.slice(0, 6000); // Limit diff size
+        const diffContent = status.substring(0, 6000); // Limit to 6000 chars
         const promptText = `
 You are an expert developer. Please analyze the following git diff and generate a concise, conventional commit message.
-Wrap the commit message in <commit-message> tags.
 
 Format:
 <commit-message>
-<icon> <type>: <title>
-- <sub title 1>
-- <sub title 2>
+[emoji] [type]: [concise title]
+- [bullet point 1]
+- [bullet point 2]
 </commit-message>
 
-Rules:
-- Use appropriate emojis for icons (e.g., ✨ for feat, 🐛 for fix, 📝 for docs)
-- Keep the title under 50 characters if possible
-- Use bullet points for details if necessary
-
 Diff:
-${diff}
+${diffContent}
 `;
 
         const response = await fetch(
@@ -180,8 +159,19 @@ ${diff}
   },
 ];
 
-const CommandsPage = () => {
+export function useCommandRegistration() {
   useEffect(() => {
+    // Register commands metadata with the main process (without handlers)
+    const commandsMetadata = commands.map(({ name, trigger, description, emoji, prompt }) => ({
+      name,
+      trigger,
+      description,
+      emoji,
+      prompt,
+    }));
+
+    window.api.send('commands:register', commandsMetadata);
+
     // Listen for execution requests from main process (CLI)
     const removeListener = window.api.on(
       'command:execute-request',
@@ -205,12 +195,8 @@ const CommandsPage = () => {
               },
             };
 
-            // Execute handler
-            // Providing empty string for output as CLI integration doesn't support pre-generation yet without new API.
-            // Command handlers should be robust or we'll add AI support later.
             const result = await command.handler('', tools);
 
-            // Send response
             window.api.send('command:execute-response', {
               requestId,
               response: { output: result || `Executed ${trigger} successfully` },
@@ -235,61 +221,4 @@ const CommandsPage = () => {
       removeListener();
     };
   }, []);
-
-  useEffect(() => {
-    if (commands.length > 0) {
-      // Register with main process
-      const simpleCommands = commands.map((c) => ({
-        name: c.name,
-        trigger: c.trigger,
-        description: c.description,
-      }));
-      window.api.send('commands:register', simpleCommands);
-    }
-  }, []); // commands is constant now
-
-  return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">CLI Commands</h1>
-          <p className="text-muted-foreground mt-1">Manage custom commands for the Elara CLI</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {commands.map((command, index) => (
-          <div
-            key={index}
-            className="group relative bg-card border border-border rounded-lg p-5 hover:border-primary/50 transition-colors"
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="text-2xl">{command.emoji || <Terminal className="w-6 h-6" />}</div>
-                <div>
-                  <h3 className="font-semibold text-foreground">{command.name}</h3>
-                  <code className="text-xs text-primary bg-primary/5 px-1.5 py-0.5 rounded">
-                    elara {command.trigger}
-                  </code>
-                </div>
-              </div>
-            </div>
-
-            <p className="text-sm text-muted-foreground line-clamp-2 h-10 mb-4">
-              {command.description}
-            </p>
-          </div>
-        ))}
-
-        {commands.length === 0 && (
-          <div className="col-span-full py-12 text-center border border-dashed border-border rounded-lg text-muted-foreground">
-            <Terminal className="w-12 h-12 mx-auto mb-4 opacity-50" />
-            <p>No commands found.</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-export default CommandsPage;
+}
