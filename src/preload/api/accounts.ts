@@ -8,4 +8,5 @@ export const accountsAPI = {
   delete: (id: string) => ipcRenderer.invoke('accounts:delete', id),
   update: (id: string, updates: any) => ipcRenderer.invoke('accounts:update', { id, updates }),
   export: () => ipcRenderer.invoke('accounts:export'),
+  import: () => ipcRenderer.invoke('accounts:import'),
 };

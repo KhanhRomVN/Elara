@@ -1,7 +1,19 @@
 import { useEffect, useState } from 'react';
 
+import { useRef } from 'react';
 import { cn } from '../../shared/lib/utils';
-import { Copy, RefreshCw, Plus, Download, Trash2, Wifi, WifiOff } from 'lucide-react';
+import {
+  Copy,
+  RefreshCw,
+  Plus,
+  Download,
+  Trash2,
+  Wifi,
+  WifiOff,
+  Search,
+  FlipVertical,
+  Upload,
+} from 'lucide-react';
 import { AddAccountDialog } from './components/AddAccountDialog';
 
 interface Account {
@@ -27,6 +39,19 @@ export const Accounts = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [serverRunning, setServerRunning] = useState(false);
   const [serverPort, setServerPort] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const fetchAccounts = async () => {
     setLoading(true);
@@ -61,14 +86,38 @@ export const Accounts = () => {
     }
   };
 
-  const handleExport = async () => {
+  const handleImport = async () => {
+    setShowDropdown(false);
     try {
       // @ts-ignore
-      await window.api.accounts.export();
+      const result = await window.api.accounts.import();
+      if (result.success) {
+        fetchAccounts();
+        alert(`Successfully imported: ${result.added} added, ${result.updated} updated.`);
+      } else if (!result.canceled) {
+        alert('Import failed: ' + result.error);
+      }
+    } catch (error) {
+      console.error('Failed to import:', error);
+    }
+  };
+
+  const handleExport = async () => {
+    setShowDropdown(false);
+    try {
+      // @ts-ignore
+      const result = await window.api.accounts.export();
     } catch (error) {
       console.error('Failed to export:', error);
     }
   };
+
+  const filteredAccounts = accounts.filter(
+    (acc) =>
+      acc.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      acc.provider.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (acc.name && acc.name.toLowerCase().includes(searchQuery.toLowerCase())),
+  );
 
   const toggleServer = async () => {
     if (serverRunning) {
@@ -98,14 +147,21 @@ export const Accounts = () => {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight text-foreground">Accounts</h2>
-          <p className="text-muted-foreground mt-1">
-            Manage your AI provider accounts regarding local proxy server.
-          </p>
+      <div className="flex items-center justify-between gap-4">
+        {/* Left: Search Bar */}
+        <div className="relative w-full max-w-sm">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search accounts..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="flex h-9 w-full rounded-md border border-input bg-background pl-9 pr-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+          />
         </div>
-        <div className="flex gap-2">
+
+        {/* Right: Actions */}
+        <div className="flex gap-2 items-center">
           <button
             onClick={toggleServer}
             className={cn(
@@ -124,27 +180,42 @@ export const Accounts = () => {
           </button>
 
           <button
-            onClick={fetchAccounts}
-            disabled={loading}
-            className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-3"
-          >
-            <RefreshCw className={cn('mr-2 h-4 w-4', loading && 'animate-spin')} />
-            Refresh
-          </button>
-          <button
-            onClick={handleExport}
-            className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-3"
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Export
-          </button>
-          <button
             onClick={() => setDialogOpen(true)}
             className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-3"
           >
             <Plus className="mr-2 h-4 w-4" />
             Add Account
           </button>
+
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setShowDropdown(!showDropdown)}
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 w-9"
+            >
+              <FlipVertical className="h-4 w-4" />
+            </button>
+
+            {showDropdown && (
+              <div className="absolute right-0 top-full mt-2 w-48 rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in zoom-in-95 duration-200 z-50">
+                <div className="p-1">
+                  <button
+                    onClick={handleImport}
+                    className="relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    Import (JSON)
+                  </button>
+                  <button
+                    onClick={handleExport}
+                    className="relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    Export (JSON)
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -175,14 +246,16 @@ export const Accounts = () => {
               </tr>
             </thead>
             <tbody className="[&_tr:last-child]:border-0">
-              {accounts.length === 0 && !loading && (
+              {filteredAccounts.length === 0 && !loading && (
                 <tr>
                   <td colSpan={7} className="h-24 text-center text-muted-foreground">
-                    No accounts found. Add one to get started.
+                    {searchQuery
+                      ? 'No accounts match your search.'
+                      : 'No accounts found. Add one to get started.'}
                   </td>
                 </tr>
               )}
-              {accounts.map((account) => (
+              {filteredAccounts.map((account) => (
                 <tr
                   key={account.id}
                   className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"

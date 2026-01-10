@@ -10,6 +10,7 @@ interface API {
     delete: (id: string) => Promise<any>;
     update: (id: string, updates: any) => Promise<any>;
     export: () => Promise<any>;
+    import: () => Promise<any>;
   };
   logs: {
     create: (log: any) => Promise<any>;

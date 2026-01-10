@@ -11,6 +11,7 @@ if (!fs.existsSync(DATA_FILE)) {
   fs.writeFileSync(DATA_FILE, JSON.stringify([], null, 2));
 }
 
+export interface Account {
   id: string;
   provider: 'Claude' | 'DeepSeek';
   email: string;
@@ -30,7 +31,6 @@ if (!fs.existsSync(DATA_FILE)) {
   name?: string;
   picture?: string;
 }
-
 
 const USER_AGENTS = [
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -295,6 +295,7 @@ export const setupAccountsHandlers = () => {
 
               console.log('[Claude] Profile found:', profile);
 
+              const newAccount: Account = {
                 id: crypto.randomUUID(),
                 provider: 'Claude',
                 email: email,
@@ -311,7 +312,6 @@ export const setupAccountsHandlers = () => {
                 name: profile.name || undefined,
                 picture: profile.picture || undefined,
               };
-
 
               saveAccount(newAccount);
               authWindow.close();
@@ -368,6 +368,7 @@ export const setupAccountsHandlers = () => {
 
                   if (!profile.email) profile.email = 'deepseek@user.com';
 
+                  const newAccount: Account = {
                     id: crypto.randomUUID(),
                     provider: 'DeepSeek',
                     email: profile.email,
@@ -384,7 +385,6 @@ export const setupAccountsHandlers = () => {
                     name: profile.name || undefined,
                     picture: profile.picture || undefined,
                   };
-
 
                   console.log('[DeepSeek] Final account data:', {
                     email: newAccount.email,
@@ -456,6 +456,80 @@ export const setupAccountsHandlers = () => {
       }
     },
   );
+
+  ipcMain.handle('accounts:import', async () => {
+    try {
+      const { canceled, filePaths } = await dialog.showOpenDialog({
+        title: 'Import Accounts',
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+        properties: ['openFile'],
+      });
+
+      if (canceled || !filePaths || filePaths.length === 0)
+        return { success: false, canceled: true };
+
+      const content = fs.readFileSync(filePaths[0], 'utf-8');
+      const importedAccounts: Account[] = JSON.parse(content);
+
+      if (!Array.isArray(importedAccounts)) {
+        return { success: false, error: 'Invalid file format: Not an array' };
+      }
+
+      let currentAccounts: Account[] = [];
+      if (fs.existsSync(DATA_FILE)) {
+        currentAccounts = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+      }
+
+      let addedCount = 0;
+      let updatedCount = 0;
+
+      for (const imported of importedAccounts) {
+        // Validate required fields
+        if (!imported.provider || !imported.email || !imported.credential) {
+          continue;
+        }
+
+        const existingIndex = currentAccounts.findIndex(
+          (acc) =>
+            acc.id === imported.id ||
+            (acc.provider === imported.provider && acc.email === imported.email),
+        );
+
+        if (existingIndex !== -1) {
+          // Merge logic: Update credentials and status, preserve stats if existing has them
+          const existing = currentAccounts[existingIndex];
+          currentAccounts[existingIndex] = {
+            ...existing,
+            ...imported,
+            // Preserve stats if imported ones are 0 or undefined, but prioritize real data
+            // A simple strategy: overwrite everything but maybe keep usage stats if imported is 0?
+            // Actually, usually import overwrites. But let's assume we want to just import valid accounts.
+            // If we treat import as "Restore", we overwrite.
+          };
+          updatedCount++;
+        } else {
+          // New account
+          if (!imported.id) imported.id = crypto.randomUUID();
+          // Initialize stats if missing
+          if (imported.totalRequests === undefined) imported.totalRequests = 0;
+          if (imported.successfulRequests === undefined) imported.successfulRequests = 0;
+          if (imported.totalDuration === undefined) imported.totalDuration = 0;
+          if (imported.tokensToday === undefined) imported.tokensToday = 0;
+          if (imported.statsDate === undefined)
+            imported.statsDate = new Date().toISOString().split('T')[0];
+
+          currentAccounts.push(imported);
+          addedCount++;
+        }
+      }
+
+      fs.writeFileSync(DATA_FILE, JSON.stringify(currentAccounts, null, 2));
+      return { success: true, added: addedCount, updated: updatedCount };
+    } catch (error: any) {
+      console.error('Failed to import:', error);
+      return { success: false, error: error.message };
+    }
+  });
 
   ipcMain.handle('accounts:export', async () => {
     try {
