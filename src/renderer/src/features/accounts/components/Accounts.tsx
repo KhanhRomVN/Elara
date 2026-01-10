@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { cn } from '../../../shared/lib/utils';
 import { Copy, RefreshCw, Plus, Download, Trash2, Wifi, WifiOff } from 'lucide-react';
 import { AddAccountDialog } from './AddAccountDialog';
@@ -16,6 +17,7 @@ interface Account {
 }
 
 export const Accounts = () => {
+  const navigate = useNavigate();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -171,7 +173,8 @@ export const Accounts = () => {
               {accounts.map((account) => (
                 <tr
                   key={account.id}
-                  className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
+                  onClick={() => navigate(`/accounts/${account.id}`)}
+                  className="border-b transition-colors hover:bg-muted/50 cursor-pointer data-[state=selected]:bg-muted"
                 >
                   <td className="p-4 align-middle">
                     <div className="flex items-center gap-3">

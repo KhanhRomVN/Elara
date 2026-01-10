@@ -2,6 +2,8 @@ import { RouteObject } from 'react-router-dom';
 import MainLayout from '../layouts/MainLayout';
 import DashboardPage from '../../features/dashboard';
 import AccountsPage from '../../features/accounts';
+import AccountDetails from '../../features/accounts/components/AccountDetails';
+import PlaygroundPage from '../../features/playground';
 
 export const routes: RouteObject[] = [
   {
@@ -15,6 +17,14 @@ export const routes: RouteObject[] = [
       {
         path: 'accounts',
         element: <AccountsPage />,
+      },
+      {
+        path: 'accounts/:id',
+        element: <AccountDetails />,
+      },
+      {
+        path: 'playground',
+        element: <PlaygroundPage />,
       },
       {
         path: 'analytics',

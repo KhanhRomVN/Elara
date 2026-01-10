@@ -4,11 +4,20 @@ import { ElectronAPI } from '@electron-toolkit/preload';
 interface API {
   accounts: {
     getAll: () => Promise<any[]>;
+    getById: (id: string) => Promise<any>;
     add: (account: any) => Promise<any>;
     login: (provider: string) => Promise<any>;
     delete: (id: string) => Promise<any>;
     update: (id: string, updates: any) => Promise<any>;
     export: () => Promise<any>;
+  };
+  logs: {
+    create: (log: any) => Promise<any>;
+    getByAccount: (options: { accountId: string; options?: any }) => Promise<any>;
+    getStatistics: (accountId: string) => Promise<any>;
+    getTimeline: (options: { accountId: string; days?: number }) => Promise<any>;
+    cleanup: () => Promise<any>;
+    deleteByAccount: (accountId: string) => Promise<any>;
   };
   server: {
     start: () => Promise<{ success: boolean; port?: number; error?: string }>;

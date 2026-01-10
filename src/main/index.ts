@@ -4,6 +4,7 @@ import { windowManager } from './core/window';
 import { setupEventHandlers } from './core/events';
 import { setupAccountsHandlers } from './ipc/accounts';
 import { setupServerHandlers } from './ipc/server';
+import { setupLogsHandlers } from './ipc/logs';
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
@@ -23,6 +24,7 @@ app.whenReady().then(() => {
   setupEventHandlers();
   setupAccountsHandlers();
   setupServerHandlers();
+  setupLogsHandlers();
 
   // Create main window
   windowManager.createMainWindow();

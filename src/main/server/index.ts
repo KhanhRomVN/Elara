@@ -4,12 +4,13 @@ import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import { Account } from '../ipc/accounts';
-import { chatCompletionStream } from './deepseek';
+import { chatCompletionStream as deepseekChat } from './deepseek';
+import { chatCompletionStream as claudeChat } from './claude';
 
 const DATA_FILE = path.join(app.getPath('userData'), 'accounts.json');
 
 let server: any = null;
-const API_PORT = 11434; // Using Ollama-like port or ANY unused port
+const API_PORT = 11434; // Using Ollama-like port
 
 const expressApp = express();
 expressApp.use(cors());
@@ -20,7 +21,20 @@ expressApp.get('/v1/models', (_req, res) => {
     object: 'list',
     data: [
       { id: 'deepseek-chat', object: 'model', created: 1677610602, owned_by: 'deepseek' },
-      { id: 'claude-3-opus', object: 'model', created: 1677610602, owned_by: 'anthropic' },
+      { id: 'deepseek-reasoner', object: 'model', created: 1677610602, owned_by: 'deepseek' },
+      { id: 'claude-3-opus-20240229', object: 'model', created: 1677610602, owned_by: 'anthropic' },
+      {
+        id: 'claude-3-sonnet-20240229',
+        object: 'model',
+        created: 1677610602,
+        owned_by: 'anthropic',
+      },
+      {
+        id: 'claude-3-haiku-20240307',
+        object: 'model',
+        created: 1677610602,
+        owned_by: 'anthropic',
+      },
     ],
   });
 });
@@ -68,7 +82,7 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
 
     // Strategy 3: Default to first active account of requested model's provider
     if (!account) {
-      const inferredProvider = model.includes('deepseek') ? 'DeepSeek' : 'Claude';
+      const inferredProvider = model.includes('claude') ? 'Claude' : 'DeepSeek';
       const finalProvider = targetProvider || inferredProvider;
       account = accounts.find((a) => a.provider === finalProvider && a.status === 'Active');
     }
@@ -83,44 +97,53 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
 
+    const callbacks = {
+      onContent: (content: string) => {
+        const response = {
+          id: 'chatcmpl-' + Math.random().toString(36).substr(2, 9),
+          object: 'chat.completion.chunk',
+          created: Date.now(),
+          model: model,
+          choices: [{ delta: { content }, index: 0, finish_reason: null }],
+        };
+        res.write(`data: ${JSON.stringify(response)}\n\n`);
+      },
+      onDone: () => {
+        const response = {
+          id: 'chatcmpl-' + Math.random().toString(36).substr(2, 9),
+          object: 'chat.completion.chunk',
+          created: Date.now(),
+          model: model,
+          choices: [{ delta: {}, index: 0, finish_reason: 'stop' }],
+        };
+        res.write(`data: ${JSON.stringify(response)}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+      },
+      onError: (err: Error) => {
+        console.error(`[Server] ${account?.provider} Error:`, err);
+        const errorResponse = { error: err.message };
+        res.write(`data: ${JSON.stringify(errorResponse)}\n\n`);
+        res.end();
+      },
+    };
+
     if (account.provider === 'DeepSeek') {
-      await chatCompletionStream(
+      await deepseekChat(
         account.credential,
         { model, messages, stream: true },
         account.userAgent,
-        {
-          onContent: (content) => {
-            const response = {
-              id: 'chatcmpl-' + Math.random().toString(36).substr(2, 9),
-              object: 'chat.completion.chunk',
-              created: Date.now(),
-              model: model,
-              choices: [{ delta: { content }, index: 0, finish_reason: null }],
-            };
-            res.write(`data: ${JSON.stringify(response)}\n\n`);
-          },
-          onDone: () => {
-            const response = {
-              id: 'chatcmpl-' + Math.random().toString(36).substr(2, 9),
-              object: 'chat.completion.chunk',
-              created: Date.now(),
-              model: model,
-              choices: [{ delta: {}, index: 0, finish_reason: 'stop' }],
-            };
-            res.write(`data: ${JSON.stringify(response)}\n\n`);
-            res.write('data: [DONE]\n\n');
-            res.end();
-          },
-          onError: (err) => {
-            console.error('[Server] DeepSeek Error:', err);
-            const errorResponse = { error: err.message };
-            res.write(`data: ${JSON.stringify(errorResponse)}\n\n`);
-            res.end();
-          },
-        },
+        callbacks,
+      );
+    } else if (account.provider === 'Claude') {
+      await claudeChat(
+        account.credential,
+        { model, messages, stream: true },
+        account.userAgent,
+        callbacks,
       );
     } else {
-      res.write(`data: {"error": "Claude provider not yet implemented in backend"}\n\n`);
+      res.write(`data: {"error": "Provider not supported"}\n\n`);
       res.end();
     }
   } catch (error: any) {

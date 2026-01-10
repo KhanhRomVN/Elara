@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users } from 'lucide-react';
+import { LayoutDashboard, Users, MessageSquare } from 'lucide-react';
 import { cn } from '../../shared/lib/utils';
 
 const Sidebar = () => {
@@ -14,12 +14,17 @@ const Sidebar = () => {
       href: '/accounts',
       icon: Users,
     },
+    {
+      title: 'Playground',
+      href: '/playground',
+      icon: MessageSquare,
+    },
   ];
 
   return (
     <div className="fixed left-0 top-0 w-72 h-full bg-sidebar border-r border-border p-4 flex flex-col">
       <div className="mb-8 px-4 py-2">
-        <h1 className="text-xl font-bold tracking-tight text-primary">Elara Project</h1>
+        <h1 className="text-xl font-bold tracking-tight text-primary">Elara</h1>
       </div>
 
       <nav className="space-y-2 flex-1">

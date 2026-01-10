@@ -115,6 +115,67 @@ export const setupAccountsHandlers = () => {
     }
   });
 
+  ipcMain.handle('accounts:get-by-id', async (_, id: string) => {
+    try {
+      if (!fs.existsSync(DATA_FILE)) return null;
+      const data = fs.readFileSync(DATA_FILE, 'utf-8');
+      const accounts: Account[] = JSON.parse(data);
+      const account = accounts.find((acc) => acc.id === id);
+      return account || null;
+    } catch (error) {
+      console.error('Failed to read account:', error);
+      return null;
+    }
+  });
+
+  const fetchClaudeProfile = (
+    sessionKey: string,
+  ): Promise<{ email: string | null; name: string | null; picture: string | null }> => {
+    return new Promise((resolve) => {
+      const request = net.request({
+        method: 'GET',
+        url: 'https://claude.ai/api/auth/session',
+      });
+
+      request.setHeader('Cookie', `sessionKey=${sessionKey}`);
+      request.setHeader('User-Agent', getRandomUserAgent());
+
+      let data = '';
+      request.on('response', (response) => {
+        response.on('data', (chunk) => (data += chunk.toString()));
+        response.on('end', () => {
+          try {
+            const json = JSON.parse(data);
+            if (json && json.email) {
+              resolve({
+                email: json.email,
+                name: json.name || json.email.split('@')[0],
+                picture: json.picture || null,
+              });
+            } else if (json && json.account) {
+              resolve({
+                email: json.account.email_address,
+                name: json.account.name || json.account.email_address.split('@')[0],
+                picture: json.account.picture || null,
+              });
+            } else {
+              console.log('[Claude] Failed to parse profile from session:', json);
+              resolve({ email: null, name: null, picture: null });
+            }
+          } catch (e) {
+            console.error('[Claude] Error parsing profile:', e);
+            resolve({ email: null, name: null, picture: null });
+          }
+        });
+      });
+      request.on('error', (e) => {
+        console.error('[Claude] Profile request error:', e);
+        resolve({ email: null, name: null, picture: null });
+      });
+      request.end();
+    });
+  };
+
   ipcMain.handle('accounts:login', async (_, provider: 'Claude' | 'DeepSeek') => {
     return new Promise(async (resolve) => {
       const userAgent = getRandomUserAgent();
@@ -218,18 +279,25 @@ export const setupAccountsHandlers = () => {
             const sessionKey = cookies.find((c) => c.name === 'sessionKey')?.value;
 
             if (sessionKey) {
-              console.log('[Claude] sessionKey found!');
+              console.log('[Claude] sessionKey found, fetching profile...');
               clearInterval(interval);
+
+              const profile = await fetchClaudeProfile(sessionKey);
+              const email = profile.email || 'claude@user.com';
+
+              console.log('[Claude] Profile found:', profile);
 
               const newAccount: Account = {
                 id: crypto.randomUUID(),
                 provider: 'Claude',
-                email: 'claude@user.com', // Placeholder
+                email: email,
                 credential: sessionKey,
                 status: 'Active',
                 usage: '0',
                 lastActive: new Date().toISOString(),
                 userAgent,
+                name: profile.name || undefined,
+                picture: profile.picture || undefined,
               };
 
               saveAccount(newAccount);
