@@ -79,9 +79,9 @@ const CommandsPage = () => {
     return (
       <div className="p-6 max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-bold text-foreground">
+          <p className="text-2xl font-bold text-white">
             {isEditing ? 'Edit Command' : 'New Command'}
-          </h1>
+          </p>
           <button
             onClick={() => setShowForm(false)}
             className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
@@ -186,7 +186,7 @@ const CommandsPage = () => {
         </div>
         <button
           onClick={handleAddNew}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+          className="text-white flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
         >
           <Plus className="w-4 h-4" />
           New Command
@@ -230,16 +230,6 @@ const CommandsPage = () => {
             <p className="text-sm text-muted-foreground line-clamp-2 h-10 mb-4">
               {command.description}
             </p>
-
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-auto pt-4 border-t border-border">
-              <span
-                className={cn(
-                  'w-2 h-2 rounded-full',
-                  command.type === 'ai-completion' ? 'bg-purple-500' : 'bg-blue-500',
-                )}
-              />
-              {command.type === 'ai-completion' ? 'AI Generator' : 'Script'}
-            </div>
           </div>
         ))}
 
@@ -249,18 +239,6 @@ const CommandsPage = () => {
             <p>No commands found. Create one to get started!</p>
           </div>
         )}
-      </div>
-
-      <div className="mt-8 p-4 bg-muted/50 rounded-lg flex items-start gap-4">
-        <AlertCircle className="w-5 h-5 text-primary mt-0.5" />
-        <div className="text-sm text-muted-foreground">
-          <p className="font-medium text-foreground mb-1">How to use</p>
-          <p>
-            After creating a command with trigger{' '}
-            <span className="font-mono text-primary">name</span>, run it in your terminal:
-          </p>
-          <code className="block mt-2 bg-black/20 p-2 rounded text-foreground">elara name</code>
-        </div>
       </div>
     </div>
   );

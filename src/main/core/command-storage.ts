@@ -39,14 +39,6 @@ class CommandStorage {
             action:
               'Generate a concise and conventional git commit message for the following changes:\n\n{{diff}}',
           },
-          {
-            id: 'default-2',
-            trigger: 'explain',
-            name: 'Explain Code',
-            description: 'Explain the code in the file',
-            type: 'ai-completion',
-            action: 'Explain the following code:\n\n{{file_content}}',
-          },
         ];
         this.save();
       }

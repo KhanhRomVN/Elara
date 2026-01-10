@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
-import { Send } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Send, Plus, Upload, User, MoreHorizontal, ChevronDown } from 'lucide-react';
 import { cn } from '../../shared/lib/utils';
+import claudeIcon from '../../assets/provider_icons/claude.svg';
+import deepseekIcon from '../../assets/provider_icons/deepseek.svg';
 
 interface Message {
   id: string;
@@ -15,7 +17,92 @@ interface Account {
   email: string;
   name?: string;
   picture?: string;
+  status?: 'Active' | 'Rate Limit' | 'Error';
 }
+
+const CustomSelect = ({
+  value,
+  onChange,
+  options,
+  placeholder,
+  disabled,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string; icon?: string | React.ReactNode }[];
+  placeholder?: string;
+  disabled?: boolean;
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedOption = options.find((opt) => opt.value === value);
+
+  return (
+    <div className="relative text-left" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        disabled={disabled}
+        className={cn(
+          'h-10 w-full min-w-[140px] flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all hover:bg-accent/50',
+          !value && 'text-muted-foreground',
+        )}
+      >
+        <div className="flex items-center gap-2 truncate">
+          {selectedOption?.icon &&
+            (typeof selectedOption.icon === 'string' ? (
+              <img src={selectedOption.icon} alt="" className="w-5 h-5 shrink-0" />
+            ) : (
+              selectedOption.icon
+            ))}
+          <span className="truncate font-medium">{selectedOption?.label || placeholder}</span>
+        </div>
+        <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+      </button>
+
+      {isOpen && (
+        <div className="absolute z-50 mt-1 max-h-60 w-full min-w-[180px] overflow-auto rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2">
+          <div className="p-1">
+            {options.map((option) => (
+              <div
+                key={option.value}
+                onClick={() => {
+                  onChange(option.value);
+                  setIsOpen(false);
+                }}
+                className={cn(
+                  'relative flex select-none items-center rounded-sm px-2 py-2 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 cursor-pointer',
+                  value === option.value && 'bg-accent text-accent-foreground',
+                )}
+              >
+                <div className="flex items-center gap-2 truncate">
+                  {option.icon &&
+                    (typeof option.icon === 'string' ? (
+                      <img src={option.icon} alt="" className="w-5 h-5 shrink-0" />
+                    ) : (
+                      option.icon
+                    ))}
+                  <span className="truncate font-medium">{option.label}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const PlaygroundPage = () => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -24,6 +111,21 @@ export const PlaygroundPage = () => {
   const [selectedProvider, setSelectedProvider] = useState<'Claude' | 'DeepSeek' | ''>('');
   const [selectedAccount, setSelectedAccount] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [sloganIndex, setSloganIndex] = useState(0);
+
+  const slogans = [
+    'Feel Free Chat Free!!',
+    'Experience the Power of AI',
+    'Your Personal Assistant',
+    'Unlock Infinite Possibilities',
+  ];
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSloganIndex((prev) => (prev + 1) % slogans.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const fetchAccounts = async () => {
@@ -31,6 +133,20 @@ export const PlaygroundPage = () => {
         // @ts-ignore
         const data = await window.api.accounts.getAll();
         setAccounts(data);
+
+        // Auto-select optimal account (DeepSeek priority)
+        if (data.length > 0) {
+          const deepseekAccount = data.find(
+            (acc) => acc.provider === 'DeepSeek' && acc.status === 'Active',
+          );
+          const otherAccount = data.find((acc) => acc.status === 'Active');
+          const target = deepseekAccount || otherAccount || data[0];
+
+          if (target) {
+            setSelectedProvider(target.provider);
+            setSelectedAccount(target.id);
+          }
+        }
       } catch (error) {
         console.error('Failed to fetch accounts:', error);
       }
@@ -173,144 +289,335 @@ export const PlaygroundPage = () => {
     }
   };
 
-  return (
-    <div className="flex flex-col h-full p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="mb-6">
-        <h2 className="text-3xl font-bold tracking-tight text-foreground">Playground</h2>
-        <p className="text-muted-foreground mt-1">
-          Test and experiment with AI interactions in a sandbox environment.
-        </p>
+  // Fake history data
+  const history = [
+    { id: '1', title: 'React Performance Tips', date: 'Today' },
+    { id: '2', title: 'Explain Quantum Computing', date: 'Yesterday' },
+    { id: '3', title: 'Debug Node.js Error', date: 'Previous 7 Days' },
+  ];
+
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+
+  const startNewChat = () => {
+    setActiveChatId(null);
+    setMessages([]);
+    setInput('');
+  };
+
+  const handleSendUninitialized = async () => {
+    if (!input.trim() || !selectedAccount) return;
+    setActiveChatId('new-session'); // simplistic state transition
+    await handleSend();
+  };
+
+  const handleKeyDownUninitialized = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendUninitialized();
+    }
+  };
+
+  const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const target = e.target;
+    target.style.height = 'auto'; // Reset height
+    const maxHeight = 24 * 10; // Approx 10 lines
+    const newHeight = Math.min(target.scrollHeight, maxHeight);
+    target.style.height = `${newHeight}px`;
+    setInput(target.value);
+  };
+
+  const account = accounts.find((a) => a.id === selectedAccount);
+
+  const providerOptions = [
+    { value: 'Claude', label: 'Claude', icon: claudeIcon },
+    { value: 'DeepSeek', label: 'DeepSeek', icon: deepseekIcon },
+  ];
+
+  const accountOptions = filteredAccounts.map((acc) => ({
+    value: acc.id,
+    label: acc.name || acc.email,
+    icon: acc.picture ? (
+      <img src={acc.picture} className="w-4 h-4 rounded-full" alt="" />
+    ) : (
+      <User className="w-4 h-4" />
+    ),
+  }));
+
+  const renderDropdowns = () => (
+    <div className="flex gap-3 justify-start">
+      <div className="w-[180px]">
+        <CustomSelect
+          value={selectedProvider}
+          onChange={(val) => {
+            const newProvider = val as 'Claude' | 'DeepSeek' | '';
+            setSelectedProvider(newProvider);
+            if (newProvider) {
+              const matches = accounts.filter((acc) => acc.provider === newProvider);
+              const active = matches.find((acc) => acc.status === 'Active');
+              setSelectedAccount(active?.id || matches[0]?.id || '');
+            } else {
+              setSelectedAccount('');
+            }
+          }}
+          options={providerOptions}
+          placeholder="Select Provider"
+        />
       </div>
+      <div className="w-[240px]">
+        <CustomSelect
+          value={selectedAccount}
+          onChange={setSelectedAccount}
+          options={accountOptions}
+          placeholder="Select Account"
+          disabled={!selectedProvider}
+        />
+      </div>
+    </div>
+  );
 
-      <div className="flex-1 flex flex-col rounded-xl border bg-card shadow-sm overflow-hidden">
-        {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {messages.length === 0 && (
-            <div className="h-full flex items-center justify-center">
-              <div className="text-center text-muted-foreground">
-                <p className="text-lg font-medium">Start a conversation</p>
-                <p className="text-sm mt-1">
-                  Select a provider and account, then type a message below
-                </p>
-              </div>
-            </div>
-          )}
-
-          {messages.map((message) => (
-            <div
-              key={message.id}
+  return (
+    <div className="flex flex-col h-full animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-4">
+      <div className="mt-4">
+        <h2 className="text-2xl font-bold tracking-tight">Playground</h2>
+        {/* Animated Slogan */}
+        <div className="h-8 relative overflow-hidden mt-1">
+          {slogans.map((slogan, index) => (
+            <p
+              key={index}
               className={cn(
-                'flex w-full',
-                message.role === 'user' ? 'justify-end' : 'justify-start',
+                'absolute top-0 left-0 w-full transition-all duration-500 text-lg text-muted-foreground',
+                index === sloganIndex ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4',
               )}
             >
-              <div
-                className={cn(
-                  'max-w-[80%] rounded-lg px-4 py-3',
-                  message.role === 'user'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-foreground',
-                )}
+              {slogan}
+            </p>
+          ))}
+        </div>
+      </div>
+      <div className="flex-1 flex overflow-hidden rounded-xl border bg-card">
+        {/* Sidebar */}
+        <div className="w-64 border-r bg-muted/10 flex flex-col p-4 gap-4">
+          {/* Top Sidebar: Provider Icon */}
+          <div className="flex items-center gap-2 px-2 pb-4 border-b shrink-0">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-background border shadow-sm">
+              <img
+                src={selectedProvider === 'Claude' ? claudeIcon : deepseekIcon}
+                alt="Provider"
+                className="w-5 h-5"
+              />
+            </div>
+            <span className="font-bold text-lg">{selectedProvider || 'P'}</span>
+          </div>
+
+          <button
+            onClick={startNewChat}
+            className="flex items-center gap-2 w-full px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors shrink-0"
+          >
+            <Plus className="w-4 h-4 text-white" />
+            <span className="font-medium text-white">New Chat</span>
+          </button>
+
+          <div className="flex-1 overflow-y-auto space-y-1">
+            <p className="text-xs font-medium text-muted-foreground px-2 py-2">Recents</p>
+            {history.map((item) => (
+              <button
+                key={item.id}
+                className="w-full text-left px-3 py-2 rounded-md hover:bg-accent hover:text-accent-foreground text-sm truncate transition-colors flex items-center gap-2"
               >
-                <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                <p className="text-xs mt-2 opacity-70">{message.timestamp.toLocaleTimeString()}</p>
+                <MoreHorizontal className="w-4 h-4 opacity-70" />
+                <span className="truncate">{item.title}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* User Info (Bottom Sidebar) */}
+          <div className="mt-auto border-t pt-4 flex items-center gap-3 shrink-0">
+            {account ? (
+              <>
+                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
+                  {account.picture ? (
+                    <img src={account.picture} className="w-full h-full object-cover" />
+                  ) : (
+                    <User className="h-4 w-4 text-primary" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{account.name || 'User'}</p>
+                  <p className="text-xs text-muted-foreground truncate">{account.email}</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
+                  <User className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate text-muted-foreground">No Account</p>
+                </div>
+              </>
+            )}
+            <button className="text-muted-foreground hover:text-foreground">
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col relative">
+          {/* Only show Account Selectors at top right or similar, or keep them above chat? 
+            For now, I'll place them floating or in the top bar if in chat, 
+            but for the request "Section centered" usually implies a clean look. 
+            However, we need to select account to chat. 
+            I will put the selectors in the "Welcome" screen above the input or just below the text.
+        */}
+
+          {activeChatId ? (
+            /* Active Chat View */
+            <div className="flex flex-col h-full bg-background">
+              {/* Header / Top bar with Selectors - HIDDEN in active chat per user request */}
+              {/* <div className="border-b p-3 flex justify-between items-center bg-background/95 backdrop-blur z-10">
+                {renderDropdowns()}
+              </div> */}
+
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={cn(
+                      'flex w-full',
+                      message.role === 'user' ? 'justify-end' : 'justify-start',
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        'max-w-[80%] rounded-lg px-4 py-3',
+                        message.role === 'user'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-muted text-foreground',
+                      )}
+                    >
+                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    </div>
+                  </div>
+                ))}
+                {loading && (
+                  <div className="flex justify-start">
+                    <div className="max-w-[80%] rounded-lg px-4 py-3 bg-muted text-foreground">
+                      <span className="text-sm">Thinking...</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Input Bar */}
+              <div className="p-4 border-t bg-background">
+                <style>{`
+                  .custom-scrollbar::-webkit-scrollbar {
+                    width: 6px;
+                  }
+                  .custom-scrollbar::-webkit-scrollbar-track {
+                    background: transparent;
+                  }
+                  .custom-scrollbar::-webkit-scrollbar-thumb {
+                    background-color: hsl(var(--muted-foreground) / 0.3);
+                    border-radius: 10px;
+                  }
+                  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                    background-color: hsl(var(--muted-foreground) / 0.5);
+                  }
+                `}</style>
+                <div className="relative border rounded-xl bg-background shadow-sm focus-within:ring-1 focus-within:ring-ring transition-shadow w-full">
+                  <textarea
+                    value={input}
+                    onChange={handleInput}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Type a message..."
+                    className="w-full min-h-[50px] border-none bg-transparent p-4 text-base focus:outline-none focus:ring-0 resize-none pb-14 custom-scrollbar"
+                    rows={1}
+                  />
+
+                  {/* Bottom Actions Bar */}
+                  <div className="absolute bottom-2 left-2 right-2 flex justify-between items-center">
+                    <div className="flex gap-1">
+                      <button
+                        className="p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted/50 transition-colors"
+                        title="Add"
+                      >
+                        <Plus className="h-5 w-5" />
+                      </button>
+                      <button
+                        className="p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted/50 transition-colors"
+                        title="Upload"
+                      >
+                        <Upload className="h-5 w-5" />
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={handleSend}
+                      disabled={loading}
+                      className="h-8 w-8 flex items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      <Send className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-          ))}
+          ) : (
+            /* Welcome Screen */
+            <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-6 animate-in fade-in zoom-in-95 duration-500">
+              <div className="space-y-2">
+                <h1 className="text-4xl font-bold tracking-tight text-foreground">Elara</h1>
+                <p className="text-xl font-medium text-muted-foreground/80">
+                  Feel Free Chat Free!!
+                </p>
+              </div>
 
-          {loading && (
-            <div className="flex justify-start">
-              <div className="max-w-[80%] rounded-lg px-4 py-3 bg-muted text-foreground">
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-1">
-                    <div
-                      className="w-2 h-2 rounded-full bg-current animate-bounce"
-                      style={{ animationDelay: '0ms' }}
-                    />
-                    <div
-                      className="w-2 h-2 rounded-full bg-current animate-bounce"
-                      style={{ animationDelay: '150ms' }}
-                    />
-                    <div
-                      className="w-2 h-2 rounded-full bg-current animate-bounce"
-                      style={{ animationDelay: '300ms' }}
-                    />
+              <div className="w-full max-w-2xl space-y-4 text-left">
+                {/* Account Selection */}
+                {renderDropdowns()}
+
+                <div className="relative border rounded-xl bg-background shadow-sm focus-within:ring-1 focus-within:ring-ring transition-shadow w-full max-w-2xl text-left">
+                  <textarea
+                    value={input}
+                    onChange={handleInput}
+                    onKeyDown={handleKeyDownUninitialized}
+                    placeholder="Ask anything..."
+                    className="w-full min-h-[50px] border-none bg-transparent p-4 text-base focus:outline-none focus:ring-0 resize-none pb-14 custom-scrollbar"
+                    rows={1}
+                  />
+
+                  {/* Bottom Actions Bar */}
+                  <div className="absolute bottom-2 left-2 right-2 flex justify-between items-center">
+                    <div className="flex gap-1">
+                      <button
+                        className="p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted/50 transition-colors"
+                        title="Add"
+                      >
+                        <Plus className="h-5 w-5" />
+                      </button>
+                      <button
+                        className="p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted/50 transition-colors"
+                        title="Upload"
+                      >
+                        <Upload className="h-5 w-5" />
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={handleSendUninitialized}
+                      disabled={!input.trim() || !selectedAccount || loading}
+                      className="h-8 w-8 flex items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      <Send className="h-4 w-4 text-white" />
+                    </button>
                   </div>
-                  <span className="text-sm text-muted-foreground">Thinking...</span>
                 </div>
               </div>
             </div>
           )}
-        </div>
-
-        {/* Input Area */}
-        <div className="border-t bg-background p-4 space-y-3">
-          {/* Provider and Account Selectors */}
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                Provider
-              </label>
-              <select
-                value={selectedProvider}
-                onChange={(e) => {
-                  setSelectedProvider(e.target.value as 'Claude' | 'DeepSeek' | '');
-                  setSelectedAccount('');
-                }}
-                className="w-full h-9 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                <option value="">Select provider...</option>
-                <option value="Claude">Claude</option>
-                <option value="DeepSeek">DeepSeek</option>
-              </select>
-            </div>
-
-            <div className="flex-1">
-              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                Account
-              </label>
-              <select
-                value={selectedAccount}
-                onChange={(e) => setSelectedAccount(e.target.value)}
-                disabled={!selectedProvider || filteredAccounts.length === 0}
-                className="w-full h-9 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <option value="">Select account...</option>
-                {filteredAccounts.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.name || account.email}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Message Input */}
-          <div className="flex gap-2">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={
-                selectedAccount
-                  ? 'Type your message here... (Shift+Enter for new line)'
-                  : 'Select an account to start chatting...'
-              }
-              disabled={!selectedAccount || loading}
-              className="flex-1 min-h-[60px] max-h-[200px] resize-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              rows={2}
-            />
-            <button
-              onClick={handleSend}
-              disabled={!input.trim() || !selectedAccount || loading}
-              className={cn(
-                'inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
-                'bg-primary text-primary-foreground hover:bg-primary/90 h-10 w-10 shrink-0 self-end',
-              )}
-            >
-              <Send className="h-4 w-4" />
-            </button>
-          </div>
         </div>
       </div>
     </div>

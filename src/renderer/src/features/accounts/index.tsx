@@ -146,7 +146,11 @@ export const Accounts = () => {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
+      <div className="mt-4">
+        <h2 className="text-2xl font-bold tracking-tight">Accounts</h2>
+        <p className="text-muted-foreground">Manage your connected accounts.</p>
+      </div>
       <div className="flex items-center justify-between gap-4">
         {/* Left: Search Bar */}
         <div className="relative w-full max-w-sm">
@@ -181,7 +185,7 @@ export const Accounts = () => {
 
           <button
             onClick={() => setDialogOpen(true)}
-            className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-3"
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-3 text-white"
           >
             <Plus className="mr-2 h-4 w-4" />
             Add Account
@@ -308,7 +312,7 @@ export const Accounts = () => {
                   <td className="p-4 align-middle group relative">
                     <code
                       className={cn(
-                        'relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-xs break-all selection:bg-primary/20 block cursor-pointer hover:bg-muted/80 hover:text-primary transition-colors',
+                        'relative rounded  font-mono text-xs break-all block cursor-pointer hover:text-primary transition-colors',
                       )}
                       onClick={() => copyApiUrl(account)}
                       title={'Click to copy full URL'}
