@@ -1,73 +1,95 @@
-# Template Electron App
+<p align="center">
+  <img src="build/icon.png" alt="Elara Logo" width="128" height="128">
+</p>
 
-Professional, production-ready Electron application template featuring a modern tech stack and best practices.
+<h1 align="center">Elara</h1>
 
-## Usage
+<p align="center">
+  <strong>🚀 AI-powered developer productivity desktop app with CLI integration</strong>
+</p>
 
-This is a CLI tool to bootstrap a new Electron application.
+<p align="center">
+  <a href="#features">Features</a> •
+  <a href="#installation">Installation</a> •
+  <a href="#usage">Usage</a> •
+  <a href="#cli">CLI</a> •
+  <a href="#development">Development</a> •
+  <a href="#license">License</a>
+</p>
 
-### Scaffold a new project
+<p align="center">
+  <img src="https://img.shields.io/badge/Electron-28.1.0-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron">
+  <img src="https://img.shields.io/badge/React-18.2.0-61DAFB?style=flat-square&logo=react&logoColor=white" alt="React">
+  <img src="https://img.shields.io/badge/TypeScript-5.3.0-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="License">
+</p>
 
-Use `npx` (recommended) to create a new project in seconds:
+---
+
+## ✨ Features
+
+- **🤖 AI-Powered Commands** - Integrate with multiple AI providers (DeepSeek, Claude) for intelligent assistance
+- **📝 Commit Message Generator** - Automatically generate conventional commit messages from staged changes
+- **🔌 CLI Integration** - Powerful command-line interface accessible from anywhere
+- **🖥️ Cross-Platform** - Available for Windows, macOS, and Linux
+- **🎨 Modern UI** - Beautiful interface built with React, TailwindCSS, and Monaco Editor
+- **🔄 System Tray** - Runs in background with quick access from system tray
+- **📊 Account Management** - Manage multiple AI provider accounts
+
+## 📦 Installation
+
+### Download Pre-built Binaries
+
+Download the latest release for your platform from the [Releases](https://github.com/KhanhRomVN/Elara/releases) page.
+
+| Platform | Format                               |
+| -------- | ------------------------------------ |
+| Windows  | `.exe` (NSIS Installer), `.msi`      |
+| macOS    | `.dmg`                               |
+| Linux    | `.AppImage`, `.deb`, `.rpm`, `.snap` |
+
+### Install via npm
 
 ```bash
-npx @khanhromvn/create-electron-app
+npm install -g elara
 ```
 
-Then follow the interactive prompts to set up your project name.
+## 🚀 Usage
 
-After scaffolding:
+### Desktop Application
+
+1. Launch Elara from your applications menu or dock
+2. Add your AI provider accounts in the Accounts page
+3. Use the Playground to interact with AI models
+4. Access commands through the Commands page
+
+### CLI
+
+The CLI allows you to use Elara commands directly from your terminal.
 
 ```bash
-cd <your-project-name>
-npm install
-npm run dev
+# Check Elara status
+elara
+
+# Generate commit message from staged changes
+elara commit-message
 ```
 
-## Features
+> **Note:** The desktop app must be running for CLI commands to work.
 
-- 🏗 **Architecture**: Feature-based folder structure for scalability.
-- ⚡ **Tech Stack**: Electron, React, TypeScript, Vite.
-- 🎨 **Styling**: TailwindCSS with shadcn/ui integration.
-- 🎭 **Theming**: Advanced theme system with presets (Light/Dark/System).
-- 🧪 **Testing**: Vitest ready for Unit and Integration tests.
-- 🧹 **Code Quality**: ESLint, Prettier, Husky, lint-staged.
-- 📦 **Build**: efficient build process with electron-builder.
-
-## Project Structure
-
-```bash
-src/
-├── main/           # Main process
-│   ├── core/       # Core logic (WindowManager, Config)
-│   ├── features/   # Main process features
-│   └── index.ts    # Entry point
-├── preload/        # Preload scripts
-│   ├── api/        # Exposed APIs
-│   └── index.ts    # Entry point
-└── renderer/       # Renderer process (React)
-    ├── src/
-    │   ├── core/       # Core providers, routes, theme
-    │   ├── features/   # Feature modules (Dashboard, etc)
-    │   ├── shared/     # Shared components, hooks, utils
-    │   ├── assets/     # Static assets
-    │   └── main.tsx    # Entry point
-```
-
-## Development (Contributing)
-
-If you want to contribute to this template or run it locally as a standalone app:
+## 🛠️ Development
 
 ### Prerequisites
 
-- Node.js >= 18
-- npm or yarn
+- Node.js >= 18.x
+- npm >= 9.x
 
-### Installation
+### Setup
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/KhanhRomVN/Elara.git
+cd Elara
 
 # Install dependencies
 npm install
@@ -76,25 +98,52 @@ npm install
 npm run dev
 ```
 
-## Scripts
+### Available Scripts
 
-- `npm run dev`: Start development server.
-- `npm run build`: Build for production.
-- `npm test`: Run tests.
-- `npm run lint`: Lint code.
-- `npm run format`: Format code.
+| Script                | Description                              |
+| --------------------- | ---------------------------------------- |
+| `npm run dev`         | Start development server with hot reload |
+| `npm run build`       | Build for production (Windows & Linux)   |
+| `npm run build:win`   | Build for Windows only                   |
+| `npm run build:mac`   | Build for macOS only                     |
+| `npm run build:linux` | Build for Linux only                     |
+| `npm run lint`        | Run ESLint                               |
+| `npm run format`      | Format code with Prettier                |
+| `npm run test`        | Run tests                                |
 
-## Documentation
+### Project Structure
 
-- [Architecture](./docs/ARCHITECTURE.md)
-- [Setup](./docs/SETUP.md)
-- [Development](./docs/DEVELOPMENT.md)
-- [Dependencies](./docs/DEPENDENCIES.md)
+```
+elara/
+├── bin/                    # CLI client
+├── build/                  # Build resources (icons, etc.)
+├── docs/                   # Documentation
+├── src/
+│   ├── main/              # Electron main process
+│   │   ├── core/          # Core functionality (window, tray, CLI server)
+│   │   ├── ipc/           # IPC handlers
+│   │   └── server/        # Local API server
+│   ├── preload/           # Preload scripts
+│   └── renderer/          # React frontend
+│       └── src/
+│           ├── core/      # Core components
+│           ├── features/  # Feature modules
+│           └── styles/    # Global styles
+└── scripts/               # Build & setup scripts
+```
 
-## Contributing
+## 📄 License
 
-Please read [CONTRIBUTING.md](./docs/CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## License
+## 👤 Author
 
-MIT
+**KhanhRomVN**
+
+- GitHub: [@KhanhRomVN](https://github.com/KhanhRomVN)
+
+---
+
+<p align="center">
+  Made with ❤️ by KhanhRomVN
+</p>
