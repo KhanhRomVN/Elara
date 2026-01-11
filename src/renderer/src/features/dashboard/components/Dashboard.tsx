@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BarChart3, Users, Zap, AlertCircle } from 'lucide-react';
+import { BarChart3, Users, Zap } from 'lucide-react';
 
 const Dashboard = () => {
   const [stats, setStats] = useState({

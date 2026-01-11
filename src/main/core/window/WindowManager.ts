@@ -5,6 +5,7 @@ import { windowConfig } from '../config';
 
 export class WindowManager {
   private mainWindow: BrowserWindow | null = null;
+  private isQuitting = false;
 
   constructor() {}
 
@@ -25,12 +26,21 @@ export class WindowManager {
         nodeIntegration: false,
         contextIsolation: true,
       },
+      icon: join(__dirname, '../../resources/icon.png'),
     });
 
     this.mainWindow.on('ready-to-show', () => {
       this.mainWindow?.show();
       if (is.dev) {
         // keep window maximized in dev
+      }
+    });
+
+    // Handle window close - minimize to tray instead
+    this.mainWindow.on('close', (event) => {
+      if (!this.isQuitting) {
+        event.preventDefault();
+        this.mainWindow?.hide();
       }
     });
 
@@ -50,6 +60,10 @@ export class WindowManager {
 
   getMainWindow(): BrowserWindow | null {
     return this.mainWindow;
+  }
+
+  setQuitting(value: boolean): void {
+    this.isQuitting = value;
   }
 }
 

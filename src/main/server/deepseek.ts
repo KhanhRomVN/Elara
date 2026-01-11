@@ -141,10 +141,16 @@ async function solvePoW(challenge: PoWChallenge): Promise<PoWResponse> {
     let wasmPath = '';
 
     if (app.isPackaged) {
-      wasmPath = path.join(process.resourcesPath, 'resources', 'sha3_wasm_bg.7b9ca65ddd.wasm');
+      // When using asarUnpack, files are extracted to app.asar.unpacked/
+      wasmPath = path.join(
+        process.resourcesPath,
+        'app.asar.unpacked',
+        'resources',
+        'sha3_wasm_bg.7b9ca65ddd.wasm',
+      );
       if (!fs.existsSync(wasmPath)) {
-        // Try alternative path without inner resources mainly for some setups
-        wasmPath = path.join(process.resourcesPath, 'sha3_wasm_bg.7b9ca65ddd.wasm');
+        // Fallback: try without app.asar.unpacked for some setups
+        wasmPath = path.join(process.resourcesPath, 'resources', 'sha3_wasm_bg.7b9ca65ddd.wasm');
       }
     } else {
       wasmPath = path.join(process.cwd(), 'resources', 'sha3_wasm_bg.7b9ca65ddd.wasm');

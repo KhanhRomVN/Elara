@@ -185,19 +185,19 @@ const CommandsPage = () => {
     // Listen for execution requests from main process (CLI)
     const removeListener = window.api.on(
       'command:execute-request',
-      async (_event: any, { requestId, trigger }: any) => {
-        console.log(`Received execution request for: ${trigger}`);
+      async (_event: any, { requestId, trigger, cwd }: any) => {
+        console.log(`Received execution request for: ${trigger}, cwd: ${cwd}`);
 
         // Find the command
         const command = commands.find((c) => c.trigger === trigger);
 
         if (command && command.handler) {
           try {
-            // Mock tools
+            // Mock tools - pass cwd to shell.execute
             const tools = {
               shell: {
                 execute: async (cmd: string) => {
-                  return await window.api.shell.execute(cmd);
+                  return await window.api.shell.execute(cmd, cwd);
                 },
               },
               prompt: async (msg: string) => {

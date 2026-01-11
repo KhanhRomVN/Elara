@@ -2,16 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { useRef } from 'react';
 import { cn } from '../../shared/lib/utils';
-import {
-  Copy,
-  RefreshCw,
-  Plus,
-  Download,
-  Trash2,
-  Search,
-  FlipVertical,
-  Upload,
-} from 'lucide-react';
+import { Copy, Plus, Download, Trash2, Search, FlipVertical, Upload } from 'lucide-react';
 import { AddAccountDialog } from './components/AddAccountDialog';
 
 interface Account {
@@ -35,7 +26,7 @@ export const Accounts = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [serverRunning, setServerRunning] = useState(false);
+  const [, setServerRunning] = useState(false);
   const [serverPort, setServerPort] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);

@@ -55,9 +55,13 @@ export function setupCommandsHandlers(): void {
     },
   );
 
-  ipcMain.handle('shell:execute', async (_, command: string) => {
+  ipcMain.handle('shell:execute', async (_, command: string, cwd?: string) => {
     try {
-      const { stdout, stderr } = await execAsync(command, { maxBuffer: 50 * 1024 * 1024 });
+      const options: { maxBuffer: number; cwd?: string } = { maxBuffer: 50 * 1024 * 1024 };
+      if (cwd) {
+        options.cwd = cwd;
+      }
+      const { stdout, stderr } = await execAsync(command, options);
       if (stderr) {
         console.warn('Shell command warning:', stderr);
       }

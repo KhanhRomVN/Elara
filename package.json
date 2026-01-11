@@ -1,10 +1,10 @@
 {
-  "name": "Elara",
-  "version": "0.1.0",
+  "name": "elara",
+  "version": "1.0.7",
   "publishConfig": {
     "access": "public"
   },
-  "description": "Electron application created with @khanhromvn/create-electron-app",
+  "description": "Elara is a cross-platform application created with @khanhromvn/create-electron-app",
   "bin": {
     "elara": "./bin/cli.js"
   },
@@ -20,7 +20,7 @@
   "author": "KhanhRomVN",
   "scripts": {
     "dev": "node scripts/dev-setup.js && electron-vite dev",
-    "build": "npm run typecheck && electron-vite build",
+    "build": "npm run typecheck && electron-vite build && electron-builder --win --linux",
     "preview": "electron-vite preview",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
@@ -32,9 +32,10 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "postinstall": "electron-builder install-app-deps && node scripts/dev-setup.js",
-    "build:win": "npm run build && electron-builder --win",
-    "build:mac": "npm run build && electron-builder --mac",
-    "build:linux": "npm run build && electron-builder --linux",
+    "build:all": "npm run build",
+    "build:win": "npm run typecheck && electron-vite build && electron-builder --win",
+    "build:mac": "npm run typecheck && electron-vite build && electron-builder --mac",
+    "build:linux": "npm run typecheck && electron-vite build && electron-builder --linux",
     "install-cli": "node scripts/install-cli.js",
     "uninstall-cli": "node scripts/uninstall-cli.js",
     "setup-cli": "node scripts/dev-setup.js",

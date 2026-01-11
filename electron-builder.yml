@@ -1,25 +1,52 @@
-appId: com.electron.template
-productName: Template Electron
+appId: com.electron.elara
+productName: Elara
 directories:
   buildResources: build
 files:
-  - "!**/.vscode/*"
-  - "!src/*"
-  - "!electron.vite.config.{js,ts,mjs,cjs}"
-  - "!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc,dev-app-update.yml,CHANGELOG.md,README.md}"
-  - "!{.env,.env.*,.npmrc,pnpm-lock.yaml,yarn.lock}"
-  - "!{tsconfig.json,tsconfig.*.json}"
-  - "!{.github,docs,tests,scripts}"
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml,yarn.lock}'
+  - '!{tsconfig.json,tsconfig.*.json}'
+  - '!{.github,docs,tests,scripts}'
 asarUnpack:
   - resources/**
+
+# Windows Configuration
 win:
-  executableName: syfer
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - arm64
+    - target: msi
+      arch:
+        - x64
+        - arm64
+  executableName: Elara
+  icon: build/icon.png
+
+# Windows NSIS Installer (.exe)
 nsis:
-  artifactName: ${name}-${version}-setup.${ext}
+  artifactName: ${name}-${version}-${arch}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+
+# Windows MSI Installer
+msi:
+  artifactName: ${name}-${version}.${ext}
+
+# macOS Configuration
 mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
@@ -27,17 +54,57 @@ mac:
     - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
   notarize: false
+  icon: build/icon.png
+
+# macOS DMG
 dmg:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${name}-${version}_${arch}.${ext}
+  title: ${productName} ${version}
+
+# Linux Configuration
 linux:
   target:
-    - AppImage
-    - snap
-    - deb
-  maintainer: electronjs.org
+    - target: deb
+      arch:
+        - x64
+        - arm64
+    - target: snap
+      arch:
+        - x64
+
+    - target: rpm
+      arch:
+        - x64
+        - arm64
+    - target: AppImage
+      arch:
+        - x64
+        - arm64
+  maintainer: KhanhRomVN
   category: Utility
+  executableName: elara
+  icon: build/icons
+
+# Linux Debian Package
+deb:
+  artifactName: ${name}-${version}-${arch}.${ext}
+
+# Linux Snap
+snap:
+  artifactName: ${name}-${version}-${arch}.${ext}
+
+# Linux Flatpak
+flatpak:
+  artifactName: ${name}-${version}-${arch}.${ext}
+
+# Linux RPM
+rpm:
+  artifactName: ${name}-${version}-${arch}.${ext}
+
+# Linux AppImage
 appImage:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${name}-${version}-${arch}.${ext}
+
 npmRebuild: false
 publish:
   provider: generic

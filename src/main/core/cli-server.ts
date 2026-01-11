@@ -112,7 +112,7 @@ export function startCLIServer(): void {
           activeSocket = socket;
 
           if (request.type === 'info') {
-            safeWrite(socket, getAppInfo());
+            safeWrite(socket, { type: 'info', ...getAppInfo() });
             socket.end();
           } else if (request.type === 'execute') {
             const { trigger } = request;

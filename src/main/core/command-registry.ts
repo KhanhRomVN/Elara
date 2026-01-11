@@ -51,6 +51,7 @@ class CommandRegistry {
         requestId,
         trigger,
         args,
+        cwd: args.cwd, // Forward cwd from CLI request
       });
     });
   }

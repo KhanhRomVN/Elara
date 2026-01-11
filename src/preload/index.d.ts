@@ -42,7 +42,7 @@ interface API {
     }>;
   };
   shell: {
-    execute: (command: string) => Promise<string>;
+    execute: (command: string, cwd?: string) => Promise<string>;
   };
   // General IPC methods
   on: (channel: string, listener: (event: IpcRendererEvent, ...args: any[]) => void) => () => void;

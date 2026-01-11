@@ -17,7 +17,8 @@ const api = {
     getStats: (): Promise<any> => ipcRenderer.invoke('stats:get'),
   },
   shell: {
-    execute: (command: string): Promise<string> => ipcRenderer.invoke('shell:execute', command),
+    execute: (command: string, cwd?: string): Promise<string> =>
+      ipcRenderer.invoke('shell:execute', command, cwd),
   },
   on: (channel: string, listener: (event: any, ...args: any[]) => void) => {
     const subscription = (_event: any, ...args: any[]) => listener(_event, ...args);

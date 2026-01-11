@@ -208,6 +208,8 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
 
   // Handle line highlighting
   useEffect(() => {
+    let decorations: string[] = [];
+
     if (
       editorInstance.current &&
       showLineNumbers &&
@@ -217,7 +219,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
       const editor = editorInstance.current;
 
       // Clear previous decorations/collections if we stored them (simple version: just overwrite)
-      const decorations = editor.deltaDecorations(
+      decorations = editor.deltaDecorations(
         [],
         [
           {
@@ -232,14 +234,14 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
       );
 
       editor.revealLineInCenter(line);
-
-      // Cleanup function to remove decorations?
-      // Monaco handles deltaDecorations by returning new IDs. For this simple case, we trust re-renders or disposal.
-      // But ideally we should track `decorations` ref.
-      return () => {
-        editor.deltaDecorations(decorations, []);
-      };
     }
+
+    // Always return cleanup function
+    return () => {
+      if (editorInstance.current && decorations.length > 0) {
+        editorInstance.current.deltaDecorations(decorations, []);
+      }
+    };
   }, [themeConfig?.highlightLine, showLineNumbers]);
 
   return <div ref={editorRef} className={`w-full h-full min-h-[200px] ${className || ''}`} />;
