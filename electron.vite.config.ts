@@ -30,6 +30,12 @@ export default defineConfig({
     },
     build: {
       outDir: 'out/preload',
+      rollupOptions: {
+        input: {
+          index: resolve(__dirname, 'src/preload/index.ts'),
+          'auth-preload': resolve(__dirname, 'src/preload/auth-preload.ts'),
+        },
+      },
     },
   },
   renderer: {

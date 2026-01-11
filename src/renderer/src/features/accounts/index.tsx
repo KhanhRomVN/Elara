@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { useRef } from 'react';
 import { cn } from '../../shared/lib/utils';
-import { Copy, Plus, Download, Trash2, Search, FlipVertical, Upload } from 'lucide-react';
+import { Copy, Plus, Download, Trash2, Search, AlignEndVertical, Upload } from 'lucide-react';
 import { AddAccountDialog } from './components/AddAccountDialog';
 
 interface Account {
@@ -155,7 +155,7 @@ export const Accounts = () => {
               onClick={() => setShowDropdown(!showDropdown)}
               className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 w-9"
             >
-              <FlipVertical className="h-4 w-4" />
+              <AlignEndVertical className="h-4 w-4" />
             </button>
 
             {showDropdown && (

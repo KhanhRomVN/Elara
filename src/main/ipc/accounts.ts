@@ -32,16 +32,10 @@ export interface Account {
   picture?: string;
 }
 
-const USER_AGENTS = [
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-];
-
-function getRandomUserAgent() {
-  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-}
+const getSafeUserAgent = () => {
+  // Use a static, realistic Chrome User-Agent to avoid bot detection
+  return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+};
 
 const fetchDeepSeekProfile = (
   token: string,
@@ -136,13 +130,14 @@ export const setupAccountsHandlers = () => {
     sessionKey: string,
   ): Promise<{ email: string | null; name: string | null; picture: string | null }> => {
     return new Promise((resolve) => {
+      // Try organizations API first which includes account info
       const request = net.request({
         method: 'GET',
-        url: 'https://claude.ai/api/auth/session',
+        url: 'https://claude.ai/api/organizations',
       });
 
       request.setHeader('Cookie', `sessionKey=${sessionKey}`);
-      request.setHeader('User-Agent', getRandomUserAgent());
+      request.setHeader('User-Agent', getSafeUserAgent());
 
       let data = '';
       request.on('response', (response) => {
@@ -150,29 +145,51 @@ export const setupAccountsHandlers = () => {
         response.on('end', () => {
           try {
             const json = JSON.parse(data);
-            if (json && json.email) {
-              resolve({
-                email: json.email,
-                name: json.name || json.email.split('@')[0],
-                picture: json.picture || null,
-              });
-            } else if (json && json.account) {
-              resolve({
-                email: json.account.email_address,
-                name: json.account.name || json.account.email_address.split('@')[0],
-                picture: json.account.picture || null,
-              });
-            } else {
-              resolve({ email: null, name: null, picture: null });
+            console.log('[Claude] Organizations API response:', json);
+
+            // Organizations API returns an array with account info
+            if (json && Array.isArray(json) && json.length > 0) {
+              const org = json[0];
+
+              // Try to extract email from organization name
+              // Format: "email@domain.com's Organization"
+              if (org.name && typeof org.name === 'string') {
+                const emailMatch = org.name.match(/^(.+@.+\..+)'s Organization$/);
+                if (emailMatch) {
+                  const email = emailMatch[1];
+                  console.log('[Claude] Extracted email from org name:', email);
+                  resolve({
+                    email: email,
+                    name: email.split('@')[0],
+                    picture: null,
+                  });
+                  return;
+                }
+              }
+
+              // Check if there's account info in the organization
+              if (org.created_by_account) {
+                resolve({
+                  email: org.created_by_account.email_address || null,
+                  name:
+                    org.created_by_account.full_name || org.created_by_account.display_name || null,
+                  picture: null,
+                });
+                return;
+              }
             }
+
+            // Fallback: no account info found
+            console.log('[Claude] No account info in organizations response');
+            resolve({ email: null, name: null, picture: null });
           } catch (e) {
-            console.error('[Claude] Error parsing profile:', e);
+            console.error('[Claude] Error parsing organizations response:', e);
             resolve({ email: null, name: null, picture: null });
           }
         });
       });
       request.on('error', (e) => {
-        console.error('[Claude] Profile request error:', e);
+        console.error('[Claude] Organizations request error:', e);
         resolve({ email: null, name: null, picture: null });
       });
       request.end();
@@ -181,13 +198,18 @@ export const setupAccountsHandlers = () => {
 
   ipcMain.handle('accounts:login', async (_, provider: 'Claude' | 'DeepSeek') => {
     return new Promise(async (resolve) => {
-      const userAgent = getRandomUserAgent();
+      console.log(`[Accounts] Starting login for provider: ${provider}`);
+
+      // Use a consistent, real Chrome user agent by stripping Electron/App identifiers
+      const userAgent = getSafeUserAgent();
+      console.log(`[Accounts] Using User-Agent: ${userAgent}`);
 
       const partition = `persist:${provider.toLowerCase()}`;
       const authSession = session.fromPartition(partition);
 
       // Clear previous session data to ensure fresh login
       await authSession.clearStorageData();
+      console.log(`[Accounts] Cleared session data for partition: ${partition}`);
 
       const authWindow = new BrowserWindow({
         width: 1000,
@@ -207,9 +229,12 @@ export const setupAccountsHandlers = () => {
 
       const url =
         provider === 'Claude' ? 'https://claude.ai/login' : 'https://chat.deepseek.com/login';
+      console.log(`[Accounts] Loading login URL: ${url}`);
 
-      // For DeepSeek, intercept POST request to capture email from body
+      // Intercept login requests to capture email
       let capturedEmail: string | null = null;
+      let capturedName: string | null = null;
+
       if (provider === 'DeepSeek') {
         authSession.webRequest.onBeforeRequest(
           { urls: ['https://chat.deepseek.com/api/v0/users/login'] },
@@ -229,6 +254,25 @@ export const setupAccountsHandlers = () => {
               }
             }
             callback({});
+          },
+        );
+      } else if (provider === 'Claude') {
+        // Intercept Claude Google login response to capture email
+        authSession.webRequest.onCompleted(
+          { urls: ['https://claude.ai/api/auth/verify_google'] },
+          (details) => {
+            console.log('[Claude] Detected verify_google request');
+          },
+        );
+
+        authSession.webRequest.onResponseStarted(
+          { urls: ['https://claude.ai/api/auth/verify_google'] },
+          async (details) => {
+            if (details.statusCode === 200) {
+              console.log('[Claude] verify_google succeeded, attempting to extract response data');
+              // Note: We cannot directly access response body in onResponseStarted
+              // We'll need to rely on the profile fetch endpoint or use a different approach
+            }
           },
         );
       }
@@ -251,9 +295,15 @@ export const setupAccountsHandlers = () => {
             const sessionKey = cookies.find((c) => c.name === 'sessionKey')?.value;
 
             if (sessionKey) {
+              console.log('[Claude] SessionKey found, fetching profile...');
               clearInterval(interval);
 
               const profile = await fetchClaudeProfile(sessionKey);
+              console.log('[Claude] Profile fetched:', {
+                email: profile.email,
+                name: profile.name,
+              });
+
               const email = profile.email || 'claude@user.com';
 
               const newAccount: Account = {
@@ -274,7 +324,12 @@ export const setupAccountsHandlers = () => {
                 picture: profile.picture || undefined,
               };
 
+              console.log('[Claude] Saving account:', {
+                id: newAccount.id,
+                email: newAccount.email,
+              });
               saveAccount(newAccount);
+              console.log('[Claude] Account saved successfully');
               authWindow.close();
               resolve({ success: true, account: newAccount });
             }
@@ -345,8 +400,10 @@ export const setupAccountsHandlers = () => {
             }
           }
         } catch (e) {
-          // Ignore errors during polling (e.g. navigation in progress)
-          // console.error(e);
+          // Log errors during polling for debugging
+          if (provider === 'Claude') {
+            console.error('[Claude] Error during login polling:', e);
+          }
         }
       }, 1000);
 

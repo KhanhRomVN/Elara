@@ -139,6 +139,7 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
 
     const callbacks = {
       onContent: (content: string) => {
+        console.log('[Server] Streaming content chunk:', content);
         // Estimate token count - very rough approximation (4 chars ~= 1 token)
         // Ideally the provider would return usage stats
         const estimatedTokens = Math.ceil(content.length / 4);
@@ -153,6 +154,7 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
           choices: [{ delta: { content }, index: 0, finish_reason: null }],
         };
         res.write(`data: ${JSON.stringify(response)}\n\n`);
+        console.log('[Server] Wrote SSE event:', JSON.stringify(response));
       },
       onDone: () => {
         const response = {

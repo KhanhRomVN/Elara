@@ -40,54 +40,8 @@ for (const prop of automationProps) {
   }
 }
 
-// Override navigator properties to appear more human
-Object.defineProperty(navigator, 'languages', {
-  get: () => ['en-US', 'en', 'vi'],
-});
-
-Object.defineProperty(navigator, 'plugins', {
-  get: () => [
-    {
-      0: {
-        type: 'application/x-google-chrome-pdf',
-        suffixes: 'pdf',
-        description: 'Portable Document Format',
-      },
-      description: 'Portable Document Format',
-      filename: 'internal-pdf-viewer',
-      length: 1,
-      name: 'Chrome PDF Plugin',
-    },
-    {
-      0: { type: 'application/pdf', suffixes: 'pdf', description: '' },
-      description: '',
-      filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai',
-      length: 1,
-      name: 'Chrome PDF Viewer',
-    },
-    {
-      0: { type: 'application/x-nacl', suffixes: '', description: 'Native Client Executable' },
-      1: {
-        type: 'application/x-pnacl',
-        suffixes: '',
-        description: 'Portable Native Client Executable',
-      },
-      description: '',
-      filename: 'internal-nacl-plugin',
-      length: 2,
-      name: 'Native Client',
-    },
-  ],
-});
-
-// Spoof permissions API to avoid detection
-const originalQuery = window.navigator.permissions?.query;
-if (originalQuery) {
-  (window.navigator.permissions as any).query = (parameters: any) =>
-    parameters.name === 'notifications'
-      ? Promise.resolve({ state: Notification.permission } as PermissionStatus)
-      : originalQuery(parameters);
-}
+// Navigator spoofing removed to prevent conflicts with real Electron environment
+// The main `webdriver` spoofing above is the most critical part.
 
 // Add missing chrome object properties
 if (!(window as any).chrome) {

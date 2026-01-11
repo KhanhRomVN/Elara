@@ -124,6 +124,7 @@ export const PlaygroundPage = () => {
   const [sloganIndex, setSloganIndex] = useState(0);
   const [thinkingEnabled, setThinkingEnabled] = useState(true);
   const [searchEnabled, setSearchEnabled] = useState(false);
+  const [claudeModel, setClaudeModel] = useState('claude-sonnet-4-5-20250929');
 
   const slogans = [
     'Feel Free Chat Free!!',
@@ -208,7 +209,7 @@ export const PlaygroundPage = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: account.provider === 'Claude' ? 'claude-3-5-sonnet-20241022' : 'deepseek-chat',
+          model: account.provider === 'Claude' ? claudeModel : 'deepseek-chat',
           messages: [
             ...messages.map((msg) => ({
               role: msg.role,
@@ -269,6 +270,7 @@ export const PlaygroundPage = () => {
 
               const content = parsed.choices?.[0]?.delta?.content;
               if (content) {
+                console.log('[Playground] Received content chunk:', content);
                 setMessages((prev) =>
                   prev.map((msg) =>
                     msg.id === assistantMessageId
@@ -386,6 +388,19 @@ export const PlaygroundPage = () => {
           disabled={!selectedProvider}
         />
       </div>
+      {selectedProvider === 'Claude' && (
+        <div className="w-[200px]">
+          <CustomSelect
+            value={claudeModel}
+            onChange={setClaudeModel}
+            options={[
+              { value: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5' },
+              { value: 'claude-opus-4-5-20251101', label: 'Claude Opus 4.5' },
+            ]}
+            placeholder="Select Model"
+          />
+        </div>
+      )}
       {selectedProvider === 'DeepSeek' && (
         <>
           <div className="flex items-center gap-2 ml-2 p-2 rounded-md bg-accent/30 border border-border">
