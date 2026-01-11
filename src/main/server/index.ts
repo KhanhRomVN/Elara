@@ -94,8 +94,6 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
     const targetProvider = providerHeader || providerQuery;
     const targetEmail = emailHeader || emailQuery;
 
-    console.log(`[Server] Request: ${model} | Provider: ${targetProvider} | Email: ${targetEmail}`);
-
     if (!fs.existsSync(DATA_FILE)) {
       return res.status(500).json({ error: 'Accounts database not found' });
     }
@@ -129,8 +127,6 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
     if (!account) {
       return res.status(401).json({ error: 'No valid account found for this request' });
     }
-
-    console.log(`[Server] Using Account: ${account.email} (${account.provider})`);
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -215,12 +211,10 @@ export const startServer = () => {
 
   return new Promise((resolve) => {
     server = expressApp.listen(API_PORT, () => {
-      console.log(`[Server] Listening on port ${API_PORT}`);
       resolve({ success: true, port: API_PORT });
     });
     server.on('error', (e: any) => {
       if (e.code === 'EADDRINUSE') {
-        console.log(`[Server] Port ${API_PORT} in use, assuming existing server.`);
         resolve({ success: true, port: API_PORT, message: 'Joined existing server' });
       } else {
         console.error('[Server] Start Error:', e);
@@ -235,6 +229,5 @@ export const stopServer = () => {
 
   server.close();
   server = null;
-  console.log('[Server] Stopped');
   return { success: true };
 };

@@ -135,8 +135,6 @@ let dsHash: DeepSeekHash | null = null;
 
 // Solves the PoW challenge using WASM
 async function solvePoW(challenge: PoWChallenge): Promise<PoWResponse> {
-  console.log('[PoW] Solving challenge:', challenge);
-
   if (!dsHash) {
     let wasmPath = '';
 
@@ -156,24 +154,16 @@ async function solvePoW(challenge: PoWChallenge): Promise<PoWResponse> {
       wasmPath = path.join(process.cwd(), 'resources', 'sha3_wasm_bg.7b9ca65ddd.wasm');
     }
 
-    console.log('[PoW] Loading WASM from:', wasmPath);
     dsHash = new DeepSeekHash(wasmPath);
     await dsHash.init();
   }
 
-  const start = Date.now();
-
   // Format: salt_expireAt_
   const prefix = `${challenge.salt}_${challenge.expire_at}_`;
 
-  console.log(`[PoW] Solving with Prefix: "${prefix}", Difficulty: ${challenge.difficulty}`);
-
   const answer = dsHash!.calculateHash(challenge.difficulty, challenge.challenge, prefix);
 
-  const duration = Date.now() - start;
-
   if (answer !== null) {
-    console.log(`[PoW] Solved in ${duration}ms. Answer: ${answer}`);
     return {
       algorithm: challenge.algorithm,
       challenge: challenge.challenge,
@@ -256,7 +246,6 @@ export async function chatCompletionStream(
     };
 
     // 1. Create Chat Session
-    console.log('[API] Creating Chat Session...');
     const sessionRes = await makeRequest(`${apiBase}/chat_session/create`, 'POST', {
       character_id: null,
     });
@@ -265,10 +254,8 @@ export async function chatCompletionStream(
     if (!sessionId) {
       throw new Error('Failed to create chat session: No ID returned');
     }
-    console.log('[API] Chat Session Created:', sessionId);
 
     // 2. Request PoW Challenge
-    console.log('[API] Requesting PoW Challenge...');
     const challengeRes = await makeRequest(
       `${apiBase}/chat/create_pow_challenge`,
       'POST',
@@ -282,12 +269,10 @@ export async function chatCompletionStream(
     }
 
     // 3. Solve PoW
-    console.log('[API] Solving PoW...');
     const powAnswer = await solvePoW(challengeData);
     const powResponseBase64 = Buffer.from(JSON.stringify(powAnswer)).toString('base64');
 
     // 4. Send Chat Completion
-    console.log('[API] Sending Completion Request...');
 
     // Payload matching deepseek4free
     const webPayload = {
@@ -319,8 +304,6 @@ export async function chatCompletionStream(
     if (userAgent) request.setHeader('User-Agent', userAgent);
 
     request.on('response', (response) => {
-      console.log(`[API] Completion Status: ${response.statusCode}`);
-
       if (response.statusCode !== 200) {
         let errBody = '';
         response.on('data', (c) => (errBody += c));
@@ -348,7 +331,6 @@ export async function chatCompletionStream(
 
       response.on('end', () => {
         if (buffer.trim()) processLine(buffer);
-        console.log('[API] Stream ended');
         callbacks.onDone();
       });
     });
@@ -373,7 +355,7 @@ export async function chatCompletionStream(
           callbacks.onContent(data.choices[0].delta.content);
         }
       } catch (e) {
-        console.error('[API Debug] Parse error for line:', line, e);
+        // Skip lines that fail to parse
       }
     }
 

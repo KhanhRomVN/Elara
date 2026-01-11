@@ -147,7 +147,6 @@ export function startCLIServer(): void {
   });
 
   server.listen(SOCKET_PATH, () => {
-    console.log(`CLI server listening on ${SOCKET_PATH}`);
     if (process.platform !== 'win32') {
       try {
         fs.chmodSync(SOCKET_PATH, 0o666);

@@ -1,6 +1,6 @@
 import { ipcMain, dialog, app, BrowserWindow, session, net } from 'electron';
 import fs from 'fs';
-import path from 'path';
+import path, { join } from 'path';
 
 const crypto = require('crypto');
 
@@ -47,7 +47,6 @@ const fetchDeepSeekProfile = (
   token: string,
 ): Promise<{ email: string | null; name: string | null; picture: string | null }> => {
   return new Promise((resolve) => {
-    console.log('[DeepSeek] Fetching user profile...');
     const request = net.request({
       method: 'GET',
       url: 'https://chat.deepseek.com/api/v0/users/current',
@@ -55,11 +54,9 @@ const fetchDeepSeekProfile = (
     });
     request.setHeader('Authorization', token);
     request.on('response', (response) => {
-      console.log(`[DeepSeek] API Status: ${response.statusCode}`);
       let data = '';
       response.on('data', (chunk) => (data += chunk.toString()));
       response.on('end', () => {
-        // console.log(`[DeepSeek] API Response: ${data}`); // Uncomment for full debug
         try {
           const json = JSON.parse(data);
           // Try multiple possible paths based on observations
@@ -94,7 +91,6 @@ const fetchDeepSeekProfile = (
               picture: picture || null,
             });
           } else {
-            console.log('[DeepSeek] structure mismatch:', JSON.stringify(json, null, 2));
             resolve({ email: null, name: null, picture: null });
           }
         } catch (e) {
@@ -167,7 +163,6 @@ export const setupAccountsHandlers = () => {
                 picture: json.account.picture || null,
               });
             } else {
-              console.log('[Claude] Failed to parse profile from session:', json);
               resolve({ email: null, name: null, picture: null });
             }
           } catch (e) {
@@ -202,6 +197,9 @@ export const setupAccountsHandlers = () => {
           nodeIntegration: false,
           contextIsolation: true,
           partition, // Use separate partition for isolation
+          preload: join(__dirname, '../preload/auth-preload.js'),
+          spellcheck: false,
+          backgroundThrottling: false,
         },
       });
 
@@ -213,55 +211,23 @@ export const setupAccountsHandlers = () => {
       // For DeepSeek, intercept POST request to capture email from body
       let capturedEmail: string | null = null;
       if (provider === 'DeepSeek') {
-        console.log('[DeepSeek] Setting up webRequest interceptor...');
-
         authSession.webRequest.onBeforeRequest(
           { urls: ['https://chat.deepseek.com/api/v0/users/login'] },
           (details, callback) => {
-            console.log('[DeepSeek] =====================================');
-            console.log('[DeepSeek] Intercepted login request');
-            console.log('[DeepSeek] Method:', details.method);
-            console.log('[DeepSeek] URL:', details.url);
-            console.log('[DeepSeek] Has uploadData:', !!details.uploadData);
-            console.log('[DeepSeek] uploadData:', details.uploadData);
-
             if (details.method === 'POST' && details.uploadData) {
               try {
-                console.log('[DeepSeek] uploadData length:', details.uploadData.length);
-                console.log('[DeepSeek] First uploadData item:', details.uploadData[0]);
-
-                // Get the request body from uploadData
                 const uploadItem = details.uploadData[0];
                 if (uploadItem.bytes) {
                   const bodyString = Buffer.from(uploadItem.bytes).toString('utf-8');
-                  console.log('[DeepSeek] Request body captured, length:', bodyString.length);
-                  console.log('[DeepSeek] Body preview:', bodyString.substring(0, 200));
-
                   const parsed = JSON.parse(bodyString);
-                  console.log('[DeepSeek] Parsed body keys:', Object.keys(parsed));
-
-                  // Email is at top level, not in a nested 'request' field
                   if (parsed.email) {
                     capturedEmail = parsed.email;
-                    console.log(`[DeepSeek] ✅ Successfully captured email: ${capturedEmail}`);
-                  } else {
-                    console.log('[DeepSeek] ⚠️ No email field in request body');
-                    console.log(
-                      '[DeepSeek] Body structure:',
-                      JSON.stringify(parsed, null, 2).substring(0, 300),
-                    );
                   }
-                } else if (uploadItem.file) {
-                  console.log('[DeepSeek] uploadData is a file, not bytes');
                 }
               } catch (e) {
                 console.error('[DeepSeek] Error parsing request body:', e);
               }
-            } else {
-              console.log('[DeepSeek] ⚠️ Not a POST request or no uploadData');
             }
-            console.log('[DeepSeek] =====================================');
-
             callback({});
           },
         );
@@ -279,21 +245,16 @@ export const setupAccountsHandlers = () => {
 
         try {
           if (provider === 'Claude') {
-            console.log('[Claude] Polling for sessionKey...');
-            // Check cookies
             const cookies = await authWindow.webContents.session.cookies.get({
               domain: '.claude.ai',
             });
             const sessionKey = cookies.find((c) => c.name === 'sessionKey')?.value;
 
             if (sessionKey) {
-              console.log('[Claude] sessionKey found, fetching profile...');
               clearInterval(interval);
 
               const profile = await fetchClaudeProfile(sessionKey);
               const email = profile.email || 'claude@user.com';
-
-              console.log('[Claude] Profile found:', profile);
 
               const newAccount: Account = {
                 id: crypto.randomUUID(),
@@ -318,7 +279,6 @@ export const setupAccountsHandlers = () => {
               resolve({ success: true, account: newAccount });
             }
           } else {
-            console.log('[DeepSeek] Polling for userToken in localStorage...');
             // DeepSeek - Check LocalStorage
             const localStorageData = await authWindow.webContents
               .executeJavaScript('JSON.stringify(localStorage)')
@@ -330,25 +290,17 @@ export const setupAccountsHandlers = () => {
                 if (tokenObj && tokenObj.value) {
                   clearInterval(interval);
                   const bearerToken = `Bearer ${tokenObj.value}`;
-                  console.log('[DeepSeek] Token found, fetching profile...');
-                  console.log('[DeepSeek] Captured email from webRequest:', capturedEmail);
 
                   // Fetch profile via API
                   let profile = await fetchDeepSeekProfile(bearerToken);
 
                   // Use captured email if available (and not masked), otherwise use API email
                   if (capturedEmail && !capturedEmail.includes('***')) {
-                    console.log('[DeepSeek] Using captured email (unmasked)');
                     profile.email = capturedEmail;
-                  } else if (capturedEmail) {
-                    console.log('[DeepSeek] ⚠️ Captured email is masked, will prompt user');
-                  } else {
-                    console.log('[DeepSeek] ⚠️ No email was captured from request');
                   }
 
                   // Fallback: Try to scrape from DOM if still no email
                   if (!profile.email) {
-                    console.log('[DeepSeek] API failed, attempting DOM scrape...');
                     const scrapedEmail = await authWindow.webContents
                       .executeJavaScript(
                         `
@@ -361,7 +313,6 @@ export const setupAccountsHandlers = () => {
                       )
                       .catch(() => null);
                     if (scrapedEmail) {
-                      console.log(`[DeepSeek] Email scraped from DOM: ${scrapedEmail}`);
                       profile.email = scrapedEmail;
                     }
                   }
@@ -385,12 +336,6 @@ export const setupAccountsHandlers = () => {
                     name: profile.name || undefined,
                     picture: profile.picture || undefined,
                   };
-
-                  console.log('[DeepSeek] Final account data:', {
-                    email: newAccount.email,
-                    name: newAccount.name,
-                    emailMasked: newAccount.email.includes('***'),
-                  });
 
                   saveAccount(newAccount);
                   authWindow.close();

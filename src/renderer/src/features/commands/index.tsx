@@ -186,9 +186,6 @@ const CommandsPage = () => {
     const removeListener = window.api.on(
       'command:execute-request',
       async (_event: any, { requestId, trigger, cwd }: any) => {
-        console.log(`Received execution request for: ${trigger}, cwd: ${cwd}`);
-
-        // Find the command
         const command = commands.find((c) => c.trigger === trigger);
 
         if (command && command.handler) {

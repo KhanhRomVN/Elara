@@ -32,12 +32,10 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
           !result.account?.email;
 
         if (needsManualEmail && result.account) {
-          console.log('[AddAccount] Email is masked or missing, prompting user for manual input');
           setAccountId(result.account.id);
           setShowEmailInput(true);
           setLoading(false);
         } else {
-          console.log('[AddAccount] Email successfully obtained:', result.account?.email);
           onOpenChange(false);
           onSuccess();
         }

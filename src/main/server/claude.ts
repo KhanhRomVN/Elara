@@ -49,22 +49,18 @@ export async function chatCompletionStream(
     };
 
     // 1. Get Organization
-    console.log('[Claude] Fetching organizations...');
     const orgs = await makeRequest('https://claude.ai/api/organizations', 'GET');
     if (!orgs || !orgs.length) throw new Error('No organizations found');
     const orgId = orgs[0].uuid;
-    console.log('[Claude] Using Org ID:', orgId);
 
     // 2. Create Conversation
     const convUuid = crypto.randomUUID();
-    console.log('[Claude] Creating conversation:', convUuid);
     await makeRequest(`https://claude.ai/api/organizations/${orgId}/chat_conversations`, 'POST', {
       uuid: convUuid,
       name: '',
     });
 
     // 3. Send Completion
-    console.log('[Claude] Sending completion request...');
 
     // Concatenate all messages into a single prompt for context preservation
     const prompt = payload.messages

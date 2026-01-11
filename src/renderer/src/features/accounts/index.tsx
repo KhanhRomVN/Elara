@@ -47,11 +47,6 @@ export const Accounts = () => {
     try {
       // @ts-ignore
       const data = await window.api.accounts.getAll();
-      console.log('📧 Raw accounts data:', data);
-      console.log(
-        '📧 Email values:',
-        data.map((acc) => ({ id: acc.id, email: acc.email })),
-      );
       setAccounts(data);
     } catch (error) {
       console.error('Failed to fetch accounts:', error);
