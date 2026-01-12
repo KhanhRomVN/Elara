@@ -91,7 +91,8 @@ expressApp.get('/v1/models', (_req, res) => {
 
 expressApp.post('/v1/chat/completions', async (req, res) => {
   try {
-    const { model, messages, stream, thinking, search } = req.body;
+    const { model, messages, stream, thinking, search, conversation_id, parent_message_id } =
+      req.body;
 
     // Priority: Headers -> Query Params
     const authHeader = req.headers.authorization;
@@ -192,7 +193,7 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
     if (account.provider === 'DeepSeek') {
       await deepseekChat(
         account.credential,
-        { model, messages, stream: true, thinking, search },
+        { model, messages, stream: true, thinking, search, conversation_id, parent_message_id },
         account.userAgent,
         callbacks,
       );

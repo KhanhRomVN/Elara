@@ -16,6 +16,8 @@ export interface ChatPayload {
   temperature?: number;
   thinking?: boolean;
   search?: boolean;
+  conversation_id?: string;
+  parent_message_id?: string;
 }
 
 interface PoWChallenge {
@@ -245,14 +247,17 @@ export async function chatCompletionStream(
       });
     };
 
-    // 1. Create Chat Session
-    const sessionRes = await makeRequest(`${apiBase}/chat_session/create`, 'POST', {
-      character_id: null,
-    });
-
-    const sessionId = sessionRes?.data?.biz_data?.id;
+    // 1. Create Chat Session (if not provided)
+    let sessionId = payload.conversation_id;
     if (!sessionId) {
-      throw new Error('Failed to create chat session: No ID returned');
+      const sessionRes = await makeRequest(`${apiBase}/chat_session/create`, 'POST', {
+        character_id: null,
+      });
+
+      sessionId = sessionRes?.data?.biz_data?.id;
+      if (!sessionId) {
+        throw new Error('Failed to create chat session: No ID returned');
+      }
     }
 
     // 2. Request PoW Challenge
@@ -277,7 +282,7 @@ export async function chatCompletionStream(
     // Payload matching deepseek4free
     const webPayload = {
       chat_session_id: sessionId,
-      parent_message_id: null,
+      parent_message_id: payload.parent_message_id || null,
       prompt: payload.messages[payload.messages.length - 1].content,
       ref_file_ids: [],
       thinking_enabled: payload.thinking ?? true, // Map our 'thinking' param to DeepSeek's 'thinking_enabled'

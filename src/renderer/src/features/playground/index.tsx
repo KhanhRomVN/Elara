@@ -122,6 +122,7 @@ export const PlaygroundPage = () => {
   const [selectedProvider, setSelectedProvider] = useState<'Claude' | 'DeepSeek' | ''>('');
   const [selectedAccount, setSelectedAccount] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [currentMessageId, setCurrentMessageId] = useState<number | null>(null);
   const [sloganIndex, setSloganIndex] = useState(0);
@@ -206,7 +207,12 @@ export const PlaygroundPage = () => {
       // Call the API
       const url = `http://localhost:${port}/v1/chat/completions?email=${encodeURIComponent(account.email)}&provider=${account.provider.toLowerCase()}`;
 
+      const controller = new AbortController();
+      setAbortController(controller);
+      console.log('Starting request with controller:', controller);
+
       const response = await fetch(url, {
+        signal: controller.signal,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -226,6 +232,9 @@ export const PlaygroundPage = () => {
           stream: true,
           thinking: account.provider === 'DeepSeek' ? thinkingEnabled : undefined,
           search: account.provider === 'DeepSeek' ? searchEnabled : undefined,
+          // New fields for context
+          conversation_id: activeChatId !== 'new-session' ? activeChatId : undefined,
+          parent_message_id: messages.length > 0 ? messages[messages.length - 1].id : undefined,
         }),
       });
 
@@ -244,6 +253,7 @@ export const PlaygroundPage = () => {
 
       setMessages((prev) => [...prev, assistantMessage]);
       setLoading(false);
+      setIsStreaming(true);
 
       // Parse SSE stream
       const reader = response.body?.getReader();
@@ -287,7 +297,19 @@ export const PlaygroundPage = () => {
           }
         }
       }
+      setIsStreaming(false);
     } catch (error) {
+      // Ignore abort errors
+      if (
+        error instanceof Error &&
+        (error.name === 'AbortError' || error.message.includes('aborted'))
+      ) {
+        console.log('Request aborted by user');
+        setLoading(false);
+        setIsStreaming(false);
+        return;
+      }
+
       console.error('Failed to send message:', error);
       const errorMessage: Message = {
         id: crypto.randomUUID(),
@@ -297,6 +319,7 @@ export const PlaygroundPage = () => {
       };
       setMessages((prev) => [...prev, errorMessage]);
       setLoading(false);
+      setIsStreaming(false);
     }
   };
 
@@ -442,6 +465,7 @@ export const PlaygroundPage = () => {
   };
 
   const handleStop = async () => {
+    console.log('Stopping request, controller:', abortController);
     // Abort the fetch request
     if (abortController) {
       abortController.abort();
@@ -449,6 +473,7 @@ export const PlaygroundPage = () => {
     }
 
     setLoading(false);
+    setIsStreaming(false);
     setCurrentMessageId(null);
   };
 
@@ -674,7 +699,7 @@ export const PlaygroundPage = () => {
                     </div>
                   </div>
                 ))}
-                {loading && (
+                {(loading || isStreaming) && (
                   <div className="flex justify-start">
                     <div className="max-w-[80%] rounded-lg px-4 py-3 bg-muted text-foreground">
                       <span className="text-sm">Thinking...</span>
@@ -705,7 +730,7 @@ export const PlaygroundPage = () => {
                     value={input}
                     onChange={handleInput}
                     onKeyDown={handleKeyDown}
-                    disabled={loading}
+                    disabled={loading || isStreaming}
                     placeholder="Type a message..."
                     className="w-full min-h-[50px] border-none bg-transparent p-4 text-base focus:outline-none focus:ring-0 resize-none pb-14 custom-scrollbar disabled:opacity-50 disabled:cursor-not-allowed"
                     rows={1}
@@ -728,7 +753,7 @@ export const PlaygroundPage = () => {
                       </button>
                     </div>
 
-                    {loading ? (
+                    {loading || isStreaming ? (
                       <button
                         onClick={handleStop}
                         className="h-8 w-8 text-white flex items-center justify-center rounded-lg bg-red-600 hover:bg-red-700 transition-all"
@@ -792,7 +817,7 @@ export const PlaygroundPage = () => {
 
                     <button
                       onClick={handleSendUninitialized}
-                      disabled={!input.trim() || !selectedAccount || loading}
+                      disabled={!input.trim() || !selectedAccount || loading || isStreaming}
                       className="h-8 w-8 flex items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                     >
                       <Send className="h-4 w-4 text-white" />
