@@ -487,3 +487,66 @@ export async function getChatHistory(
     throw error;
   }
 }
+
+// Stop DeepSeek stream
+export async function stopStream(
+  token: string,
+  sessionId: string,
+  messageId: number,
+  userAgent?: string,
+): Promise<any> {
+  try {
+    const apiBase = 'https://chat.deepseek.com/api/v0';
+    const origin = 'https://chat.deepseek.com';
+    const url = `${apiBase}/chat/stop_stream`;
+
+    const request = net.request({
+      method: 'POST',
+      url,
+      useSessionCookies: true,
+    });
+
+    request.setHeader('Authorization', token);
+    request.setHeader('Origin', origin);
+    request.setHeader('Referer', `${origin}/a/chat/s/${sessionId}`);
+    request.setHeader('Accept', '*/*');
+    request.setHeader('Content-Type', 'application/json');
+    request.setHeader('x-client-locale', 'en_US');
+    request.setHeader('x-app-version', '20241129.1');
+    request.setHeader('x-client-version', '1.6.1');
+    request.setHeader('x-client-platform', 'web');
+    if (userAgent) request.setHeader('User-Agent', userAgent);
+
+    const body = JSON.stringify({
+      chat_session_id: sessionId,
+      message_id: messageId,
+    });
+
+    return new Promise((resolve, reject) => {
+      let data = '';
+
+      request.on('response', (response) => {
+        response.on('data', (chunk) => (data += chunk.toString()));
+        response.on('end', () => {
+          if (response.statusCode === 200) {
+            try {
+              const parsed = JSON.parse(data);
+              resolve(parsed);
+            } catch (e) {
+              reject(e);
+            }
+          } else {
+            reject(new Error(`Failed to stop stream: ${response.statusCode}`));
+          }
+        });
+      });
+
+      request.on('error', reject);
+      request.write(body);
+      request.end();
+    });
+  } catch (error: any) {
+    console.error('[DeepSeek] Stop Stream Error:', error);
+    throw error;
+  }
+}

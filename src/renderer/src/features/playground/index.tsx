@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Lightbulb,
   Search,
+  StopCircle,
 } from 'lucide-react';
 import { cn } from '../../shared/lib/utils';
 import claudeIcon from '../../assets/provider_icons/claude.svg';
@@ -121,6 +122,8 @@ export const PlaygroundPage = () => {
   const [selectedProvider, setSelectedProvider] = useState<'Claude' | 'DeepSeek' | ''>('');
   const [selectedAccount, setSelectedAccount] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const [currentMessageId, setCurrentMessageId] = useState<number | null>(null);
   const [sloganIndex, setSloganIndex] = useState(0);
   const [thinkingEnabled, setThinkingEnabled] = useState(true);
   const [searchEnabled, setSearchEnabled] = useState(false);
@@ -270,7 +273,6 @@ export const PlaygroundPage = () => {
 
               const content = parsed.choices?.[0]?.delta?.content;
               if (content) {
-                console.log('[Playground] Received content chunk:', content);
                 setMessages((prev) =>
                   prev.map((msg) =>
                     msg.id === assistantMessageId
@@ -307,13 +309,12 @@ export const PlaygroundPage = () => {
 
   // Real conversation history
   const [history, setHistory] = useState<any[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [, setLoadingHistory] = useState(false);
 
   // Fetch conversation history when provider or account changes
   useEffect(() => {
     const fetchHistory = async () => {
       if (!selectedProvider || !selectedAccount) {
-        console.log('[History] No provider or account selected');
         setHistory([]);
         return;
       }
@@ -321,15 +322,9 @@ export const PlaygroundPage = () => {
       // Find the selected account object
       const account = accounts.find((a) => a.id === selectedAccount);
       if (!account) {
-        console.log('[History] Account not found:', selectedAccount);
         setHistory([]);
         return;
       }
-
-      console.log('[History] Fetching history for:', {
-        provider: selectedProvider,
-        email: account.email,
-      });
 
       setLoadingHistory(true);
       try {
@@ -338,14 +333,10 @@ export const PlaygroundPage = () => {
             ? 'http://localhost:11434/v1/claude/conversations'
             : 'http://localhost:11434/v1/deepseek/sessions';
 
-        console.log('[History] Endpoint:', endpoint);
         const response = await fetch(`${endpoint}?email=${encodeURIComponent(account.email)}`);
-
-        console.log('[History] Response status:', response.status);
 
         if (response.ok) {
           const data = await response.json();
-          console.log('[History] Received data:', data);
 
           // Format data for display
           const formattedHistory =
@@ -361,7 +352,6 @@ export const PlaygroundPage = () => {
                   date: new Date(session.updated_at * 1000).toLocaleDateString(),
                 }));
 
-          console.log('[History] Formatted history:', formattedHistory);
           setHistory(formattedHistory);
         } else {
           const errorText = await response.text();
@@ -388,7 +378,6 @@ export const PlaygroundPage = () => {
   };
 
   const loadConversation = async (conversationId: string) => {
-    console.log('[Conversation] Loading conversation:', conversationId);
     try {
       const account = accounts.find((a) => a.id === selectedAccount);
       if (!account) {
@@ -401,12 +390,10 @@ export const PlaygroundPage = () => {
           ? `http://localhost:11434/v1/claude/conversations/${conversationId}`
           : `http://localhost:11434/v1/deepseek/sessions/${conversationId}/messages`;
 
-      console.log('[Conversation] Fetching from:', endpoint);
       const response = await fetch(`${endpoint}?email=${encodeURIComponent(account.email)}`);
 
       if (response.ok) {
         const data = await response.json();
-        console.log('[Conversation] Loaded data:', data);
 
         // Extract conversation title
         const title =
@@ -444,7 +431,6 @@ export const PlaygroundPage = () => {
                 }))
                 .filter((m: Message) => m.content) || [];
 
-        console.log('[Conversation] Formatted messages:', formattedMessages);
         setMessages(formattedMessages);
         setActiveChatId(conversationId);
       } else {
@@ -453,6 +439,17 @@ export const PlaygroundPage = () => {
     } catch (error) {
       console.error('[Conversation] Error loading conversation:', error);
     }
+  };
+
+  const handleStop = async () => {
+    // Abort the fetch request
+    if (abortController) {
+      abortController.abort();
+      setAbortController(null);
+    }
+
+    setLoading(false);
+    setCurrentMessageId(null);
   };
 
   const handleSendUninitialized = async (e?: React.FormEvent) => {
@@ -708,8 +705,9 @@ export const PlaygroundPage = () => {
                     value={input}
                     onChange={handleInput}
                     onKeyDown={handleKeyDown}
+                    disabled={loading}
                     placeholder="Type a message..."
-                    className="w-full min-h-[50px] border-none bg-transparent p-4 text-base focus:outline-none focus:ring-0 resize-none pb-14 custom-scrollbar"
+                    className="w-full min-h-[50px] border-none bg-transparent p-4 text-base focus:outline-none focus:ring-0 resize-none pb-14 custom-scrollbar disabled:opacity-50 disabled:cursor-not-allowed"
                     rows={1}
                   />
 
@@ -730,13 +728,23 @@ export const PlaygroundPage = () => {
                       </button>
                     </div>
 
-                    <button
-                      onClick={handleSend}
-                      disabled={loading}
-                      className="h-8 w-8 text-white flex items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                    >
-                      <Send className="h-4 w-4" />
-                    </button>
+                    {loading ? (
+                      <button
+                        onClick={handleStop}
+                        className="h-8 w-8 text-white flex items-center justify-center rounded-lg bg-red-600 hover:bg-red-700 transition-all"
+                        title="Stop generating"
+                      >
+                        <StopCircle className="h-4 w-4" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleSend}
+                        disabled={!input.trim() || !selectedAccount}
+                        className="h-8 w-8 text-white flex items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      >
+                        <Send className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

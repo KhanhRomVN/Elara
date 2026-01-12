@@ -18,7 +18,6 @@ class CommandRegistry {
     commands.forEach((cmd) => {
       this.commands.set(cmd.trigger, cmd);
     });
-    console.log(`Registered ${commands.length} renderer commands.`);
   }
 
   getCommand(trigger: string): RendererCommand | undefined {

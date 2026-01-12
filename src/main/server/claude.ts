@@ -99,13 +99,11 @@ export async function chatCompletionStream(
       model, // CRITICAL: Model must be specified when creating conversation
     };
 
-    console.log('[Claude] Creating conversation with model:', model);
-    const convResponse = await makeRequest(
+    await makeRequest(
       `${BASE_URL}/api/organizations/${orgId}/chat_conversations`,
       'POST',
       convBody,
     );
-    console.log('[Claude] Conversation created:', JSON.stringify(convResponse, null, 2));
 
     // 3. Send Completion
     const prompt = payload.messages
@@ -141,14 +139,6 @@ export async function chatCompletionStream(
       rendering_mode: 'messages',
     };
 
-    console.log('[Claude] Sending completion request:');
-    console.log(
-      '[Claude] URL:',
-      `${BASE_URL}/api/organizations/${orgId}/chat_conversations/${convUuid}/completion`,
-    );
-    console.log('[Claude] Model:', model);
-    console.log('[Claude] Body:', JSON.stringify(completionBody, null, 2));
-
     const req = net.request({
       method: 'POST',
       url: `${BASE_URL}/api/organizations/${orgId}/chat_conversations/${convUuid}/completion`,
@@ -165,8 +155,6 @@ export async function chatCompletionStream(
       const decoder = new TextDecoder();
       let buffer = '';
 
-      console.log('[Claude] Response status:', response.statusCode);
-
       if (response.statusCode !== 200) {
         response.on('data', (chunk) => {
           const errorText = decoder.decode(chunk);
@@ -177,8 +165,6 @@ export async function chatCompletionStream(
         });
         return;
       }
-
-      console.log('[Claude] Starting to stream response...');
 
       response.on('data', (chunk) => {
         const text = decoder.decode(chunk, { stream: true });
@@ -193,15 +179,11 @@ export async function chatCompletionStream(
             if (jsonStr === '[DONE]') continue;
             try {
               const data = JSON.parse(jsonStr);
-              console.log('[Claude] SSE data:', JSON.stringify(data, null, 2));
               if (data.completion) {
-                console.log('[Claude] Sending content (completion):', data.completion);
                 callbacks.onContent(data.completion);
               } else if (data.delta?.text) {
-                console.log('[Claude] Sending content (delta.text):', data.delta.text);
                 callbacks.onContent(data.delta.text);
               } else if (data.message?.content) {
-                console.log('[Claude] Sending content (message.content):', data.message.content);
                 callbacks.onContent(data.message.content);
               }
             } catch (e) {
@@ -212,7 +194,6 @@ export async function chatCompletionStream(
       });
 
       response.on('end', () => {
-        console.log('[Claude] Streaming completed');
         callbacks.onDone();
       });
     });
@@ -436,5 +417,71 @@ export async function deleteConversation(
   } catch (e: any) {
     console.error('[Claude] Delete Conversation Error:', e);
     throw e;
+  }
+}
+// Stop Claude response
+export async function stopResponse(
+  token: string,
+  conversationId: string,
+  userAgent?: string,
+): Promise<any> {
+  try {
+    const origin = BASE_URL;
+    const cookie = `sessionKey=${token}`;
+
+    const setCommonHeaders = (req: Electron.ClientRequest) => {
+      req.setHeader('Cookie', cookie);
+      req.setHeader('Origin', origin);
+      req.setHeader('Accept', 'application/json');
+      req.setHeader('anthropic-client-platform', 'web_claude_ai');
+      req.setHeader('anthropic-client-version', '1.0.0');
+      req.setHeader('anthropic-device-id', getDeviceId());
+      req.setHeader('anthropic-anonymous-id', getAnonymousId());
+      if (userAgent) req.setHeader('User-Agent', userAgent);
+    };
+
+    // Get organization
+    const orgsReq = net.request({ method: 'GET', url: `${BASE_URL}/api/organizations` });
+    setCommonHeaders(orgsReq);
+
+    const orgs = await new Promise<any>((resolve, reject) => {
+      let data = '';
+      orgsReq.on('response', (response) => {
+        response.on('data', (chunk) => (data += chunk.toString()));
+        response.on('end', () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch (e) {
+            reject(e);
+          }
+        });
+      });
+      orgsReq.on('error', reject);
+      orgsReq.end();
+    });
+
+    if (!orgs || !orgs.length) throw new Error('No organizations found');
+    const orgId = orgs[0].uuid;
+
+    // Stop response
+    const url = `${BASE_URL}/api/organizations/${orgId}/chat_conversations/${conversationId}/stop_response`;
+    const request = net.request({ method: 'POST', url });
+    setCommonHeaders(request);
+    request.setHeader('Content-Length', '0');
+
+    return new Promise((resolve, reject) => {
+      request.on('response', (response) => {
+        if (response.statusCode === 200) {
+          resolve({ success: true });
+        } else {
+          reject(new Error(`Failed to stop response: ${response.statusCode}`));
+        }
+      });
+      request.on('error', reject);
+      request.end();
+    });
+  } catch (error: any) {
+    console.error('[Claude] Stop Response Error:', error);
+    throw error;
   }
 }

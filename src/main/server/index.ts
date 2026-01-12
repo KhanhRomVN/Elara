@@ -4,12 +4,18 @@ import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import { Account } from '../ipc/accounts';
-import { chatCompletionStream as deepseekChat, getChatSessions, getChatHistory } from './deepseek';
+import {
+  chatCompletionStream as deepseekChat,
+  getChatSessions,
+  getChatHistory,
+  stopStream,
+} from './deepseek';
 import {
   chatCompletionStream as claudeChat,
   getConversations,
   getConversationDetail,
   deleteConversation,
+  stopResponse,
 } from './claude';
 import { statsManager } from '../core/stats';
 
@@ -144,9 +150,6 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
 
     const callbacks = {
       onContent: (content: string) => {
-        console.log('[Server] Streaming content chunk:', content);
-        // Estimate token count - very rough approximation (4 chars ~= 1 token)
-        // Ideally the provider would return usage stats
         const estimatedTokens = Math.ceil(content.length / 4);
         statsManager.trackTokens(estimatedTokens);
         requestTokens += estimatedTokens;
@@ -159,7 +162,6 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
           choices: [{ delta: { content }, index: 0, finish_reason: null }],
         };
         res.write(`data: ${JSON.stringify(response)}\n\n`);
-        console.log('[Server] Wrote SSE event:', JSON.stringify(response));
       },
       onDone: () => {
         const response = {
@@ -414,6 +416,60 @@ expressApp.get('/v1/deepseek/sessions/:id/messages', async (req, res) => {
     res.json(history);
   } catch (error: any) {
     console.error('[Server] Get DeepSeek Chat History Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Stop DeepSeek stream
+expressApp.post('/v1/deepseek/sessions/:id/stop', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { messageId, email } = req.body;
+
+    if (!fs.existsSync(DATA_FILE)) {
+      return res.status(500).json({ error: 'Accounts database not found' });
+    }
+
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    const account = accounts.find(
+      (a) => a.email.toLowerCase() === email.toLowerCase() && a.provider === 'DeepSeek',
+    );
+
+    if (!account) {
+      return res.status(401).json({ error: 'No valid DeepSeek account found' });
+    }
+
+    await stopStream(account.credential, id, messageId, account.userAgent);
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('[Server] Stop DeepSeek Stream Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Stop Claude response
+expressApp.post('/v1/claude/conversations/:id/stop', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const emailQuery = req.query.email as string;
+
+    if (!fs.existsSync(DATA_FILE)) {
+      return res.status(500).json({ error: 'Accounts database not found' });
+    }
+
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    const account = accounts.find(
+      (a) => a.email.toLowerCase() === emailQuery?.toLowerCase() && a.provider === 'Claude',
+    );
+
+    if (!account) {
+      return res.status(401).json({ error: 'No valid Claude account found' });
+    }
+
+    await stopResponse(account.credential, id, account.userAgent);
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('[Server] Stop Claude Response Error:', error);
     res.status(500).json({ error: error.message });
   }
 });

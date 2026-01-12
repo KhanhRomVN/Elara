@@ -163,9 +163,7 @@ export function startCLIServer(): void {
 
 export function stopCLIServer(): void {
   if (server) {
-    server.close(() => {
-      console.log('CLI server stopped');
-    });
+    server.close(() => {});
 
     if (process.platform !== 'win32' && fs.existsSync(SOCKET_PATH)) {
       try {

@@ -145,8 +145,6 @@ export const setupAccountsHandlers = () => {
         response.on('end', () => {
           try {
             const json = JSON.parse(data);
-            console.log('[Claude] Organizations API response:', json);
-
             // Organizations API returns an array with account info
             if (json && Array.isArray(json) && json.length > 0) {
               const org = json[0];
@@ -157,7 +155,6 @@ export const setupAccountsHandlers = () => {
                 const emailMatch = org.name.match(/^(.+@.+\..+)'s Organization$/);
                 if (emailMatch) {
                   const email = emailMatch[1];
-                  console.log('[Claude] Extracted email from org name:', email);
                   resolve({
                     email: email,
                     name: email.split('@')[0],
@@ -180,7 +177,6 @@ export const setupAccountsHandlers = () => {
             }
 
             // Fallback: no account info found
-            console.log('[Claude] No account info in organizations response');
             resolve({ email: null, name: null, picture: null });
           } catch (e) {
             console.error('[Claude] Error parsing organizations response:', e);
@@ -198,18 +194,14 @@ export const setupAccountsHandlers = () => {
 
   ipcMain.handle('accounts:login', async (_, provider: 'Claude' | 'DeepSeek') => {
     return new Promise(async (resolve) => {
-      console.log(`[Accounts] Starting login for provider: ${provider}`);
-
       // Use a consistent, real Chrome user agent by stripping Electron/App identifiers
       const userAgent = getSafeUserAgent();
-      console.log(`[Accounts] Using User-Agent: ${userAgent}`);
 
       const partition = `persist:${provider.toLowerCase()}`;
       const authSession = session.fromPartition(partition);
 
       // Clear previous session data to ensure fresh login
       await authSession.clearStorageData();
-      console.log(`[Accounts] Cleared session data for partition: ${partition}`);
 
       const authWindow = new BrowserWindow({
         width: 1000,
@@ -229,11 +221,9 @@ export const setupAccountsHandlers = () => {
 
       const url =
         provider === 'Claude' ? 'https://claude.ai/login' : 'https://chat.deepseek.com/login';
-      console.log(`[Accounts] Loading login URL: ${url}`);
 
       // Intercept login requests to capture email
       let capturedEmail: string | null = null;
-      let capturedName: string | null = null;
 
       if (provider === 'DeepSeek') {
         authSession.webRequest.onBeforeRequest(
@@ -260,20 +250,12 @@ export const setupAccountsHandlers = () => {
         // Intercept Claude Google login response to capture email
         authSession.webRequest.onCompleted(
           { urls: ['https://claude.ai/api/auth/verify_google'] },
-          (details) => {
-            console.log('[Claude] Detected verify_google request');
-          },
+          () => {},
         );
 
         authSession.webRequest.onResponseStarted(
           { urls: ['https://claude.ai/api/auth/verify_google'] },
-          async (details) => {
-            if (details.statusCode === 200) {
-              console.log('[Claude] verify_google succeeded, attempting to extract response data');
-              // Note: We cannot directly access response body in onResponseStarted
-              // We'll need to rely on the profile fetch endpoint or use a different approach
-            }
-          },
+          async () => {},
         );
       }
 
@@ -295,15 +277,8 @@ export const setupAccountsHandlers = () => {
             const sessionKey = cookies.find((c) => c.name === 'sessionKey')?.value;
 
             if (sessionKey) {
-              console.log('[Claude] SessionKey found, fetching profile...');
               clearInterval(interval);
-
               const profile = await fetchClaudeProfile(sessionKey);
-              console.log('[Claude] Profile fetched:', {
-                email: profile.email,
-                name: profile.name,
-              });
-
               const email = profile.email || 'claude@user.com';
 
               const newAccount: Account = {
@@ -324,12 +299,7 @@ export const setupAccountsHandlers = () => {
                 picture: profile.picture || undefined,
               };
 
-              console.log('[Claude] Saving account:', {
-                id: newAccount.id,
-                email: newAccount.email,
-              });
               saveAccount(newAccount);
-              console.log('[Claude] Account saved successfully');
               authWindow.close();
               resolve({ success: true, account: newAccount });
             }
