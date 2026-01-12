@@ -357,7 +357,9 @@ export const PlaygroundPage = () => {
         const endpoint =
           selectedProvider === 'Claude'
             ? 'http://localhost:11434/v1/claude/conversations'
-            : 'http://localhost:11434/v1/deepseek/sessions';
+            : selectedProvider === 'Mistral'
+              ? 'http://localhost:11434/v1/mistral/conversations'
+              : 'http://localhost:11434/v1/deepseek/sessions';
 
         const response = await fetch(`${endpoint}?email=${encodeURIComponent(account.email)}`);
 
@@ -372,11 +374,17 @@ export const PlaygroundPage = () => {
                   title: conv.name || conv.summary || 'Untitled',
                   date: new Date(conv.updated_at).toLocaleDateString(),
                 }))
-              : data.map((session: any) => ({
-                  id: session.id,
-                  title: session.title || 'Untitled',
-                  date: new Date(session.updated_at * 1000).toLocaleDateString(),
-                }));
+              : selectedProvider === 'Mistral'
+                ? data.map((conv: any) => ({
+                    id: conv.id,
+                    title: conv.title || 'Untitled',
+                    date: new Date(conv.created_at || Date.now()).toLocaleDateString(),
+                  }))
+                : data.map((session: any) => ({
+                    id: session.id,
+                    title: session.title || 'Untitled',
+                    date: new Date(session.updated_at * 1000).toLocaleDateString(),
+                  }));
 
           setHistory(formattedHistory);
         } else {
@@ -414,7 +422,9 @@ export const PlaygroundPage = () => {
       const endpoint =
         selectedProvider === 'Claude'
           ? `http://localhost:11434/v1/claude/conversations/${conversationId}`
-          : `http://localhost:11434/v1/deepseek/sessions/${conversationId}/messages`;
+          : selectedProvider === 'Mistral'
+            ? `http://localhost:11434/v1/mistral/conversations/${conversationId}`
+            : `http://localhost:11434/v1/deepseek/sessions/${conversationId}/messages`;
 
       const response = await fetch(`${endpoint}?email=${encodeURIComponent(account.email)}`);
 
@@ -425,7 +435,9 @@ export const PlaygroundPage = () => {
         const title =
           selectedProvider === 'Claude'
             ? data.name || data.summary || 'Untitled Conversation'
-            : data.chat_session?.title || 'Untitled Conversation';
+            : selectedProvider === 'Mistral'
+              ? 'Conversation' // Mistral detail doesn't currently return title in my stub
+              : data.chat_session?.title || 'Untitled Conversation';
 
         setConversationTitle(title);
 
@@ -445,17 +457,23 @@ export const PlaygroundPage = () => {
                     '',
                 }))
                 .filter((m: Message) => m.content) || []
-            : data.chat_messages
-                ?.map((msg: any) => ({
-                  id: msg.message_id,
-                  role: msg.role === 'USER' ? ('user' as const) : ('assistant' as const),
-                  content:
-                    msg.fragments
-                      ?.map((f: any) => f.content || '')
-                      .join('')
-                      .trim() || '',
-                }))
-                .filter((m: Message) => m.content) || [];
+            : selectedProvider === 'Mistral'
+              ? data.messages?.map((msg: any) => ({
+                  id: msg.id || crypto.randomUUID(),
+                  role: msg.role,
+                  content: msg.content,
+                })) || []
+              : data.chat_messages
+                  ?.map((msg: any) => ({
+                    id: msg.message_id,
+                    role: msg.role === 'USER' ? ('user' as const) : ('assistant' as const),
+                    content:
+                      msg.fragments
+                        ?.map((f: any) => f.content || '')
+                        .join('')
+                        .trim() || '',
+                  }))
+                  .filter((m: Message) => m.content) || [];
 
         setMessages(formattedMessages);
         setActiveChatId(conversationId);

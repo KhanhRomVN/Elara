@@ -18,7 +18,14 @@ import {
   stopResponse,
 } from './claude';
 import { chatCompletionStream as chatgptChat } from './chatgpt';
-import { chatCompletionStream as mistralChat } from './mistral';
+import {
+  chatCompletionStream as mistralChat,
+  getConversations as getMistralConversations,
+  getConversationDetail as getMistralConversationDetail,
+} from './mistral';
+
+// ... (existing code)
+
 import { statsManager } from '../core/stats';
 
 const DATA_FILE = path.join(app.getPath('userData'), 'accounts.json');
@@ -514,6 +521,91 @@ expressApp.post('/v1/claude/conversations/:id/stop', async (req, res) => {
     res.json({ success: true });
   } catch (error: any) {
     console.error('[Server] Stop Claude Response Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get Mistral conversations
+expressApp.get('/v1/mistral/conversations', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const emailQuery = req.query.email as string;
+
+    if (!fs.existsSync(DATA_FILE)) {
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
+    }
+
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    let account: Account | undefined;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      account = accounts.find((a) => a.id === token);
+    }
+
+    if (!account && emailQuery) {
+      account = accounts.find(
+        (a) => a.email.toLowerCase() === emailQuery.toLowerCase() && a.provider === 'Mistral',
+      );
+    }
+
+    if (!account) {
+      account = accounts.find((a) => a.provider === 'Mistral' && a.status === 'Active');
+    }
+
+    if (!account) {
+      res.status(401).json({ error: 'No valid Mistral account found' });
+      return;
+    }
+
+    const conversations = await getMistralConversations(account.credential);
+    res.json(conversations);
+  } catch (error: any) {
+    console.error('[Server] Get Mistral Conversations Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get Mistral conversation detail
+expressApp.get('/v1/mistral/conversations/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const authHeader = req.headers.authorization;
+    const emailQuery = req.query.email as string;
+
+    if (!fs.existsSync(DATA_FILE)) {
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
+    }
+
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    let account: Account | undefined;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      account = accounts.find((a) => a.id === token);
+    }
+
+    if (!account && emailQuery) {
+      account = accounts.find(
+        (a) => a.email.toLowerCase() === emailQuery.toLowerCase() && a.provider === 'Mistral',
+      );
+    }
+
+    if (!account) {
+      account = accounts.find((a) => a.provider === 'Mistral' && a.status === 'Active');
+    }
+
+    if (!account) {
+      res.status(401).json({ error: 'No valid Mistral account found' });
+      return;
+    }
+
+    const messages = await getMistralConversationDetail(account.credential, id);
+    res.json({ messages });
+  } catch (error: any) {
+    console.error('[Server] Get Mistral Conversation Detail Error:', error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -177,6 +177,8 @@ async function streamResponse(
   request.setHeader('Origin', 'https://chat.mistral.ai');
   request.setHeader('Referer', `https://chat.mistral.ai/chat/${chatId}`);
 
+  const reasoningChunks = new Set<number>();
+
   const payload = {
     chatId: chatId,
     mode: 'start',
@@ -214,39 +216,106 @@ async function streamResponse(
         const jsonStr = line.slice(colonIndex + 1);
         try {
           const data = JSON.parse(jsonStr);
-          // Check for message patches
-          // {"json":{"type":"message",...,"patches":[{"op":"append","path":"/contentChunks/0/text","value":"..."}]}}
+
+          // Track reasoning state for chunks
+          // We need to persist this state across chunks if necessary, but here we process line by line.
+          // Wait, 'data' is one update. We need a persistent state for the stream function scope.
+          // Moving state definition outside the loop.
 
           if (data?.json?.patches) {
+            // First pass: Update chunk types (reasoning vs content)
             for (const patch of data.json.patches) {
-              if (patch.op === 'append' && patch.path.includes('/text') && patch.value) {
-                callbacks.onContent(patch.value);
-              }
-              // Mistral sometimes replaces content chunks too?
-              if (patch.op === 'replace' && patch.path.includes('/text') && patch.value) {
-                // This might be a full replacement or initial set.
-                // For streaming, 'append' is usually what we want for delta.
-                // If 'replace' is used for the whole text, we might duplicate.
-                // But usually 'replace' on /contentChunks/0/text with a single string is init.
-                // Let's assume append is the main carrier of new tokens.
-                if (patch.value.type === 'text') {
-                  callbacks.onContent(patch.value.text);
-                } else if (typeof patch.value === 'string') {
-                  // callbacks.onContent(patch.value); // Use with caution
+              // Handle "add" or "replace" on contentChunks (initialization)
+              if (
+                (patch.op === 'add' || patch.op === 'replace') &&
+                patch.path.includes('/contentChunks')
+              ) {
+                const value = patch.value;
+                if (Array.isArray(value)) {
+                  // "/contentChunks": [ ... ]
+                  value.forEach((chunk, index) => {
+                    if (chunk?._context?.type === 'reasoning') {
+                      reasoningChunks.add(index);
+                    } else {
+                      reasoningChunks.delete(index);
+                    }
+                  });
+                } else if (value && typeof value === 'object') {
+                  // "/contentChunks/1": { ... }
+                  const pathParts = patch.path.split('/');
+                  const indexStr = pathParts[pathParts.length - 1]; // "1"
+                  const index = parseInt(indexStr);
+                  if (!isNaN(index)) {
+                    if (value._context?.type === 'reasoning') {
+                      reasoningChunks.add(index);
+                    } else {
+                      reasoningChunks.delete(index);
+                    }
+                  }
                 }
               }
-              // Handle "add" op? contentChunks/1
+
+              // Handle context update directly
+              if (patch.op === 'replace' && patch.path.includes('/_context')) {
+                // path: "/contentChunks/0/_context"
+                const match = patch.path.match(/\/contentChunks\/(\d+)\/_context/);
+                if (match) {
+                  const index = parseInt(match[1]);
+                  if (patch.value?.type === 'reasoning') {
+                    reasoningChunks.add(index);
+                  } else {
+                    reasoningChunks.delete(index);
+                  }
+                }
+              }
+            }
+
+            // Second pass: Emit content
+            for (const patch of data.json.patches) {
+              if (patch.op === 'append' && patch.path.includes('/text') && patch.value) {
+                // path: "/contentChunks/0/text"
+                const match = patch.path.match(/\/contentChunks\/(\d+)\/text/);
+                if (match) {
+                  const index = parseInt(match[1]);
+                  if (!reasoningChunks.has(index)) {
+                    callbacks.onContent(patch.value);
+                  }
+                }
+              }
+
+              if (patch.op === 'replace' && patch.path.includes('/text') && patch.value) {
+                const match = patch.path.match(/\/contentChunks\/(\d+)\/text/);
+                if (match) {
+                  const index = parseInt(match[1]);
+                  if (!reasoningChunks.has(index)) {
+                    if (patch.value.type === 'text') {
+                      callbacks.onContent(patch.value.text);
+                    } else if (typeof patch.value === 'string') {
+                      // Sometimes replace is used for init, careful not to duplicate if we handled it in "add"
+                      // usage of replace on /text usually means "set text to this"
+                      callbacks.onContent(patch.value);
+                    }
+                  }
+                }
+              }
+
+              // Handle "add" op with text value directly
               if (
                 patch.op === 'add' &&
                 patch.path.includes('/contentChunks') &&
                 patch.value?.text
               ) {
-                callbacks.onContent(patch.value.text);
+                // path: "/contentChunks/1"
+                const pathParts = patch.path.split('/');
+                const index = parseInt(pathParts[pathParts.length - 1]);
+                if (!isNaN(index) && !reasoningChunks.has(index)) {
+                  callbacks.onContent(patch.value.text);
+                }
               }
             }
           }
 
-          // Check for completion?
+          // Check for completion
           if (data?.json?.generationStatus === 'success' || data?.json?.status === 'success') {
             // Done
           }
@@ -321,4 +390,99 @@ export async function fetchMistralProfile(
     request.on('error', () => resolve(null));
     request.end();
   });
+}
+
+// --------------------------------------------------------------------------------------
+// Conversation History
+// --------------------------------------------------------------------------------------
+
+export interface MistralConversation {
+  id: string;
+  title: string;
+  created_at?: number;
+  updated_at?: number;
+}
+
+export interface MistralMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export async function getConversations(cookies: string): Promise<MistralConversation[]> {
+  console.log('[Mistral] Fetching conversations...');
+  return new Promise((resolve) => {
+    const request = net.request({
+      method: 'GET',
+      url: 'https://chat.mistral.ai/chat',
+    });
+
+    request.setHeader('Cookie', cookies);
+    request.setHeader(
+      'User-Agent',
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    );
+
+    request.on('response', (response) => {
+      console.log('[Mistral] Conversations response status:', response.statusCode);
+      let data = '';
+      response.on('data', (chunk) => (data += chunk.toString()));
+      response.on('end', () => {
+        console.log('[Mistral] Conversations data length:', data.length);
+        if (response.statusCode === 200) {
+          const conversations: MistralConversation[] = [];
+
+          // Log a snippet to verify content
+          console.log('[Mistral] Response snippet (first 500 chars):', data.substring(0, 500));
+
+          // Regex to find chat links and titles in the HTML/Hydration data
+          // Matches href="/chat/UUID" followed eventually by the title div with "leading-5.5" class
+          // We look for both escaped (in JS strings) and unescaped (in HTML)
+          // Pattern: href="\/chat\/([a-f0-9-]{36})".*?leading-5\.5[^>]*>([^<]+)<\/div>
+          // Note: In hydration strings, quotes are escaped as \"
+
+          const regex = /href=\\?"\/chat\/([a-f0-9-]{36})\\?".*?leading-5\.5[^>]*>([^<]+)<\/div>/g;
+          let match;
+
+          // Use a Set to avoid duplicates since the data might appear in both HTML and Hydration script
+          const seenIds = new Set<string>();
+
+          while ((match = regex.exec(data)) !== null) {
+            const id = match[1];
+            const title = match[2];
+
+            if (id && title && !seenIds.has(id)) {
+              seenIds.add(id);
+              conversations.push({
+                id,
+                title: title.trim(), // Decode HTML entities if needed? Usually simple text.
+                created_at: Date.now(), // No date in sidebar list usually
+              });
+            }
+          }
+
+          console.log(`[Mistral] Found ${conversations.length} conversations`);
+          resolve(conversations);
+        } else {
+          console.log('[Mistral] Failed to fetch conversations, status not 200');
+          resolve([]);
+        }
+      });
+    });
+
+    request.on('error', (e) => {
+      console.error('[Mistral] Request error:', e);
+      resolve([]);
+    });
+    request.end();
+  });
+}
+
+export async function getConversationDetail(
+  cookies: string,
+  chatId: string,
+): Promise<MistralMessage[]> {
+  // TODO: Implement detail fetching by parsing https://chat.mistral.ai/chat/<chatId>
+  // For now return empty or implement a basic fetch
+  return [];
 }
