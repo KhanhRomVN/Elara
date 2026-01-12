@@ -7,7 +7,7 @@ import { AddAccountDialog } from './components/AddAccountDialog';
 
 interface Account {
   id: string;
-  provider: 'Claude' | 'DeepSeek';
+  provider: 'Claude' | 'DeepSeek' | 'ChatGPT' | 'Mistral';
   email: string;
   credential: string;
   status: 'Active' | 'Rate Limit' | 'Error';
@@ -242,7 +242,11 @@ export const Accounts = () => {
                               'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
                               account.provider === 'Claude'
                                 ? 'bg-orange-500/10 text-orange-500'
-                                : 'bg-blue-500/10 text-blue-500',
+                                : account.provider === 'ChatGPT'
+                                  ? 'bg-green-500/10 text-green-500'
+                                  : account.provider === 'Mistral'
+                                    ? 'bg-yellow-500/10 text-yellow-500'
+                                    : 'bg-blue-500/10 text-blue-500',
                             )}
                           >
                             {account.provider}

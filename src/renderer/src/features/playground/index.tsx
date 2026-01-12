@@ -1,18 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import {
-  Send,
-  Plus,
-  Upload,
-  User,
-  MoreHorizontal,
-  ChevronDown,
-  Lightbulb,
-  Search,
-  StopCircle,
-} from 'lucide-react';
+import { Send, Plus, Upload, User, MoreHorizontal, ChevronDown, StopCircle } from 'lucide-react';
 import { cn } from '../../shared/lib/utils';
 import claudeIcon from '../../assets/provider_icons/claude.svg';
 import deepseekIcon from '../../assets/provider_icons/deepseek.svg';
+import chatgptIcon from '../../assets/provider_icons/openai.svg';
+import mistralIcon from '../../assets/provider_icons/mistral.svg';
 import { Switch } from '../../core/components/Switch';
 
 interface Message {
@@ -24,7 +16,7 @@ interface Message {
 
 interface Account {
   id: string;
-  provider: 'Claude' | 'DeepSeek';
+  provider: 'Claude' | 'DeepSeek' | 'ChatGPT' | 'Mistral';
   email: string;
   name?: string;
   picture?: string;
@@ -119,16 +111,20 @@ export const PlaygroundPage = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [selectedProvider, setSelectedProvider] = useState<'Claude' | 'DeepSeek' | ''>('');
+
+  const [selectedProvider, setSelectedProvider] = useState<
+    'Claude' | 'DeepSeek' | 'ChatGPT' | 'Mistral' | ''
+  >('');
   const [selectedAccount, setSelectedAccount] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
-  const [currentMessageId, setCurrentMessageId] = useState<number | null>(null);
+  const [_currentMessageId, setCurrentMessageId] = useState<number | null>(null);
   const [sloganIndex, setSloganIndex] = useState(0);
   const [thinkingEnabled, setThinkingEnabled] = useState(true);
   const [searchEnabled, setSearchEnabled] = useState(false);
   const [claudeModel, setClaudeModel] = useState('claude-sonnet-4-5-20250929');
+  const [chatgptModel, setChatgptModel] = useState('gpt-4o');
 
   const slogans = [
     'Feel Free Chat Free!!',
@@ -218,7 +214,14 @@ export const PlaygroundPage = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: account.provider === 'Claude' ? claudeModel : 'deepseek-chat',
+          model:
+            account.provider === 'Claude'
+              ? claudeModel
+              : account.provider === 'ChatGPT'
+                ? chatgptModel
+                : account.provider === 'Mistral'
+                  ? 'mistral-large-latest'
+                  : 'deepseek-chat',
           messages: [
             ...messages.map((msg) => ({
               role: msg.role,
@@ -477,7 +480,7 @@ export const PlaygroundPage = () => {
     setCurrentMessageId(null);
   };
 
-  const handleSendUninitialized = async (e?: React.FormEvent) => {
+  const handleSendUninitialized = async () => {
     if (!input.trim() || !selectedAccount) return;
     setActiveChatId('new-session'); // simplistic state transition
     await handleSend();
@@ -504,6 +507,8 @@ export const PlaygroundPage = () => {
   const providerOptions = [
     { value: 'Claude', label: 'Claude', icon: claudeIcon },
     { value: 'DeepSeek', label: 'DeepSeek', icon: deepseekIcon },
+    { value: 'ChatGPT', label: 'ChatGPT', icon: chatgptIcon },
+    { value: 'Mistral', label: 'Mistral', icon: mistralIcon },
   ];
 
   const accountOptions = filteredAccounts.map((acc) => ({
@@ -522,7 +527,7 @@ export const PlaygroundPage = () => {
         <CustomSelect
           value={selectedProvider}
           onChange={(val) => {
-            const newProvider = val as 'Claude' | 'DeepSeek' | '';
+            const newProvider = val as 'Claude' | 'DeepSeek' | 'ChatGPT' | '';
             setSelectedProvider(newProvider);
             if (newProvider) {
               const matches = accounts.filter((acc) => acc.provider === newProvider);
@@ -553,6 +558,22 @@ export const PlaygroundPage = () => {
             options={[
               { value: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5' },
               { value: 'claude-opus-4-5-20251101', label: 'Claude Opus 4.5' },
+            ]}
+            placeholder="Select Model"
+          />
+        </div>
+      )}
+      {selectedProvider === 'ChatGPT' && (
+        <div className="w-[200px]">
+          <CustomSelect
+            value={chatgptModel}
+            onChange={setChatgptModel}
+            options={[
+              { value: 'auto', label: 'Auto' },
+              { value: 'gpt-4o', label: 'GPT-4o' },
+              { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+              { value: 'o1-preview', label: 'o1 Preview' },
+              { value: 'o1-mini', label: 'o1 Mini' },
             ]}
             placeholder="Select Model"
           />
@@ -599,7 +620,13 @@ export const PlaygroundPage = () => {
           <div className="flex items-center gap-2 px-2 pb-4 border-b shrink-0">
             <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-background border shadow-sm">
               <img
-                src={selectedProvider === 'Claude' ? claudeIcon : deepseekIcon}
+                src={
+                  selectedProvider === 'Claude'
+                    ? claudeIcon
+                    : selectedProvider === 'ChatGPT'
+                      ? chatgptIcon
+                      : deepseekIcon
+                }
                 alt="Provider"
                 className="w-5 h-5"
               />

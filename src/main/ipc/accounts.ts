@@ -4,6 +4,8 @@ import path, { join } from 'path';
 
 const crypto = require('crypto');
 
+import { fetchMistralProfile } from '../server/mistral';
+
 const DATA_FILE = path.join(app.getPath('userData'), 'accounts.json');
 
 // Ensure data file exists
@@ -13,7 +15,7 @@ if (!fs.existsSync(DATA_FILE)) {
 
 export interface Account {
   id: string;
-  provider: 'Claude' | 'DeepSeek';
+  provider: 'Claude' | 'DeepSeek' | 'ChatGPT' | 'Mistral';
   email: string;
   credential: string; // cookie or api key
   status: 'Active' | 'Rate Limit' | 'Error';
@@ -192,197 +194,298 @@ export const setupAccountsHandlers = () => {
     });
   };
 
-  ipcMain.handle('accounts:login', async (_, provider: 'Claude' | 'DeepSeek') => {
-    return new Promise(async (resolve) => {
-      // Use a consistent, real Chrome user agent by stripping Electron/App identifiers
-      const userAgent = getSafeUserAgent();
+  ipcMain.handle(
+    'accounts:login',
+    async (_, provider: 'Claude' | 'DeepSeek' | 'ChatGPT' | 'Mistral') => {
+      return new Promise(async (resolve) => {
+        // Use a consistent, real Chrome user agent by stripping Electron/App identifiers
+        const userAgent = getSafeUserAgent();
 
-      const partition = `persist:${provider.toLowerCase()}`;
-      const authSession = session.fromPartition(partition);
+        const partition = `persist:${provider.toLowerCase()}`;
+        const authSession = session.fromPartition(partition);
 
-      // Clear previous session data to ensure fresh login
-      await authSession.clearStorageData();
+        // Clear previous session data to ensure fresh login
+        await authSession.clearStorageData();
 
-      const authWindow = new BrowserWindow({
-        width: 1000,
-        height: 800,
-        title: `Login to ${provider}`,
-        webPreferences: {
-          nodeIntegration: false,
-          contextIsolation: true,
-          partition, // Use separate partition for isolation
-          preload: join(__dirname, '../preload/auth-preload.js'),
-          spellcheck: false,
-          backgroundThrottling: false,
-        },
-      });
-
-      authWindow.webContents.setUserAgent(userAgent);
-
-      const url =
-        provider === 'Claude' ? 'https://claude.ai/login' : 'https://chat.deepseek.com/login';
-
-      // Intercept login requests to capture email
-      let capturedEmail: string | null = null;
-
-      if (provider === 'DeepSeek') {
-        authSession.webRequest.onBeforeRequest(
-          { urls: ['https://chat.deepseek.com/api/v0/users/login'] },
-          (details, callback) => {
-            if (details.method === 'POST' && details.uploadData) {
-              try {
-                const uploadItem = details.uploadData[0];
-                if (uploadItem.bytes) {
-                  const bodyString = Buffer.from(uploadItem.bytes).toString('utf-8');
-                  const parsed = JSON.parse(bodyString);
-                  if (parsed.email) {
-                    capturedEmail = parsed.email;
-                  }
-                }
-              } catch (e) {
-                console.error('[DeepSeek] Error parsing request body:', e);
-              }
-            }
-            callback({});
+        const authWindow = new BrowserWindow({
+          width: 1000,
+          height: 800,
+          title: `Login to ${provider}`,
+          webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            partition, // Use separate partition for isolation
+            preload: join(__dirname, '../preload/auth-preload.js'),
+            spellcheck: false,
+            backgroundThrottling: false,
           },
-        );
-      } else if (provider === 'Claude') {
-        // Intercept Claude Google login response to capture email
-        authSession.webRequest.onCompleted(
-          { urls: ['https://claude.ai/api/auth/verify_google'] },
-          () => {},
-        );
+        });
 
-        authSession.webRequest.onResponseStarted(
-          { urls: ['https://claude.ai/api/auth/verify_google'] },
-          async () => {},
-        );
-      }
+        authWindow.webContents.setUserAgent(userAgent);
 
-      authWindow.loadURL(url);
+        const url =
+          provider === 'Claude'
+            ? 'https://claude.ai/login'
+            : provider === 'ChatGPT'
+              ? 'https://chatgpt.com/auth/login'
+              : provider === 'Mistral'
+                ? 'https://console.mistral.ai/home'
+                : 'https://chat.deepseek.com/login';
 
-      // Poll for credentials
-      const interval = setInterval(async () => {
-        if (authWindow.isDestroyed()) {
-          clearInterval(interval);
-          resolve({ success: false, error: 'Window closed' });
-          return;
+        // Intercept login requests to capture email
+        let capturedEmail: string | null = null;
+
+        if (provider === 'DeepSeek') {
+          authSession.webRequest.onBeforeRequest(
+            { urls: ['https://chat.deepseek.com/api/v0/users/login'] },
+            (details, callback) => {
+              if (details.method === 'POST' && details.uploadData) {
+                try {
+                  const uploadItem = details.uploadData[0];
+                  if (uploadItem.bytes) {
+                    const bodyString = Buffer.from(uploadItem.bytes).toString('utf-8');
+                    const parsed = JSON.parse(bodyString);
+                    if (parsed.email) {
+                      capturedEmail = parsed.email;
+                    }
+                  }
+                } catch (e) {
+                  console.error('[DeepSeek] Error parsing request body:', e);
+                }
+              }
+              callback({});
+            },
+          );
+        } else if (provider === 'Claude') {
+          // Intercept Claude Google login response to capture email
+          authSession.webRequest.onCompleted(
+            { urls: ['https://claude.ai/api/auth/verify_google'] },
+            () => {},
+          );
+
+          authSession.webRequest.onResponseStarted(
+            { urls: ['https://claude.ai/api/auth/verify_google'] },
+            async () => {},
+          );
         }
 
-        try {
-          if (provider === 'Claude') {
-            const cookies = await authWindow.webContents.session.cookies.get({
-              domain: '.claude.ai',
-            });
-            const sessionKey = cookies.find((c) => c.name === 'sessionKey')?.value;
+        authWindow.loadURL(url);
 
-            if (sessionKey) {
-              clearInterval(interval);
-              const profile = await fetchClaudeProfile(sessionKey);
-              const email = profile.email || 'claude@user.com';
+        // Poll for credentials
+        const interval = setInterval(async () => {
+          if (authWindow.isDestroyed()) {
+            clearInterval(interval);
+            resolve({ success: false, error: 'Window closed' });
+            return;
+          }
 
-              const newAccount: Account = {
-                id: crypto.randomUUID(),
-                provider: 'Claude',
-                email: email,
-                credential: sessionKey,
-                status: 'Active',
-                usage: '0',
-                totalRequests: 0,
-                successfulRequests: 0,
-                totalDuration: 0,
-                tokensToday: 0,
-                statsDate: new Date().toISOString().split('T')[0],
-                lastActive: new Date().toISOString(),
-                userAgent,
-                name: profile.name || undefined,
-                picture: profile.picture || undefined,
-              };
+          try {
+            if (provider === 'Claude') {
+              const cookies = await authWindow.webContents.session.cookies.get({
+                domain: '.claude.ai',
+              });
+              const sessionKey = cookies.find((c) => c.name === 'sessionKey')?.value;
 
-              saveAccount(newAccount);
-              authWindow.close();
-              resolve({ success: true, account: newAccount });
-            }
-          } else {
-            // DeepSeek - Check LocalStorage
-            const localStorageData = await authWindow.webContents
-              .executeJavaScript('JSON.stringify(localStorage)')
-              .catch(() => null);
-            if (localStorageData) {
-              const data = JSON.parse(localStorageData);
-              if (data.userToken) {
-                const tokenObj = JSON.parse(data.userToken);
-                if (tokenObj && tokenObj.value) {
-                  clearInterval(interval);
-                  const bearerToken = `Bearer ${tokenObj.value}`;
+              if (sessionKey) {
+                clearInterval(interval);
+                const profile = await fetchClaudeProfile(sessionKey);
+                const email = profile.email || 'claude@user.com';
 
-                  // Fetch profile via API
-                  let profile = await fetchDeepSeekProfile(bearerToken);
+                const newAccount: Account = {
+                  id: crypto.randomUUID(),
+                  provider: 'Claude',
+                  email: email,
+                  credential: sessionKey,
+                  status: 'Active',
+                  usage: '0',
+                  totalRequests: 0,
+                  successfulRequests: 0,
+                  totalDuration: 0,
+                  tokensToday: 0,
+                  statsDate: new Date().toISOString().split('T')[0],
+                  lastActive: new Date().toISOString(),
+                  userAgent,
+                  name: profile.name || undefined,
+                  picture: profile.picture || undefined,
+                };
 
-                  // Use captured email if available (and not masked), otherwise use API email
-                  if (capturedEmail && !capturedEmail.includes('***')) {
-                    profile.email = capturedEmail;
-                  }
+                saveAccount(newAccount);
+                authWindow.close();
+                resolve({ success: true, account: newAccount });
+              }
+            } else if (provider === 'ChatGPT') {
+              const cookies = await authWindow.webContents.session.cookies.get({
+                domain: '.chatgpt.com',
+              });
+              const sessionToken = cookies.find(
+                (c) => c.name === '__Secure-next-auth.session-token',
+              );
 
-                  // Fallback: Try to scrape from DOM if still no email
-                  if (!profile.email) {
-                    const scrapedEmail = await authWindow.webContents
-                      .executeJavaScript(
-                        `
+              if (sessionToken) {
+                clearInterval(interval);
+
+                // Construct full cookie string to include Cloudflare and other necessary cookies
+                const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+
+                // Fetch profile logic could be added here, similar to DeepSeek/Claude
+                // For now, let's try to get email from the window or default
+                let email = 'chatgpt@user.com';
+                // Try to capture from script
+                const scrapedEmail = await authWindow.webContents
+                  .executeJavaScript(
+                    `
+                  (() => {
+                      // Try typical selectors
+                      const el = document.querySelector('div[data-testid="profile-button"]');
+                      return el ? el.innerText : null;
+                  })()
+               `,
+                  )
+                  .catch(() => null);
+                if (scrapedEmail && scrapedEmail.includes('@')) email = scrapedEmail;
+
+                const newAccount: Account = {
+                  id: crypto.randomUUID(),
+                  provider: 'ChatGPT',
+                  email: email,
+                  credential: cookieString, // Store the full cookie string
+                  status: 'Active',
+                  usage: '0',
+                  totalRequests: 0,
+                  successfulRequests: 0,
+                  totalDuration: 0,
+                  tokensToday: 0,
+                  statsDate: new Date().toISOString().split('T')[0],
+                  lastActive: new Date().toISOString(),
+                  userAgent,
+                  name: undefined,
+                  picture: undefined,
+                };
+
+                saveAccount(newAccount);
+                authWindow.close();
+                resolve({ success: true, account: newAccount });
+              }
+            } else if (provider === 'Mistral') {
+              const cookies = await authWindow.webContents.session.cookies.get({
+                domain: 'mistral.ai',
+              });
+              // Try to find critical cookies that imply login
+              // Based on logs: ory_session_... and csrftoken
+              // ory_session prefix varies?
+              const orySession = cookies.find((c) => c.name.startsWith('ory_session_'));
+
+              if (orySession) {
+                clearInterval(interval);
+                // Reconstruct cookie string
+                const cookieStr = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+
+                const profile = await fetchMistralProfile(cookieStr);
+                const email = profile?.email || 'mistral@user.com';
+
+                const newAccount: Account = {
+                  id: crypto.randomUUID(),
+                  provider: 'Mistral',
+                  email: email,
+                  credential: cookieStr,
+                  status: 'Active',
+                  usage: '0',
+                  totalRequests: 0,
+                  successfulRequests: 0,
+                  totalDuration: 0,
+                  tokensToday: 0,
+                  statsDate: new Date().toISOString().split('T')[0],
+                  lastActive: new Date().toISOString(),
+                  userAgent,
+                  name: profile?.name || undefined,
+                  picture: profile?.avatar || undefined,
+                };
+
+                saveAccount(newAccount);
+                authWindow.close();
+                resolve({ success: true, account: newAccount });
+              }
+            } else {
+              // DeepSeek - Check LocalStorage
+              const localStorageData = await authWindow.webContents
+                .executeJavaScript('JSON.stringify(localStorage)')
+                .catch(() => null);
+              if (localStorageData) {
+                const data = JSON.parse(localStorageData);
+                if (data.userToken) {
+                  const tokenObj = JSON.parse(data.userToken);
+                  if (tokenObj && tokenObj.value) {
+                    clearInterval(interval);
+                    const bearerToken = `Bearer ${tokenObj.value}`;
+
+                    // Fetch profile via API
+                    let profile = await fetchDeepSeekProfile(bearerToken);
+
+                    // Use captured email if available (and not masked), otherwise use API email
+                    if (capturedEmail && !capturedEmail.includes('***')) {
+                      profile.email = capturedEmail;
+                    }
+
+                    // Fallback: Try to scrape from DOM if still no email
+                    if (!profile.email) {
+                      const scrapedEmail = await authWindow.webContents
+                        .executeJavaScript(
+                          `
                             (() => {
                                 // Try common selectors for email/username
                                 const el = document.querySelector('.user-email') || document.querySelector('.ds-avatar-name') || document.querySelector('[class*="user-info"]');
                                 return el ? el.innerText : null;
                             })()
                           `,
-                      )
-                      .catch(() => null);
-                    if (scrapedEmail) {
-                      profile.email = scrapedEmail;
+                        )
+                        .catch(() => null);
+                      if (scrapedEmail) {
+                        profile.email = scrapedEmail;
+                      }
                     }
+
+                    if (!profile.email) profile.email = 'deepseek@user.com';
+
+                    const newAccount: Account = {
+                      id: crypto.randomUUID(),
+                      provider: 'DeepSeek',
+                      email: profile.email,
+                      credential: bearerToken,
+                      status: 'Active',
+                      usage: '0',
+                      totalRequests: 0,
+                      successfulRequests: 0,
+                      totalDuration: 0,
+                      tokensToday: 0,
+                      statsDate: new Date().toISOString().split('T')[0],
+                      lastActive: new Date().toISOString(),
+                      userAgent,
+                      name: profile.name || undefined,
+                      picture: profile.picture || undefined,
+                    };
+
+                    saveAccount(newAccount);
+                    authWindow.close();
+                    resolve({ success: true, account: newAccount });
                   }
-
-                  if (!profile.email) profile.email = 'deepseek@user.com';
-
-                  const newAccount: Account = {
-                    id: crypto.randomUUID(),
-                    provider: 'DeepSeek',
-                    email: profile.email,
-                    credential: bearerToken,
-                    status: 'Active',
-                    usage: '0',
-                    totalRequests: 0,
-                    successfulRequests: 0,
-                    totalDuration: 0,
-                    tokensToday: 0,
-                    statsDate: new Date().toISOString().split('T')[0],
-                    lastActive: new Date().toISOString(),
-                    userAgent,
-                    name: profile.name || undefined,
-                    picture: profile.picture || undefined,
-                  };
-
-                  saveAccount(newAccount);
-                  authWindow.close();
-                  resolve({ success: true, account: newAccount });
                 }
               }
             }
+          } catch (e) {
+            // Log errors during polling for debugging
+            if (provider === 'Claude') {
+              console.error('[Claude] Error during login polling:', e);
+            }
           }
-        } catch (e) {
-          // Log errors during polling for debugging
-          if (provider === 'Claude') {
-            console.error('[Claude] Error during login polling:', e);
-          }
-        }
-      }, 1000);
+        }, 1000);
 
-      authWindow.on('closed', () => {
-        clearInterval(interval);
-        resolve({ success: false, error: 'Window closed' });
+        authWindow.on('closed', () => {
+          clearInterval(interval);
+          resolve({ success: false, error: 'Window closed' });
+        });
       });
-    });
-  });
+    },
+  );
 
   // Helper to append account
   const saveAccount = (account: Account) => {

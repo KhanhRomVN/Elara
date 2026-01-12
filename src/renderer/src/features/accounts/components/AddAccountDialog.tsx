@@ -191,6 +191,8 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
                   >
                     <option value="Claude">Claude</option>
                     <option value="DeepSeek">DeepSeek</option>
+                    <option value="ChatGPT">ChatGPT</option>
+                    <option value="Mistral">Mistral</option>
                   </select>
                   <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700 dark:text-gray-200">
                     <svg

@@ -17,6 +17,8 @@ import {
   deleteConversation,
   stopResponse,
 } from './claude';
+import { chatCompletionStream as chatgptChat } from './chatgpt';
+import { chatCompletionStream as mistralChat } from './mistral';
 import { statsManager } from '../core/stats';
 
 const DATA_FILE = path.join(app.getPath('userData'), 'accounts.json');
@@ -85,14 +87,20 @@ expressApp.get('/v1/models', (_req, res) => {
         created: 1677610602,
         owned_by: 'anthropic',
       },
+      {
+        id: 'claude-3-haiku-20240307',
+        object: 'model',
+        created: 1677610602,
+        owned_by: 'anthropic',
+      },
+      { id: 'mistral-large-latest', object: 'model', created: 1677610602, owned_by: 'mistral' },
     ],
   });
 });
 
 expressApp.post('/v1/chat/completions', async (req, res) => {
   try {
-    const { model, messages, stream, thinking, search, conversation_id, parent_message_id } =
-      req.body;
+    const { model, messages, thinking, search, conversation_id, parent_message_id } = req.body;
 
     // Priority: Headers -> Query Params
     const authHeader = req.headers.authorization;
@@ -107,7 +115,8 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
     const targetEmail = emailHeader || emailQuery;
 
     if (!fs.existsSync(DATA_FILE)) {
-      return res.status(500).json({ error: 'Accounts database not found' });
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
     }
 
     const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
@@ -131,13 +140,20 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
 
     // Strategy 3: Default to first active account of requested model's provider
     if (!account) {
-      const inferredProvider = model.includes('claude') ? 'Claude' : 'DeepSeek';
+      const inferredProvider = model.includes('claude')
+        ? 'Claude'
+        : model.includes('gpt') || model === 'auto'
+          ? 'ChatGPT'
+          : model.includes('mistral')
+            ? 'Mistral'
+            : 'DeepSeek';
       const finalProvider = targetProvider || inferredProvider;
       account = accounts.find((a) => a.provider === finalProvider && a.status === 'Active');
     }
 
     if (!account) {
-      return res.status(401).json({ error: 'No valid account found for this request' });
+      res.status(401).json({ error: 'No valid account found for this request' });
+      return;
     }
 
     res.setHeader('Content-Type', 'text/event-stream');
@@ -204,6 +220,19 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
         account.userAgent,
         callbacks,
       );
+    } else if (account.provider === 'ChatGPT') {
+      await chatgptChat(
+        account.credential,
+        { model, messages, stream: true, conversation_id, parent_message_id },
+        account.userAgent,
+        callbacks,
+      );
+    } else if (account.provider === 'Mistral') {
+      await mistralChat(
+        account.credential,
+        { model, messages, temperature: 0.7 }, // Add temperature if needed
+        callbacks,
+      );
     } else {
       res.write(`data: {"error": "Provider not supported"}\n\n`);
       res.end();
@@ -224,7 +253,8 @@ expressApp.get('/v1/claude/conversations', async (req, res) => {
     const limitQuery = parseInt(req.query.limit as string) || 30;
 
     if (!fs.existsSync(DATA_FILE)) {
-      return res.status(500).json({ error: 'Accounts database not found' });
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
     }
 
     const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
@@ -246,7 +276,8 @@ expressApp.get('/v1/claude/conversations', async (req, res) => {
     }
 
     if (!account) {
-      return res.status(401).json({ error: 'No valid Claude account found' });
+      res.status(401).json({ error: 'No valid Claude account found' });
+      return;
     }
 
     const conversations = await getConversations(account.credential, account.userAgent, limitQuery);
@@ -265,7 +296,8 @@ expressApp.get('/v1/claude/conversations/:id', async (req, res) => {
     const emailQuery = req.query.email as string;
 
     if (!fs.existsSync(DATA_FILE)) {
-      return res.status(500).json({ error: 'Accounts database not found' });
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
     }
 
     const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
@@ -287,7 +319,8 @@ expressApp.get('/v1/claude/conversations/:id', async (req, res) => {
     }
 
     if (!account) {
-      return res.status(401).json({ error: 'No valid Claude account found' });
+      res.status(401).json({ error: 'No valid Claude account found' });
+      return;
     }
 
     const conversation = await getConversationDetail(account.credential, id, account.userAgent);
@@ -306,7 +339,8 @@ expressApp.delete('/v1/claude/conversations/:id', async (req, res) => {
     const emailQuery = req.query.email as string;
 
     if (!fs.existsSync(DATA_FILE)) {
-      return res.status(500).json({ error: 'Accounts database not found' });
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
     }
 
     const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
@@ -328,7 +362,8 @@ expressApp.delete('/v1/claude/conversations/:id', async (req, res) => {
     }
 
     if (!account) {
-      return res.status(401).json({ error: 'No valid Claude account found' });
+      res.status(401).json({ error: 'No valid Claude account found' });
+      return;
     }
 
     await deleteConversation(account.credential, id, account.userAgent);
@@ -347,7 +382,8 @@ expressApp.get('/v1/deepseek/sessions', async (req, res) => {
     const pinnedOnly = req.query.pinned === 'true';
 
     if (!fs.existsSync(DATA_FILE)) {
-      return res.status(500).json({ error: 'Accounts database not found' });
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
     }
 
     const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
@@ -369,7 +405,8 @@ expressApp.get('/v1/deepseek/sessions', async (req, res) => {
     }
 
     if (!account) {
-      return res.status(401).json({ error: 'No valid DeepSeek account found' });
+      res.status(401).json({ error: 'No valid DeepSeek account found' });
+      return;
     }
 
     const sessions = await getChatSessions(account.credential, account.userAgent, pinnedOnly);
@@ -388,7 +425,8 @@ expressApp.get('/v1/deepseek/sessions/:id/messages', async (req, res) => {
     const emailQuery = req.query.email as string;
 
     if (!fs.existsSync(DATA_FILE)) {
-      return res.status(500).json({ error: 'Accounts database not found' });
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
     }
 
     const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
@@ -410,7 +448,8 @@ expressApp.get('/v1/deepseek/sessions/:id/messages', async (req, res) => {
     }
 
     if (!account) {
-      return res.status(401).json({ error: 'No valid DeepSeek account found' });
+      res.status(401).json({ error: 'No valid DeepSeek account found' });
+      return;
     }
 
     const history = await getChatHistory(account.credential, id, account.userAgent);
@@ -428,7 +467,8 @@ expressApp.post('/v1/deepseek/sessions/:id/stop', async (req, res) => {
     const { messageId, email } = req.body;
 
     if (!fs.existsSync(DATA_FILE)) {
-      return res.status(500).json({ error: 'Accounts database not found' });
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
     }
 
     const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
@@ -437,7 +477,8 @@ expressApp.post('/v1/deepseek/sessions/:id/stop', async (req, res) => {
     );
 
     if (!account) {
-      return res.status(401).json({ error: 'No valid DeepSeek account found' });
+      res.status(401).json({ error: 'No valid DeepSeek account found' });
+      return;
     }
 
     await stopStream(account.credential, id, messageId, account.userAgent);
@@ -455,7 +496,8 @@ expressApp.post('/v1/claude/conversations/:id/stop', async (req, res) => {
     const emailQuery = req.query.email as string;
 
     if (!fs.existsSync(DATA_FILE)) {
-      return res.status(500).json({ error: 'Accounts database not found' });
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
     }
 
     const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
@@ -464,7 +506,8 @@ expressApp.post('/v1/claude/conversations/:id/stop', async (req, res) => {
     );
 
     if (!account) {
-      return res.status(401).json({ error: 'No valid Claude account found' });
+      res.status(401).json({ error: 'No valid Claude account found' });
+      return;
     }
 
     await stopResponse(account.credential, id, account.userAgent);
