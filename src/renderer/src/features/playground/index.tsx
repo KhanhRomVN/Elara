@@ -305,22 +305,157 @@ export const PlaygroundPage = () => {
     }
   };
 
-  // Fake history data
-  const history = [
-    { id: '1', title: 'React Performance Tips', date: 'Today' },
-    { id: '2', title: 'Explain Quantum Computing', date: 'Yesterday' },
-    { id: '3', title: 'Debug Node.js Error', date: 'Previous 7 Days' },
-  ];
+  // Real conversation history
+  const [history, setHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // Fetch conversation history when provider or account changes
+  useEffect(() => {
+    const fetchHistory = async () => {
+      if (!selectedProvider || !selectedAccount) {
+        console.log('[History] No provider or account selected');
+        setHistory([]);
+        return;
+      }
+
+      // Find the selected account object
+      const account = accounts.find((a) => a.id === selectedAccount);
+      if (!account) {
+        console.log('[History] Account not found:', selectedAccount);
+        setHistory([]);
+        return;
+      }
+
+      console.log('[History] Fetching history for:', {
+        provider: selectedProvider,
+        email: account.email,
+      });
+
+      setLoadingHistory(true);
+      try {
+        const endpoint =
+          selectedProvider === 'Claude'
+            ? 'http://localhost:11434/v1/claude/conversations'
+            : 'http://localhost:11434/v1/deepseek/sessions';
+
+        console.log('[History] Endpoint:', endpoint);
+        const response = await fetch(`${endpoint}?email=${encodeURIComponent(account.email)}`);
+
+        console.log('[History] Response status:', response.status);
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('[History] Received data:', data);
+
+          // Format data for display
+          const formattedHistory =
+            selectedProvider === 'Claude'
+              ? data.map((conv: any) => ({
+                  id: conv.uuid,
+                  title: conv.name || conv.summary || 'Untitled',
+                  date: new Date(conv.updated_at).toLocaleDateString(),
+                }))
+              : data.map((session: any) => ({
+                  id: session.id,
+                  title: session.title || 'Untitled',
+                  date: new Date(session.updated_at * 1000).toLocaleDateString(),
+                }));
+
+          console.log('[History] Formatted history:', formattedHistory);
+          setHistory(formattedHistory);
+        } else {
+          const errorText = await response.text();
+          console.error('[History] Failed to fetch:', response.status, errorText);
+        }
+      } catch (error) {
+        console.error('[History] Error fetching history:', error);
+      } finally {
+        setLoadingHistory(false);
+      }
+    };
+
+    fetchHistory();
+  }, [selectedProvider, selectedAccount, accounts]);
 
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [conversationTitle, setConversationTitle] = useState<string>('');
 
   const startNewChat = () => {
     setActiveChatId(null);
     setMessages([]);
     setInput('');
+    setConversationTitle('');
   };
 
-  const handleSendUninitialized = async () => {
+  const loadConversation = async (conversationId: string) => {
+    console.log('[Conversation] Loading conversation:', conversationId);
+    try {
+      const account = accounts.find((a) => a.id === selectedAccount);
+      if (!account) {
+        console.error('[Conversation] No account found');
+        return;
+      }
+
+      const endpoint =
+        selectedProvider === 'Claude'
+          ? `http://localhost:11434/v1/claude/conversations/${conversationId}`
+          : `http://localhost:11434/v1/deepseek/sessions/${conversationId}/messages`;
+
+      console.log('[Conversation] Fetching from:', endpoint);
+      const response = await fetch(`${endpoint}?email=${encodeURIComponent(account.email)}`);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('[Conversation] Loaded data:', data);
+
+        // Extract conversation title
+        const title =
+          selectedProvider === 'Claude'
+            ? data.name || data.summary || 'Untitled Conversation'
+            : data.chat_session?.title || 'Untitled Conversation';
+
+        setConversationTitle(title);
+
+        // Format messages from API response
+        const formattedMessages: Message[] =
+          selectedProvider === 'Claude'
+            ? data.chat_messages
+                ?.map((msg: any) => ({
+                  id: msg.uuid,
+                  role: msg.sender === 'human' ? ('user' as const) : ('assistant' as const),
+                  content:
+                    msg.content
+                      ?.map((c: any) => c.text || '')
+                      .join('')
+                      .trim() ||
+                    msg.text ||
+                    '',
+                }))
+                .filter((m: Message) => m.content) || []
+            : data.chat_messages
+                ?.map((msg: any) => ({
+                  id: msg.message_id,
+                  role: msg.role === 'USER' ? ('user' as const) : ('assistant' as const),
+                  content:
+                    msg.fragments
+                      ?.map((f: any) => f.content || '')
+                      .join('')
+                      .trim() || '',
+                }))
+                .filter((m: Message) => m.content) || [];
+
+        console.log('[Conversation] Formatted messages:', formattedMessages);
+        setMessages(formattedMessages);
+        setActiveChatId(conversationId);
+      } else {
+        console.error('[Conversation] Failed to load:', response.status);
+      }
+    } catch (error) {
+      console.error('[Conversation] Error loading conversation:', error);
+    }
+  };
+
+  const handleSendUninitialized = async (e?: React.FormEvent) => {
     if (!input.trim() || !selectedAccount) return;
     setActiveChatId('new-session'); // simplistic state transition
     await handleSend();
@@ -404,19 +539,10 @@ export const PlaygroundPage = () => {
       {selectedProvider === 'DeepSeek' && (
         <>
           <div className="flex items-center gap-2 ml-2 p-2 rounded-md bg-accent/30 border border-border">
-            <Lightbulb
-              className={cn(
-                'w-4 h-4',
-                thinkingEnabled ? 'text-yellow-500 fill-current' : 'text-muted-foreground',
-              )}
-            />
             <span className="text-sm font-medium">Thinking</span>
             <Switch checked={thinkingEnabled} onCheckedChange={setThinkingEnabled} />
           </div>
           <div className="flex items-center gap-2 ml-2 p-2 rounded-md bg-accent/30 border border-border">
-            <Search
-              className={cn('w-4 h-4', searchEnabled ? 'text-blue-500' : 'text-muted-foreground')}
-            />
             <span className="text-sm font-medium">Search</span>
             <Switch checked={searchEnabled} onCheckedChange={setSearchEnabled} />
           </div>
@@ -472,9 +598,11 @@ export const PlaygroundPage = () => {
             {history.map((item) => (
               <button
                 key={item.id}
-                className="w-full text-left px-3 py-2 rounded-md hover:bg-accent hover:text-accent-foreground text-sm truncate transition-colors flex items-center gap-2"
+                onClick={() => loadConversation(item.id)}
+                className={`w-full text-left px-3 py-2 rounded-md hover:bg-accent hover:text-accent-foreground text-sm truncate transition-colors flex items-center gap-2 ${
+                  activeChatId === item.id ? 'bg-accent' : ''
+                }`}
               >
-                <MoreHorizontal className="w-4 h-4 opacity-70" />
                 <span className="truncate">{item.title}</span>
               </button>
             ))}
@@ -524,28 +652,26 @@ export const PlaygroundPage = () => {
           {activeChatId ? (
             /* Active Chat View */
             <div className="flex flex-col h-full bg-background">
-              {/* Header / Top bar with Selectors */}
-              <div className="border-b p-3 flex justify-between items-center bg-background/95 backdrop-blur z-10">
-                {renderDropdowns()}
-              </div>
+              {/* Conversation Title Header */}
+              {conversationTitle && (
+                <div className="border-b p-4 bg-background/95 backdrop-blur">
+                  <h2 className="text-lg font-semibold truncate">{conversationTitle}</h2>
+                </div>
+              )}
 
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 {messages.map((message) => (
                   <div
                     key={message.id}
-                    className={cn(
-                      'flex w-full',
-                      message.role === 'user' ? 'justify-end' : 'justify-start',
-                    )}
+                    className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
                     <div
-                      className={cn(
-                        'max-w-[80%] rounded-lg px-4 py-3',
+                      className={`max-w-[80%] ${
                         message.role === 'user'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-muted text-foreground',
-                      )}
+                          ? 'rounded-lg px-4 py-3 bg-muted text-foreground'
+                          : 'text-foreground'
+                      }`}
                     >
                       <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                     </div>
@@ -607,7 +733,7 @@ export const PlaygroundPage = () => {
                     <button
                       onClick={handleSend}
                       disabled={loading}
-                      className="h-8 w-8 flex items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      className="h-8 w-8 text-white flex items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                     >
                       <Send className="h-4 w-4" />
                     </button>

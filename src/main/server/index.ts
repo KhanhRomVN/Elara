@@ -4,8 +4,13 @@ import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import { Account } from '../ipc/accounts';
-import { chatCompletionStream as deepseekChat } from './deepseek';
-import { chatCompletionStream as claudeChat } from './claude';
+import { chatCompletionStream as deepseekChat, getChatSessions, getChatHistory } from './deepseek';
+import {
+  chatCompletionStream as claudeChat,
+  getConversations,
+  getConversationDetail,
+  deleteConversation,
+} from './claude';
 import { statsManager } from '../core/stats';
 
 const DATA_FILE = path.join(app.getPath('userData'), 'accounts.json');
@@ -205,6 +210,211 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
     if (!res.headersSent) {
       res.status(500).json({ error: error.message });
     }
+  }
+});
+
+// Get Claude conversation history
+expressApp.get('/v1/claude/conversations', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const emailQuery = req.query.email as string;
+    const limitQuery = parseInt(req.query.limit as string) || 30;
+
+    if (!fs.existsSync(DATA_FILE)) {
+      return res.status(500).json({ error: 'Accounts database not found' });
+    }
+
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    let account: Account | undefined;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      account = accounts.find((a) => a.id === token);
+    }
+
+    if (!account && emailQuery) {
+      account = accounts.find(
+        (a) => a.email.toLowerCase() === emailQuery.toLowerCase() && a.provider === 'Claude',
+      );
+    }
+
+    if (!account) {
+      account = accounts.find((a) => a.provider === 'Claude' && a.status === 'Active');
+    }
+
+    if (!account) {
+      return res.status(401).json({ error: 'No valid Claude account found' });
+    }
+
+    const conversations = await getConversations(account.credential, account.userAgent, limitQuery);
+    res.json(conversations);
+  } catch (error: any) {
+    console.error('[Server] Get Conversations Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get Claude conversation detail
+expressApp.get('/v1/claude/conversations/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const authHeader = req.headers.authorization;
+    const emailQuery = req.query.email as string;
+
+    if (!fs.existsSync(DATA_FILE)) {
+      return res.status(500).json({ error: 'Accounts database not found' });
+    }
+
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    let account: Account | undefined;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      account = accounts.find((a) => a.id === token);
+    }
+
+    if (!account && emailQuery) {
+      account = accounts.find(
+        (a) => a.email.toLowerCase() === emailQuery.toLowerCase() && a.provider === 'Claude',
+      );
+    }
+
+    if (!account) {
+      account = accounts.find((a) => a.provider === 'Claude' && a.status === 'Active');
+    }
+
+    if (!account) {
+      return res.status(401).json({ error: 'No valid Claude account found' });
+    }
+
+    const conversation = await getConversationDetail(account.credential, id, account.userAgent);
+    res.json(conversation);
+  } catch (error: any) {
+    console.error('[Server] Get Conversation Detail Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete Claude conversation
+expressApp.delete('/v1/claude/conversations/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const authHeader = req.headers.authorization;
+    const emailQuery = req.query.email as string;
+
+    if (!fs.existsSync(DATA_FILE)) {
+      return res.status(500).json({ error: 'Accounts database not found' });
+    }
+
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    let account: Account | undefined;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      account = accounts.find((a) => a.id === token);
+    }
+
+    if (!account && emailQuery) {
+      account = accounts.find(
+        (a) => a.email.toLowerCase() === emailQuery.toLowerCase() && a.provider === 'Claude',
+      );
+    }
+
+    if (!account) {
+      account = accounts.find((a) => a.provider === 'Claude' && a.status === 'Active');
+    }
+
+    if (!account) {
+      return res.status(401).json({ error: 'No valid Claude account found' });
+    }
+
+    await deleteConversation(account.credential, id, account.userAgent);
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('[Server] Delete Conversation Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get DeepSeek chat sessions history
+expressApp.get('/v1/deepseek/sessions', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const emailQuery = req.query.email as string;
+    const pinnedOnly = req.query.pinned === 'true';
+
+    if (!fs.existsSync(DATA_FILE)) {
+      return res.status(500).json({ error: 'Accounts database not found' });
+    }
+
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    let account: Account | undefined;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      account = accounts.find((a) => a.id === token);
+    }
+
+    if (!account && emailQuery) {
+      account = accounts.find(
+        (a) => a.email.toLowerCase() === emailQuery.toLowerCase() && a.provider === 'DeepSeek',
+      );
+    }
+
+    if (!account) {
+      account = accounts.find((a) => a.provider === 'DeepSeek' && a.status === 'Active');
+    }
+
+    if (!account) {
+      return res.status(401).json({ error: 'No valid DeepSeek account found' });
+    }
+
+    const sessions = await getChatSessions(account.credential, account.userAgent, pinnedOnly);
+    res.json(sessions);
+  } catch (error: any) {
+    console.error('[Server] Get DeepSeek Sessions Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get DeepSeek chat history messages
+expressApp.get('/v1/deepseek/sessions/:id/messages', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const authHeader = req.headers.authorization;
+    const emailQuery = req.query.email as string;
+
+    if (!fs.existsSync(DATA_FILE)) {
+      return res.status(500).json({ error: 'Accounts database not found' });
+    }
+
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    let account: Account | undefined;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      account = accounts.find((a) => a.id === token);
+    }
+
+    if (!account && emailQuery) {
+      account = accounts.find(
+        (a) => a.email.toLowerCase() === emailQuery.toLowerCase() && a.provider === 'DeepSeek',
+      );
+    }
+
+    if (!account) {
+      account = accounts.find((a) => a.provider === 'DeepSeek' && a.status === 'Active');
+    }
+
+    if (!account) {
+      return res.status(401).json({ error: 'No valid DeepSeek account found' });
+    }
+
+    const history = await getChatHistory(account.credential, id, account.userAgent);
+    res.json(history);
+  } catch (error: any) {
+    console.error('[Server] Get DeepSeek Chat History Error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

@@ -367,3 +367,123 @@ export async function chatCompletionStream(
     callbacks.onError(error);
   }
 }
+
+// Get DeepSeek chat session history
+export async function getChatSessions(
+  token: string,
+  userAgent?: string,
+  pinnedOnly: boolean = false,
+): Promise<any> {
+  try {
+    const apiBase = 'https://chat.deepseek.com/api/v0';
+    const origin = 'https://chat.deepseek.com';
+
+    const url = `${apiBase}/chat_session/fetch_page?lte_cursor.pinned=${pinnedOnly}`;
+
+    const request = net.request({
+      method: 'GET',
+      url,
+      useSessionCookies: true,
+    });
+
+    request.setHeader('Authorization', token);
+    request.setHeader('Origin', origin);
+    request.setHeader('Referer', `${origin}/`);
+    request.setHeader('Accept', '*/*');
+    request.setHeader('x-client-locale', 'en_US');
+    request.setHeader('x-app-version', '20241129.1');
+    request.setHeader('x-client-version', '1.6.1');
+    request.setHeader('x-client-platform', 'web');
+    if (userAgent) request.setHeader('User-Agent', userAgent);
+
+    return new Promise((resolve, reject) => {
+      let data = '';
+
+      request.on('response', (response) => {
+        response.on('data', (chunk) => (data += chunk.toString()));
+        response.on('end', () => {
+          if (response.statusCode === 200) {
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.code === 0 && parsed.data?.biz_data?.chat_sessions) {
+                resolve(parsed.data.biz_data.chat_sessions);
+              } else {
+                reject(new Error(`Failed to get chat sessions: ${parsed.msg || 'Unknown error'}`));
+              }
+            } catch (e) {
+              reject(e);
+            }
+          } else {
+            reject(new Error(`Failed to get chat sessions: ${response.statusCode}`));
+          }
+        });
+      });
+
+      request.on('error', reject);
+      request.end();
+    });
+  } catch (error: any) {
+    console.error('[DeepSeek] Get Chat Sessions Error:', error);
+    throw error;
+  }
+}
+
+// Get DeepSeek chat history messages
+export async function getChatHistory(
+  token: string,
+  sessionId: string,
+  userAgent?: string,
+): Promise<any> {
+  try {
+    const apiBase = 'https://chat.deepseek.com/api/v0';
+    const origin = 'https://chat.deepseek.com';
+
+    const url = `${apiBase}/chat/history_messages?chat_session_id=${sessionId}`;
+
+    const request = net.request({
+      method: 'GET',
+      url,
+      useSessionCookies: true,
+    });
+
+    request.setHeader('Authorization', token);
+    request.setHeader('Origin', origin);
+    request.setHeader('Referer', `${origin}/a/chat/s/${sessionId}`);
+    request.setHeader('Accept', '*/*');
+    request.setHeader('x-client-locale', 'en_US');
+    request.setHeader('x-app-version', '20241129.1');
+    request.setHeader('x-client-version', '1.6.1');
+    request.setHeader('x-client-platform', 'web');
+    if (userAgent) request.setHeader('User-Agent', userAgent);
+
+    return new Promise((resolve, reject) => {
+      let data = '';
+
+      request.on('response', (response) => {
+        response.on('data', (chunk) => (data += chunk.toString()));
+        response.on('end', () => {
+          if (response.statusCode === 200) {
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.code === 0 && parsed.data?.biz_data) {
+                resolve(parsed.data.biz_data);
+              } else {
+                reject(new Error(`Failed to get chat history: ${parsed.msg || 'Unknown error'}`));
+              }
+            } catch (e) {
+              reject(e);
+            }
+          } else {
+            reject(new Error(`Failed to get chat history: ${response.statusCode}`));
+          }
+        });
+      });
+
+      request.on('error', reject);
+      request.end();
+    });
+  } catch (error: any) {
+    console.error('[DeepSeek] Get Chat History Error:', error);
+    throw error;
+  }
+}

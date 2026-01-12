@@ -224,3 +224,217 @@ export async function chatCompletionStream(
     callbacks.onError(e);
   }
 }
+
+// Get list of conversations
+export async function getConversations(
+  token: string,
+  userAgent?: string,
+  limit: number = 30,
+): Promise<any[]> {
+  try {
+    const origin = BASE_URL;
+    const cookie = `sessionKey=${token}`;
+
+    const setCommonHeaders = (req: Electron.ClientRequest) => {
+      req.setHeader('Cookie', cookie);
+      req.setHeader('Origin', origin);
+      req.setHeader('Accept', 'application/json');
+      req.setHeader('anthropic-client-platform', 'web_claude_ai');
+      req.setHeader('anthropic-client-version', '1.0.0');
+      req.setHeader('anthropic-device-id', getDeviceId());
+      req.setHeader('anthropic-anonymous-id', getAnonymousId());
+      if (userAgent) req.setHeader('User-Agent', userAgent);
+    };
+
+    // Get organization
+    const orgsReq = net.request({ method: 'GET', url: `${BASE_URL}/api/organizations` });
+    setCommonHeaders(orgsReq);
+
+    const orgs = await new Promise<any>((resolve, reject) => {
+      let data = '';
+      orgsReq.on('response', (response) => {
+        response.on('data', (chunk) => (data += chunk.toString()));
+        response.on('end', () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch (e) {
+            reject(e);
+          }
+        });
+      });
+      orgsReq.on('error', reject);
+      orgsReq.end();
+    });
+
+    if (!orgs || !orgs.length) throw new Error('No organizations found');
+    const orgId = orgs[0].uuid;
+
+    // Get conversations
+    const url = `${BASE_URL}/api/organizations/${orgId}/chat_conversations?limit=${limit}&consistency=eventual`;
+    const req = net.request({ method: 'GET', url });
+    setCommonHeaders(req);
+
+    return new Promise((resolve, reject) => {
+      let data = '';
+      req.on('response', (response) => {
+        response.on('data', (chunk) => (data += chunk.toString()));
+        response.on('end', () => {
+          if (response.statusCode === 200) {
+            try {
+              resolve(JSON.parse(data));
+            } catch (e) {
+              reject(e);
+            }
+          } else {
+            reject(new Error(`Failed to get conversations: ${response.statusCode}`));
+          }
+        });
+      });
+      req.on('error', reject);
+      req.end();
+    });
+  } catch (e: any) {
+    console.error('[Claude] Get Conversations Error:', e);
+    throw e;
+  }
+}
+
+// Get conversation detail with messages
+export async function getConversationDetail(
+  token: string,
+  conversationId: string,
+  userAgent?: string,
+): Promise<any> {
+  try {
+    const origin = BASE_URL;
+    const cookie = `sessionKey=${token}`;
+
+    const setCommonHeaders = (req: Electron.ClientRequest) => {
+      req.setHeader('Cookie', cookie);
+      req.setHeader('Origin', origin);
+      req.setHeader('Accept', 'application/json');
+      req.setHeader('anthropic-client-platform', 'web_claude_ai');
+      req.setHeader('anthropic-client-version', '1.0.0');
+      req.setHeader('anthropic-device-id', getDeviceId());
+      req.setHeader('anthropic-anonymous-id', getAnonymousId());
+      if (userAgent) req.setHeader('User-Agent', userAgent);
+    };
+
+    // Get organization
+    const orgsReq = net.request({ method: 'GET', url: `${BASE_URL}/api/organizations` });
+    setCommonHeaders(orgsReq);
+
+    const orgs = await new Promise<any>((resolve, reject) => {
+      let data = '';
+      orgsReq.on('response', (response) => {
+        response.on('data', (chunk) => (data += chunk.toString()));
+        response.on('end', () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch (e) {
+            reject(e);
+          }
+        });
+      });
+      orgsReq.on('error', reject);
+      orgsReq.end();
+    });
+
+    if (!orgs || !orgs.length) throw new Error('No organizations found');
+    const orgId = orgs[0].uuid;
+
+    // Get conversation detail
+    const url = `${BASE_URL}/api/organizations/${orgId}/chat_conversations/${conversationId}?tree=True&rendering_mode=messages&render_all_tools=true&consistency=eventual`;
+    const req = net.request({ method: 'GET', url });
+    setCommonHeaders(req);
+
+    return new Promise((resolve, reject) => {
+      let data = '';
+      req.on('response', (response) => {
+        response.on('data', (chunk) => (data += chunk.toString()));
+        response.on('end', () => {
+          if (response.statusCode === 200) {
+            try {
+              resolve(JSON.parse(data));
+            } catch (e) {
+              reject(e);
+            }
+          } else {
+            reject(new Error(`Failed to load conversation: ${response.statusCode}`));
+          }
+        });
+      });
+      req.on('error', reject);
+      req.end();
+    });
+  } catch (e: any) {
+    console.error('[Claude] Get Conversation Detail Error:', e);
+    throw e;
+  }
+}
+
+// Delete a conversation
+export async function deleteConversation(
+  token: string,
+  conversationId: string,
+  userAgent?: string,
+): Promise<void> {
+  try {
+    const origin = BASE_URL;
+    const cookie = `sessionKey=${token}`;
+
+    const setCommonHeaders = (req: Electron.ClientRequest) => {
+      req.setHeader('Cookie', cookie);
+      req.setHeader('Origin', origin);
+      req.setHeader('Accept', 'application/json');
+      req.setHeader('anthropic-client-platform', 'web_claude_ai');
+      req.setHeader('anthropic-client-version', '1.0.0');
+      req.setHeader('anthropic-device-id', getDeviceId());
+      req.setHeader('anthropic-anonymous-id', getAnonymousId());
+      if (userAgent) req.setHeader('User-Agent', userAgent);
+    };
+
+    // Get organization
+    const orgsReq = net.request({ method: 'GET', url: `${BASE_URL}/api/organizations` });
+    setCommonHeaders(orgsReq);
+
+    const orgs = await new Promise<any>((resolve, reject) => {
+      let data = '';
+      orgsReq.on('response', (response) => {
+        response.on('data', (chunk) => (data += chunk.toString()));
+        response.on('end', () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch (e) {
+            reject(e);
+          }
+        });
+      });
+      orgsReq.on('error', reject);
+      orgsReq.end();
+    });
+
+    if (!orgs || !orgs.length) throw new Error('No organizations found');
+    const orgId = orgs[0].uuid;
+
+    // Delete conversation
+    const url = `${BASE_URL}/api/organizations/${orgId}/chat_conversations/${conversationId}`;
+    const req = net.request({ method: 'DELETE', url });
+    setCommonHeaders(req);
+
+    return new Promise((resolve, reject) => {
+      req.on('response', (response) => {
+        if (response.statusCode === 200 || response.statusCode === 204) {
+          resolve();
+        } else {
+          reject(new Error(`Failed to delete conversation: ${response.statusCode}`));
+        }
+      });
+      req.on('error', reject);
+      req.end();
+    });
+  } catch (e: any) {
+    console.error('[Claude] Delete Conversation Error:', e);
+    throw e;
+  }
+}

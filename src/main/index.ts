@@ -4,6 +4,7 @@ import { windowManager } from './core/window';
 import { setupEventHandlers } from './core/events';
 import { setupAccountsHandlers } from './ipc/accounts';
 import { setupServerHandlers } from './ipc/server';
+import { startServer } from './server';
 
 import { setupCommandsHandlers } from './ipc/commands';
 import { setupStatsHandlers } from './ipc/stats';
@@ -51,6 +52,9 @@ if (!gotTheLock) {
 
     setupCommandsHandlers();
     setupStatsHandlers();
+
+    // Start API server
+    startServer();
 
     // Start CLI server
     startCLIServer();
