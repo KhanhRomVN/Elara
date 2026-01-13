@@ -13,6 +13,7 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
   const [error, setError] = useState('');
   const [showEmailInput, setShowEmailInput] = useState(false);
   const [actualEmail, setActualEmail] = useState('');
+  const [actualUsername, setActualUsername] = useState('');
   const [accountId, setAccountId] = useState<string | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -35,6 +36,7 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
           result.account?.email === 'cohere@user.com' ||
           result.account?.email === 'groq@user.com' ||
           result.account?.email === 'gemini@user.com' ||
+          result.account?.email === 'perplexity@user.com' ||
           !result.account?.email;
 
         if (needsManualEmail && result.account) {
@@ -66,10 +68,16 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
 
     setLoading(true);
     try {
+      const updates: any = { email: actualEmail.trim() };
+      if (actualUsername.trim()) {
+        updates.name = actualUsername.trim();
+      }
+
       // @ts-ignore
-      await window.api.accounts.update(accountId, { email: actualEmail.trim() });
+      await window.api.accounts.update(accountId, updates);
       setShowEmailInput(false);
       setActualEmail('');
+      setActualUsername('');
       setAccountId(null);
       onOpenChange(false);
       onSuccess();
@@ -82,18 +90,21 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
 
   if (!open) return null;
 
+  const isPerplexity = provider === 'Perplexity';
+
   return (
     <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className="w-full max-w-md rounded-xl border bg-card text-card-foreground shadow-lg animate-in fade-in zoom-in-95 duration-200 sm:max-w-[425px]">
         <div className="flex flex-col space-y-1.5 p-6 pb-2">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold leading-none tracking-tight">
-              {showEmailInput ? 'Enter Your Email' : 'Add New Account'}
+              {showEmailInput ? 'Complete Account Setup' : 'Add New Account'}
             </h3>
             <button
               onClick={() => {
                 setShowEmailInput(false);
                 setActualEmail('');
+                setActualUsername('');
                 setAccountId(null);
                 onOpenChange(false);
               }}
@@ -105,7 +116,9 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
           </div>
           <p className="text-sm text-muted-foreground">
             {showEmailInput
-              ? 'Please enter your actual email address for this account.'
+              ? isPerplexity
+                ? 'We could not detect your email or username. Please enter them manually.'
+                : 'Please enter your actual email address for this account.'
               : 'Select a provider to log in.'}
           </p>
         </div>
@@ -144,6 +157,28 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
                   This email will be used to identify your account.
                 </p>
               </div>
+
+              {isPerplexity && (
+                <div className="space-y-2">
+                  <label
+                    htmlFor="username"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    Username (Optional)
+                  </label>
+                  <input
+                    id="username"
+                    type="text"
+                    value={actualUsername}
+                    onChange={(e) => setActualUsername(e.target.value)}
+                    placeholder="e.g. user123 (Optional)"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  />
+                  <p className="text-[0.8rem] text-muted-foreground">
+                    Displayed name for your account.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 pt-6">
@@ -152,6 +187,7 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
                 onClick={() => {
                   setShowEmailInput(false);
                   setActualEmail('');
+                  setActualUsername('');
                   setAccountId(null);
                   onOpenChange(false);
                 }}
@@ -164,7 +200,7 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
                 disabled={loading}
                 className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
               >
-                {loading ? 'Saving...' : 'Save Email'}
+                {loading ? 'Saving...' : 'Save Details'}
               </button>
             </div>
           </form>

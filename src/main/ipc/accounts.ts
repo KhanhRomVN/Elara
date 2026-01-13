@@ -432,8 +432,12 @@ export const setupAccountsHandlers = () => {
         if (provider === 'Perplexity') {
           try {
             console.log('[Accounts] Starting Perplexity login flow (Real Browser)...');
-            const { cookies, email } = await loginPerplexity();
+            const { cookies, email, username } = await loginPerplexity();
+
+            // If email is missing, we use a fallback to ensure account creation succeeds
+            // The frontend will detect this specific fallback email and trigger the manual input dialog
             const finalEmail = email || 'perplexity@user.com';
+            const name = username || undefined;
 
             const newAccount: Account = {
               id: crypto.randomUUID(),
@@ -449,7 +453,7 @@ export const setupAccountsHandlers = () => {
               statsDate: new Date().toISOString().split('T')[0],
               lastActive: new Date().toISOString(),
               userAgent,
-              name: undefined,
+              name: name,
               picture: undefined,
             };
 
