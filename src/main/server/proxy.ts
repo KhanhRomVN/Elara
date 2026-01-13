@@ -60,7 +60,6 @@ export const startProxy = (): Promise<void> => {
           }
         }
 
-        // Groq
         if (host.includes('console.groq.com')) {
           console.log(`[Proxy] Intercepting Groq request: ${url}`);
           const reqCookies = ctx.clientToProxyRequest.headers.cookie;
@@ -70,6 +69,14 @@ export const startProxy = (): Promise<void> => {
           ) {
             console.log('[Proxy] Found session in Groq Request Cookie!');
             proxyEvents.emit('groq-cookies', reqCookies);
+          }
+        }
+
+        if (host.includes('api.stytchb2b.groq.com')) {
+          const clientSdk = ctx.clientToProxyRequest.headers['x-sdk-client'];
+          if (clientSdk) {
+            // console.log('[Proxy] Captured Groq SDK Client Header');
+            proxyEvents.emit('groq-sdk-client', clientSdk);
           }
         }
 

@@ -11,6 +11,7 @@ import { login as loginCohere, getProfile as getCohereProfile } from '../server/
 import { login as loginGroq } from '../server/groq';
 import { login as loginGemini } from '../server/gemini';
 import { login as loginPerplexity } from '../server/perplexity';
+import { proxyEvents } from '../server/proxy';
 
 const DATA_FILE = path.join(app.getPath('userData'), 'accounts.json');
 
@@ -122,6 +123,31 @@ const fetchDeepSeekProfile = (
 };
 
 export const setupAccountsHandlers = () => {
+  // Listen for Groq SDK Client Header
+  proxyEvents.on('groq-sdk-client', (headerValue: string) => {
+    try {
+      if (!fs.existsSync(DATA_FILE)) return;
+      const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+      // Find the active Groq account or any Groq account
+      const index = accounts.findIndex((acc) => acc.provider === 'Groq' && acc.status === 'Active');
+
+      if (index !== -1) {
+        const acc = accounts[index];
+        const currentHeaders = acc.headers || {};
+
+        // Update if missing or changed
+        if (currentHeaders['x-sdk-client'] !== headerValue) {
+          acc.headers = { ...currentHeaders, 'x-sdk-client': headerValue };
+          accounts[index] = acc;
+          fs.writeFileSync(DATA_FILE, JSON.stringify(accounts, null, 2));
+          // console.log('[Accounts] Updated Groq x-sdk-client header');
+        }
+      }
+    } catch (e) {
+      console.error('[Accounts] Error processing Groq SDK header:', e);
+    }
+  });
+
   ipcMain.handle('accounts:get-all', async () => {
     try {
       if (!fs.existsSync(DATA_FILE)) return [];
@@ -887,4 +913,34 @@ export const setupAccountsHandlers = () => {
       return { success: false, error: 'Failed to export accounts' };
     }
   });
+};
+
+// Exported function for internal use (e.g. from proxy listeners)
+export const updateAccountDirectly = (
+  provider: Account['provider'],
+  updates: Partial<Account>,
+  matchFn?: (acc: Account) => boolean,
+): boolean => {
+  try {
+    if (!fs.existsSync(DATA_FILE)) return false;
+    const data = fs.readFileSync(DATA_FILE, 'utf-8');
+    let accounts: Account[] = JSON.parse(data);
+
+    let index = -1;
+    if (matchFn) {
+      index = accounts.findIndex(matchFn);
+    } else {
+      index = accounts.findIndex((acc) => acc.provider === provider);
+    }
+
+    if (index !== -1) {
+      accounts[index] = { ...accounts[index], ...updates };
+      fs.writeFileSync(DATA_FILE, JSON.stringify(accounts, null, 2));
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error(`[Accounts] Failed to update account for ${provider}:`, error);
+    return false;
+  }
 };
