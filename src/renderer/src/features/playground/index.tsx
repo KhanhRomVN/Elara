@@ -10,7 +10,7 @@ import qwenIcon from '../../assets/provider_icons/qwen.svg';
 import cohereIcon from '../../assets/provider_icons/cohere.svg';
 import perplexityIcon from '../../assets/provider_icons/perplexity.svg';
 import groqIcon from '../../assets/provider_icons/groq.svg';
-import geminiIcon from '../../assets/provider_icons/gemini.png';
+import geminiIcon from '../../assets/provider_icons/gemini.svg';
 import { Switch } from '../../core/components/Switch';
 
 interface Message {

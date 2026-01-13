@@ -5,6 +5,30 @@ import { cn } from '../../shared/lib/utils';
 import { Copy, Plus, Download, Trash2, Search, AlignEndVertical, Upload } from 'lucide-react';
 import { AddAccountDialog } from './components/AddAccountDialog';
 
+import claudeIcon from '../../assets/provider_icons/claude.svg';
+import deepseekIcon from '../../assets/provider_icons/deepseek.svg';
+import openaiIcon from '../../assets/provider_icons/openai.svg';
+import mistralIcon from '../../assets/provider_icons/mistral.svg';
+import kimiIcon from '../../assets/provider_icons/kimi.svg';
+import qwenIcon from '../../assets/provider_icons/qwen.svg';
+import cohereIcon from '../../assets/provider_icons/cohere.svg';
+import perplexityIcon from '../../assets/provider_icons/perplexity.svg';
+import groqIcon from '../../assets/provider_icons/groq.svg';
+import geminiIcon from '../../assets/provider_icons/gemini.svg';
+
+const providerIcons: Record<string, string> = {
+  Claude: claudeIcon,
+  DeepSeek: deepseekIcon,
+  ChatGPT: openaiIcon,
+  Mistral: mistralIcon,
+  Kimi: kimiIcon,
+  Qwen: qwenIcon,
+  Cohere: cohereIcon,
+  Perplexity: perplexityIcon,
+  Groq: groqIcon,
+  Gemini: geminiIcon,
+};
+
 interface Account {
   id: string;
   provider:
@@ -354,6 +378,11 @@ export const Accounts = () => {
                                                 : 'bg-blue-500/10 text-blue-500',
                             )}
                           >
+                            <img
+                              src={providerIcons[account.provider]}
+                              alt={account.provider}
+                              className="w-3.5 h-3.5 mr-1"
+                            />
                             {account.provider}
                           </div>
                         </div>
