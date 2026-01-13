@@ -24,7 +24,7 @@ import {
   getConversationDetail as getMistralConversationDetail,
 } from './mistral';
 import { sendMessage as kimiChat } from './kimi';
-import { sendMessage as qwenChat } from './qwen';
+import { sendMessage as qwenChat, getChats as getQwenChats } from './qwen';
 import { sendMessage as cohereChat } from './cohere';
 
 // ... (existing code)
@@ -404,6 +404,48 @@ expressApp.delete('/v1/claude/conversations/:id', async (req, res) => {
     res.json({ success: true });
   } catch (error: any) {
     console.error('[Server] Delete Conversation Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get Qwen conversation history
+expressApp.get('/v1/qwen/conversations', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const emailQuery = req.query.email as string;
+
+    if (!fs.existsSync(DATA_FILE)) {
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
+    }
+
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    let account: Account | undefined;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      account = accounts.find((a) => a.id === token);
+    }
+
+    if (!account && emailQuery) {
+      account = accounts.find(
+        (a) => a.provider === 'Qwen' && a.email.toLowerCase() === emailQuery.toLowerCase(),
+      );
+    }
+
+    if (!account) {
+      account = accounts.find((a) => a.provider === 'Qwen' && a.status === 'Active');
+    }
+
+    if (!account) {
+      res.status(401).json({ error: 'No active Qwen account found' });
+      return;
+    }
+
+    const history = await getQwenChats(account.credential);
+    res.json(history);
+  } catch (error: any) {
+    console.error('[Server] Qwen History Error:', error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -395,15 +395,21 @@ export const PlaygroundPage = () => {
                     title: conv.title || 'Untitled',
                     date: new Date(conv.created_at || Date.now()).toLocaleDateString(),
                   }))
-                : selectedProvider === 'Kimi' ||
-                    selectedProvider === 'Qwen' ||
-                    selectedProvider === 'Cohere'
-                  ? []
-                  : data.map((session: any) => ({
-                      id: session.id,
-                      title: session.title || 'Untitled',
-                      date: new Date(session.updated_at * 1000).toLocaleDateString(),
-                    }));
+                : selectedProvider === 'Qwen'
+                  ? data.map((conv: any) => ({
+                      id: conv.id,
+                      title: conv.title || 'Untitled',
+                      date: new Date(
+                        conv.updated_at ? conv.updated_at * 1000 : Date.now(),
+                      ).toLocaleDateString(),
+                    }))
+                  : selectedProvider === 'Kimi' || selectedProvider === 'Cohere'
+                    ? []
+                    : data.map((session: any) => ({
+                        id: session.id,
+                        title: session.title || 'Untitled',
+                        date: new Date(session.updated_at * 1000).toLocaleDateString(),
+                      }));
 
           setHistory(formattedHistory);
         } else {

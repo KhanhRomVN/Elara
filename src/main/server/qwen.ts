@@ -287,6 +287,68 @@ async function createChat(cookies: string, headers?: Record<string, string>): Pr
   });
 }
 
+// Get chat history
+export async function getChats(cookies: string, headers?: Record<string, string>): Promise<any[]> {
+  const { v4: uuidv4 } = require('uuid');
+  const tokenMatch = cookies.match(/token=([^;]+)/);
+  const token = tokenMatch ? tokenMatch[1] : null;
+
+  return new Promise((resolve, reject) => {
+    const request = net.request({
+      method: 'GET',
+      url: 'https://chat.qwen.ai/api/v2/chats/?page=1&exclude_project=true',
+      partition: 'persist:qwen',
+    });
+
+    const finalHeaders = {
+      'Content-Type': 'application/json',
+      'User-Agent':
+        headers?.['User-Agent'] ||
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
+      Origin: 'https://chat.qwen.ai',
+      Referer: 'https://chat.qwen.ai/',
+      'x-request-id': uuidv4(),
+      Cookie: cookies,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(headers || {}),
+    } as Record<string, any>;
+
+    // Clean headers
+    Object.keys(finalHeaders).forEach((key) => {
+      if (!finalHeaders[key]) delete finalHeaders[key];
+    });
+
+    Object.entries(finalHeaders).forEach(([k, v]) => request.setHeader(k, v as string));
+
+    request.on('response', (response) => {
+      let data = '';
+      response.on('data', (chunk) => (data += chunk.toString()));
+      response.on('end', () => {
+        if (response.statusCode === 200) {
+          try {
+            const json = JSON.parse(data);
+            if (json.data && Array.isArray(json.data)) {
+              resolve(json.data);
+            } else {
+              resolve(json.data || []);
+            }
+          } catch (e) {
+            console.error('[Qwen] getChats Parse Error:', e);
+            resolve([]);
+          }
+        } else {
+          console.error(`[Qwen] getChats failed: ${response.statusCode} ${data}`);
+          resolve([]);
+        }
+      });
+      response.on('error', reject);
+    });
+
+    request.on('error', reject);
+    request.end();
+  });
+}
+
 export async function sendMessage(
   cookies: string,
   _model: string,
@@ -297,14 +359,19 @@ export async function sendMessage(
   const { v4: uuidv4 } = require('uuid');
 
   // 1. Create chat if needed
-  let chatId: string;
+  let chatId: string = '';
   try {
     console.log('[Qwen] Creating new chat session...');
     chatId = await createChat(cookies, headers);
-    console.log('[Qwen] Created Chat ID:', chatId);
+    console.log('[Qwen] New Chat ID Obtained:', chatId);
+    if (!chatId) {
+      throw new Error('Chat ID obtained is empty or invalid');
+    }
   } catch (e) {
     console.error('[Qwen] Failed to create chat:', e);
-    throw e; // Stop if we can't create a chat
+    // Attempting without ID will likely fail, but let's see.
+    // Actually we should throw here to stop execution and show error to user.
+    throw e;
   }
 
   const parentId = null;
@@ -313,8 +380,6 @@ export async function sendMessage(
   const qwenMessages = messages.map((m) => ({
     role: m.role,
     content: m.content,
-    timestamp: Date.now(),
-    user_action: 'chat',
     models: ['qwen3-max-2025-09-23'],
     chat_type: 't2t',
     feature_config: {
