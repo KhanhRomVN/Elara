@@ -17,7 +17,10 @@ import {
   deleteConversation,
   stopResponse,
 } from './claude';
-import { chatCompletionStream as chatgptChat } from './chatgpt';
+import {
+  chatCompletionStream as chatgptChat,
+  getConversations as getChatGPTConversations,
+} from './chatgpt';
 import {
   chatCompletionStream as mistralChat,
   getConversations as getMistralConversations,
@@ -404,6 +407,54 @@ expressApp.delete('/v1/claude/conversations/:id', async (req, res) => {
     res.json({ success: true });
   } catch (error: any) {
     console.error('[Server] Delete Conversation Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get ChatGPT conversation history
+expressApp.get('/v1/chatgpt/conversations', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const emailQuery = req.query.email as string;
+    const offset = parseInt(req.query.offset as string) || 0;
+    const limit = parseInt(req.query.limit as string) || 20;
+
+    if (!fs.existsSync(DATA_FILE)) {
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
+    }
+
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    let account: Account | undefined;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      account = accounts.find((a) => a.id === token);
+    }
+
+    if (!account && emailQuery) {
+      account = accounts.find(
+        (a) => a.provider === 'ChatGPT' && a.email.toLowerCase() === emailQuery.toLowerCase(),
+      );
+    }
+
+    if (!account) {
+      account = accounts.find((a) => a.provider === 'ChatGPT' && a.status === 'Active');
+    }
+
+    if (!account) {
+      // ChatGPT provider currently manages session internally via singleton,
+      // but usually needs an 'Active' account record to proceed in Elara logic.
+      // If we don't find one, we might fail or try anyway if the singleton has session?
+      // But adhering to pattern: return 401.
+      res.status(401).json({ error: 'No active ChatGPT account found' });
+      return;
+    }
+
+    const history = await getChatGPTConversations(offset, limit);
+    res.json(history);
+  } catch (error: any) {
+    console.error('[Server] ChatGPT History Error:', error);
     res.status(500).json({ error: error.message });
   }
 });

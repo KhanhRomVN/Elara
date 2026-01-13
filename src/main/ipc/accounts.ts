@@ -35,11 +35,12 @@ export interface Account {
   userAgent?: string;
   name?: string;
   picture?: string;
+  headers?: any;
 }
 
 const getSafeUserAgent = () => {
   // Use a static, realistic Chrome User-Agent to avoid bot detection
-  return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+  return 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36';
 };
 
 const fetchDeepSeekProfile = (
@@ -217,7 +218,7 @@ export const setupAccountsHandlers = () => {
           provider === 'Claude'
             ? 'https://claude.ai/login'
             : provider === 'ChatGPT'
-              ? 'https://chatgpt.com/auth/login'
+              ? 'https://chatgpt.com'
               : provider === 'Mistral'
                 ? 'https://console.mistral.ai/home'
                 : provider === 'Kimi'
@@ -435,6 +436,7 @@ export const setupAccountsHandlers = () => {
                 resolve({ success: true, account: newAccount });
               }
             } else if (provider === 'ChatGPT') {
+              console.log('[Accounts] ChatGPT: Polling cookies...');
               const cookies = await authWindow.webContents.session.cookies.get({
                 domain: '.chatgpt.com',
               });
@@ -443,6 +445,7 @@ export const setupAccountsHandlers = () => {
               );
 
               if (sessionToken) {
+                console.log('[Accounts] ChatGPT: Found session token!');
                 clearInterval(interval);
 
                 // Construct full cookie string to include Cloudflare and other necessary cookies
@@ -452,6 +455,7 @@ export const setupAccountsHandlers = () => {
                 // For now, let's try to get email from the window or default
                 let email = 'chatgpt@user.com';
                 // Try to capture from script
+                console.log('[Accounts] ChatGPT: Attempting to scrape email...');
                 const scrapedEmail = await authWindow.webContents
                   .executeJavaScript(
                     `
@@ -462,8 +466,17 @@ export const setupAccountsHandlers = () => {
                   })()
                `,
                   )
-                  .catch(() => null);
-                if (scrapedEmail && scrapedEmail.includes('@')) email = scrapedEmail;
+                  .catch((err) => {
+                    console.error('[Accounts] ChatGPT: Email scrape error:', err);
+                    return null;
+                  });
+
+                if (scrapedEmail && scrapedEmail.includes('@')) {
+                  email = scrapedEmail;
+                  console.log('[Accounts] ChatGPT: Scraped email:', email);
+                } else {
+                  console.log('[Accounts] ChatGPT: Could not scrape email, using default.');
+                }
 
                 const newAccount: Account = {
                   id: crypto.randomUUID(),
@@ -484,6 +497,7 @@ export const setupAccountsHandlers = () => {
                 };
 
                 saveAccount(newAccount);
+                console.log('[Accounts] ChatGPT: Account saved successfully.');
                 authWindow.close();
                 resolve({ success: true, account: newAccount });
               }

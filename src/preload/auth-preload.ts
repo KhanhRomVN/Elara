@@ -48,6 +48,10 @@ window.fetch = async (...args) => {
 
   const response = await originalFetch(...args);
 
+  if (url.includes('/backend-api/conversation')) {
+    console.log(`[Preload] Fetch response: ${url} Status: ${response.status}`);
+  }
+
   // Intercept conversation requests
   if (url.includes('/backend-api/conversation') && config?.method === 'POST') {
     const clone = response.clone();
