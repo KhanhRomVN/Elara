@@ -7,13 +7,26 @@ import { spawn, execSync } from 'child_process';
 import fs from 'fs';
 import { startProxy, stopProxy, proxyEvents } from './proxy';
 const getCookies = (account: Account) => {
-  return account.credential ? JSON.parse(account.credential) : [];
+  if (!account.credential) return [];
+  try {
+    return JSON.parse(account.credential);
+  } catch (error) {
+    return account.credential.split(';').map((c) => {
+      const parts = c.trim().split('=');
+      const name = parts[0];
+      const value = parts.slice(1).join('=');
+      return { name, value };
+    });
+  }
 };
 
 const getCookieValue = (cookies: any[], name: string) => {
   const cookie = cookies.find((c: any) => c.name === name);
   return cookie ? cookie.value : '';
 };
+
+const USER_AGENT =
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36';
 
 // Helper to decode JWT and get specific claim
 const getOrgIdFromJwt = (token: string): string | null => {
@@ -30,6 +43,8 @@ const getOrgIdFromJwt = (token: string): string | null => {
     );
 
     const payload = JSON.parse(jsonPayload);
+    console.log('[Groq Debug] Decoded JWT Payload:', JSON.stringify(payload, null, 2));
+
     // Look for organization ID in custom claims or standard fields based on log
     // Log shows: "https://groq.com/organization": { "id": "org_..." }
     if (payload['https://groq.com/organization'] && payload['https://groq.com/organization'].id) {
@@ -42,11 +57,82 @@ const getOrgIdFromJwt = (token: string): string | null => {
   }
 };
 
-export const chatCompletionStream = async (req: Request, res: Response, account: Account) => {
-  const cookies = getCookies(account);
-  const sessionJwt = getCookieValue(cookies, 'stytch_session_jwt');
+const orgIdCache: Record<string, string> = {};
 
-  const orgId = getOrgIdFromJwt(sessionJwt);
+export const chatCompletionStream = async (req: Request, res: Response, account: Account) => {
+  console.log('[Groq Debug] Starting chatCompletionStream');
+  const cookies = getCookies(account);
+  console.log(
+    '[Groq Debug] Cookies parsing result:',
+    cookies ? 'Success (array of ' + cookies.length + ')' : 'Failed or Empty',
+  );
+
+  const sessionJwt = getCookieValue(cookies, 'stytch_session_jwt');
+  console.log(
+    '[Groq Debug] Session JWT found:',
+    sessionJwt ? 'Yes (Length: ' + sessionJwt.length + ')' : 'No',
+  );
+
+  let orgId = getOrgIdFromJwt(sessionJwt);
+  console.log('[Groq Debug] Org ID from JWT:', orgId);
+
+  // Fallback: Fetch Org ID from profile if not found in JWT
+  if (!orgId) {
+    if (orgIdCache[sessionJwt]) {
+      orgId = orgIdCache[sessionJwt];
+      console.log('[Groq Debug] Org ID found in cache:', orgId);
+    } else {
+      console.log('[Groq] Org ID not found in JWT, fetching profile...');
+      try {
+        console.log(
+          '[Groq Debug] Fetching profile from https://api.groq.com/platform/v1/user/profile',
+        );
+        const profileResp = await fetch('https://api.groq.com/platform/v1/user/profile', {
+          headers: {
+            Authorization: `Bearer ${sessionJwt}`,
+            Origin: 'https://console.groq.com',
+            Referer: 'https://console.groq.com/',
+            'User-Agent': USER_AGENT,
+          },
+        });
+
+        console.log('[Groq Debug] Profile fetch status:', profileResp.status);
+
+        if (profileResp.ok) {
+          const profileData = await profileResp.json();
+          // Extract Org ID from response
+          // Response structure based on doc:
+          // { "user": { "orgs": { "data": [ { "id": "org_..." } ] } } }
+          const orgs = profileData?.user?.orgs?.data;
+          console.log('[Groq Debug] Profile data orgs:', JSON.stringify(orgs));
+
+          if (orgs && orgs.length > 0) {
+            orgId = orgs[0].id;
+            console.log('[Groq] Org ID fetched from profile:', orgId);
+            if (orgId) {
+              orgIdCache[sessionJwt] = orgId;
+              console.log('[Groq Debug] Org ID cached under JWT hash...'); // Don't log full jwt if possible
+            }
+          } else {
+            console.log(
+              '[Groq Debug] No organizations found in profile data. Response:',
+              JSON.stringify(profileData),
+            );
+          }
+        } else {
+          const errorText = await profileResp.text();
+          console.error('[Groq] Failed to fetch profile. Status:', profileResp.status);
+          console.error('[Groq] Profile fetch error details:', errorText);
+          console.error(
+            '[Groq] Profile fetch headers:',
+            JSON.stringify(Object.fromEntries(profileResp.headers.entries())),
+          );
+        }
+      } catch (err) {
+        console.error('[Groq] Error fetching profile:', err);
+      }
+    }
+  }
 
   try {
     const headers: any = {
@@ -54,17 +140,33 @@ export const chatCompletionStream = async (req: Request, res: Response, account:
       'Content-Type': 'application/json',
       Origin: 'https://console.groq.com',
       Referer: 'https://console.groq.com/',
+      'User-Agent': USER_AGENT,
     };
 
     if (orgId) {
       headers['groq-organization'] = orgId;
     }
 
+    console.log(
+      '[Groq Debug] Request headers prepared. Groq-Organization:',
+      headers['groq-organization'],
+    );
+    console.log('[Groq Debug] Sending request to https://api.groq.com/openai/v1/chat/completions');
+
+    // Filter out unsupported fields like conversation_id, parent_message_id
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { conversation_id, parent_message_id, ...cleanBody } = req.body;
+
+    // Force usage of the correct model found in logs
+    cleanBody.model = 'openai/gpt-oss-120b';
+
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers,
-      body: JSON.stringify(req.body),
+      body: JSON.stringify(cleanBody),
     });
+
+    console.log('[Groq Debug] Chat completion response status:', response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -78,6 +180,7 @@ export const chatCompletionStream = async (req: Request, res: Response, account:
     res.setHeader('Connection', 'keep-alive');
 
     if (response.body) {
+      console.log('[Groq Debug] Streaming response started');
       const reader = response.body.getReader();
       try {
         while (true) {
@@ -85,11 +188,13 @@ export const chatCompletionStream = async (req: Request, res: Response, account:
           if (done) break;
           res.write(value);
         }
+        console.log('[Groq Debug] Streaming response completed');
       } finally {
         reader.releaseLock();
       }
       res.end();
     } else {
+      console.log('[Groq Debug] Response has no body');
       res.end();
     }
   } catch (error) {
@@ -155,8 +260,9 @@ export async function login() {
     '--no-first-run',
     '--no-default-browser-check',
     '--disable-dev-shm-usage',
+    `--user-agent=${USER_AGENT}`,
     '--class=groq-browser',
-    'https://console.groq.com/playground',
+    'https://console.groq.com/login',
   ];
 
   const chromeProcess = spawn(chromePath, args, {
@@ -188,12 +294,49 @@ export async function login() {
       console.log('[Groq] Cookies captured!');
       capturedCookies = cookies;
 
-      // We need to parse jwt to get email if possible, or we resolve and let accounts.ts handle email
-      // Here we just return cookies and let accounts.ts extract email from the JWT inside the cookie
+      // Extract details immediately
+      let email = '';
+      try {
+        const cookieList = cookies.split(';').map((c) => {
+          const parts = c.trim().split('=');
+          return { name: parts[0], value: parts.slice(1).join('=') };
+        });
+        const sessionJwt = getCookieValue(cookieList, 'stytch_session_jwt');
+        if (sessionJwt) {
+          const base64Url = sessionJwt.split('.')[1];
+          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+          const jsonPayload = decodeURIComponent(
+            atob(base64)
+              .split('')
+              .map(function (c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+              })
+              .join(''),
+          );
+          const payload = JSON.parse(jsonPayload);
+
+          // Try to get email from stytch session claim
+          // Structure: "https://stytch.com/session": { "authentication_factors": [ { "email_factor": { "email_address": "..." } } ] }
+          const stytchSession = payload['https://stytch.com/session'];
+          if (
+            stytchSession &&
+            stytchSession.authentication_factors &&
+            stytchSession.authentication_factors.length > 0
+          ) {
+            const factor = stytchSession.authentication_factors[0];
+            if (factor.email_factor && factor.email_factor.email_address) {
+              email = factor.email_factor.email_address;
+              console.log('[Groq] Extracted email from JWT:', email);
+            }
+          }
+        }
+      } catch (e) {
+        console.error('[Groq] Failed to extract email from JWT:', e);
+      }
 
       setTimeout(() => {
         cleanup();
-        resolve({ cookies: capturedCookies, email: '' }); // Email extraction will happen in accounts.ts or helper
+        resolve({ cookies: capturedCookies, email });
       }, 1000);
     };
 
