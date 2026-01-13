@@ -5,6 +5,9 @@ import path, { join } from 'path';
 const crypto = require('crypto');
 
 import { fetchMistralProfile } from '../server/mistral';
+import { login as loginKimi, getProfile as getKimiProfile } from '../server/kimi';
+import { login as loginQwen, getProfile as getQwenProfile } from '../server/qwen';
+import { login as loginCohere, getProfile as getCohereProfile } from '../server/cohere';
 
 const DATA_FILE = path.join(app.getPath('userData'), 'accounts.json');
 
@@ -15,7 +18,7 @@ if (!fs.existsSync(DATA_FILE)) {
 
 export interface Account {
   id: string;
-  provider: 'Claude' | 'DeepSeek' | 'ChatGPT' | 'Mistral';
+  provider: 'Claude' | 'DeepSeek' | 'ChatGPT' | 'Mistral' | 'Kimi' | 'Qwen' | 'Cohere';
   email: string;
   credential: string; // cookie or api key
   status: 'Active' | 'Rate Limit' | 'Error';
@@ -196,7 +199,10 @@ export const setupAccountsHandlers = () => {
 
   ipcMain.handle(
     'accounts:login',
-    async (_, provider: 'Claude' | 'DeepSeek' | 'ChatGPT' | 'Mistral') => {
+    async (
+      _,
+      provider: 'Claude' | 'DeepSeek' | 'ChatGPT' | 'Mistral' | 'Kimi' | 'Qwen' | 'Cohere',
+    ) => {
       return new Promise(async (resolve) => {
         // Use a consistent, real Chrome user agent by stripping Electron/App identifiers
         const userAgent = getSafeUserAgent();
@@ -207,6 +213,128 @@ export const setupAccountsHandlers = () => {
         // Clear previous session data to ensure fresh login
         await authSession.clearStorageData();
 
+        const url =
+          provider === 'Claude'
+            ? 'https://claude.ai/login'
+            : provider === 'ChatGPT'
+              ? 'https://chatgpt.com/auth/login'
+              : provider === 'Mistral'
+                ? 'https://console.mistral.ai/home'
+                : provider === 'Kimi'
+                  ? 'https://kimi.moonshot.cn'
+                  : provider === 'Qwen'
+                    ? 'https://chat.qwen.ai/auth'
+                    : provider === 'Cohere'
+                      ? 'https://dashboard.cohere.com/welcome/login'
+                      : 'https://chat.deepseek.com/login';
+
+        // Handle providers with self-managed login (no polling needed)
+        if (provider === 'Kimi') {
+          try {
+            console.log('[Accounts] Starting Kimi login flow...');
+            const { cookies } = await loginKimi();
+            console.log('[Accounts] Kimi login success, fetching profile...');
+            const profile = await getKimiProfile(cookies);
+            console.log('[Accounts] Kimi profile fetched:', profile);
+            const email = profile?.email || 'kimi@user.com';
+
+            const newAccount: Account = {
+              id: crypto.randomUUID(),
+              provider: 'Kimi',
+              email: email,
+              credential: cookies,
+              status: 'Active',
+              usage: '0',
+              totalRequests: 0,
+              successfulRequests: 0,
+              totalDuration: 0,
+              tokensToday: 0,
+              statsDate: new Date().toISOString().split('T')[0],
+              lastActive: new Date().toISOString(),
+              userAgent,
+              name: profile?.name || undefined,
+              picture: profile?.avatar || undefined,
+            };
+
+            saveAccount(newAccount);
+            resolve({ success: true, account: newAccount });
+          } catch (e: any) {
+            resolve({ success: false, error: e.message || 'Kimi login failed' });
+          }
+          return;
+        }
+
+        if (provider === 'Qwen') {
+          try {
+            console.log('[Accounts] Starting Qwen login flow...');
+            const { cookies } = await loginQwen();
+            console.log('[Accounts] Qwen login success, fetching profile...');
+            const profile = await getQwenProfile(cookies);
+            console.log('[Accounts] Qwen profile fetched:', profile);
+            const email = profile?.email || 'qwen@user.com';
+
+            const newAccount: Account = {
+              id: crypto.randomUUID(),
+              provider: 'Qwen',
+              email: email,
+              credential: cookies,
+              status: 'Active',
+              usage: '0',
+              totalRequests: 0,
+              successfulRequests: 0,
+              totalDuration: 0,
+              tokensToday: 0,
+              statsDate: new Date().toISOString().split('T')[0],
+              lastActive: new Date().toISOString(),
+              userAgent,
+              name: profile?.name || undefined,
+              picture: profile?.avatar || undefined,
+            };
+
+            saveAccount(newAccount);
+            resolve({ success: true, account: newAccount });
+          } catch (e: any) {
+            resolve({ success: false, error: e.message || 'Qwen login failed' });
+          }
+          return;
+        }
+
+        if (provider === 'Cohere') {
+          try {
+            console.log('[Accounts] Starting Cohere login flow...');
+            const { cookies } = await loginCohere();
+            console.log('[Accounts] Cohere login success, fetching profile...');
+            const profile = await getCohereProfile(cookies);
+            console.log('[Accounts] Cohere profile fetched:', profile);
+            const email = profile?.email || 'cohere@user.com';
+
+            const newAccount: Account = {
+              id: crypto.randomUUID(),
+              provider: 'Cohere',
+              email: email,
+              credential: cookies,
+              status: 'Active',
+              usage: '0',
+              totalRequests: 0,
+              successfulRequests: 0,
+              totalDuration: 0,
+              tokensToday: 0,
+              statsDate: new Date().toISOString().split('T')[0],
+              lastActive: new Date().toISOString(),
+              userAgent,
+              name: profile?.name || undefined,
+              picture: profile?.avatar || undefined,
+            };
+
+            saveAccount(newAccount);
+            resolve({ success: true, account: newAccount });
+          } catch (e: any) {
+            resolve({ success: false, error: e.message || 'Cohere login failed' });
+          }
+          return;
+        }
+
+        // For providers requiring polling (Claude, ChatGPT, Mistral, DeepSeek)
         const authWindow = new BrowserWindow({
           width: 1000,
           height: 800,
@@ -222,15 +350,6 @@ export const setupAccountsHandlers = () => {
         });
 
         authWindow.webContents.setUserAgent(userAgent);
-
-        const url =
-          provider === 'Claude'
-            ? 'https://claude.ai/login'
-            : provider === 'ChatGPT'
-              ? 'https://chatgpt.com/auth/login'
-              : provider === 'Mistral'
-                ? 'https://console.mistral.ai/home'
-                : 'https://chat.deepseek.com/login';
 
         // Intercept login requests to capture email
         let capturedEmail: string | null = null;

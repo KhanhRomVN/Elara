@@ -9,7 +9,14 @@ import { commandsAPI } from './api/commands';
 
 const api = {
   app: appAPI,
-  accounts: accountsAPI,
+  accounts: {
+    ...accountsAPI,
+    login: (provider: string) => {
+      ipcRenderer.send('debug:log', `[Preload] invoking accounts:login for ${provider}`);
+      // @ts-ignore
+      return accountsAPI.login(provider);
+    },
+  },
   server: serverAPI,
   logs: logsAPI,
   commands: commandsAPI,

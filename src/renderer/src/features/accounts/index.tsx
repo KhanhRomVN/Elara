@@ -7,7 +7,7 @@ import { AddAccountDialog } from './components/AddAccountDialog';
 
 interface Account {
   id: string;
-  provider: 'Claude' | 'DeepSeek' | 'ChatGPT' | 'Mistral';
+  provider: 'Claude' | 'DeepSeek' | 'ChatGPT' | 'Mistral' | 'Kimi' | 'Qwen' | 'Cohere';
   email: string;
   credential: string;
   status: 'Active' | 'Rate Limit' | 'Error';
@@ -108,12 +108,54 @@ export const Accounts = () => {
     }
   };
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+  const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setCurrentPage(1);
+    setSelectedAccounts(new Set());
+  }, [searchQuery]);
+
   const filteredAccounts = accounts.filter(
     (acc) =>
       acc.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
       acc.provider.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (acc.name && acc.name.toLowerCase().includes(searchQuery.toLowerCase())),
   );
+
+  const totalPages = Math.ceil(filteredAccounts.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedAccounts = filteredAccounts.slice(startIndex, startIndex + itemsPerPage);
+
+  const toggleSelection = (id: string) => {
+    const newSelected = new Set(selectedAccounts);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedAccounts(newSelected);
+  };
+
+  const toggleAll = () => {
+    if (selectedAccounts.size === paginatedAccounts.length && paginatedAccounts.length > 0) {
+      // If all on current page are selected, deselect them
+      const newSelected = new Set(selectedAccounts);
+      paginatedAccounts.forEach((acc) => newSelected.delete(acc.id));
+      setSelectedAccounts(newSelected);
+    } else {
+      // Select all on current page
+      const newSelected = new Set(selectedAccounts);
+      paginatedAccounts.forEach((acc) => newSelected.add(acc.id));
+      setSelectedAccounts(newSelected);
+    }
+  };
+
+  // Check if all visible items are selected
+  const allVisibleSelected =
+    paginatedAccounts.length > 0 && paginatedAccounts.every((acc) => selectedAccounts.has(acc.id));
+  const someVisibleSelected = paginatedAccounts.some((acc) => selectedAccounts.has(acc.id));
 
   const copyApiUrl = (account: Account) => {
     const port = serverPort || 11434;
@@ -142,6 +184,25 @@ export const Accounts = () => {
 
         {/* Right: Actions */}
         <div className="flex gap-2 items-center">
+          {selectedAccounts.size > 0 && (
+            <div className="flex items-center gap-2 mr-2">
+              <span className="text-sm text-muted-foreground">
+                {selectedAccounts.size} selected
+              </span>
+              <button
+                onClick={() => {
+                  if (confirm(`Delete ${selectedAccounts.size} accounts?`)) {
+                    selectedAccounts.forEach((id) => handleDelete(id));
+                    setSelectedAccounts(new Set());
+                  }
+                }}
+                className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-destructive/10 text-destructive hover:text-destructive h-9 px-3"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </button>
+            </div>
+          )}
           <button
             onClick={() => setDialogOpen(true)}
             className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-3 text-white"
@@ -187,6 +248,17 @@ export const Accounts = () => {
           <table className="w-full caption-bottom text-sm text-left">
             <thead className="[&_tr]:border-b">
               <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
+                <th className="h-12 px-4 align-middle w-[40px]">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-zinc-500 bg-zinc-900/50 text-blue-500 focus:ring-blue-500 focus:ring-offset-zinc-900 cursor-pointer"
+                    checked={allVisibleSelected}
+                    ref={(input) => {
+                      if (input) input.indeterminate = !allVisibleSelected && someVisibleSelected;
+                    }}
+                    onChange={toggleAll}
+                  />
+                </th>
                 <th className="h-12 px-4 align-middle font-medium text-muted-foreground">Email</th>
                 <th className="h-12 px-4 align-middle font-medium text-muted-foreground text-nowrap">
                   Last Used
@@ -211,18 +283,29 @@ export const Accounts = () => {
             <tbody className="[&_tr:last-child]:border-0">
               {filteredAccounts.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={7} className="h-24 text-center text-muted-foreground">
+                  <td colSpan={8} className="h-24 text-center text-muted-foreground">
                     {searchQuery
                       ? 'No accounts match your search.'
                       : 'No accounts found. Add one to get started.'}
                   </td>
                 </tr>
               )}
-              {filteredAccounts.map((account) => (
+              {paginatedAccounts.map((account) => (
                 <tr
                   key={account.id}
-                  className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
+                  className={cn(
+                    'border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted',
+                    selectedAccounts.has(account.id) && 'bg-muted',
+                  )}
                 >
+                  <td className="p-4 align-middle">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-zinc-500 bg-zinc-900/50 text-blue-500 focus:ring-blue-500 focus:ring-offset-zinc-900 cursor-pointer"
+                      checked={selectedAccounts.has(account.id)}
+                      onChange={() => toggleSelection(account.id)}
+                    />
+                  </td>
                   <td className="p-4 align-middle">
                     <div className="flex items-center gap-3">
                       {account.picture && (
@@ -246,7 +329,13 @@ export const Accounts = () => {
                                   ? 'bg-green-500/10 text-green-500'
                                   : account.provider === 'Mistral'
                                     ? 'bg-yellow-500/10 text-yellow-500'
-                                    : 'bg-blue-500/10 text-blue-500',
+                                    : account.provider === 'Kimi'
+                                      ? 'bg-indigo-500/10 text-indigo-500'
+                                      : account.provider === 'Qwen'
+                                        ? 'bg-purple-500/10 text-purple-500'
+                                        : account.provider === 'Cohere'
+                                          ? 'bg-teal-500/10 text-teal-500'
+                                          : 'bg-blue-500/10 text-blue-500',
                             )}
                           >
                             {account.provider}
@@ -305,6 +394,36 @@ export const Accounts = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Footer */}
+        {filteredAccounts.length > 0 && (
+          <div className="flex items-center justify-between px-4 py-4 border-t">
+            <div className="text-sm text-muted-foreground">
+              Showing {startIndex + 1} to{' '}
+              {Math.min(startIndex + itemsPerPage, filteredAccounts.length)} of{' '}
+              {filteredAccounts.length} accounts
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-transparent shadow-sm hover:bg-accent hover:text-accent-foreground h-8 px-4 w-24"
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+              >
+                Previous
+              </button>
+              <div className="text-sm font-medium">
+                Page {currentPage} of {totalPages}
+              </div>
+              <button
+                className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-transparent shadow-sm hover:bg-accent hover:text-accent-foreground h-8 px-4 w-24"
+                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <AddAccountDialog open={dialogOpen} onOpenChange={setDialogOpen} onSuccess={fetchAccounts} />

@@ -152,11 +152,21 @@ ${diff}
 
         // 6. Extract Commit Message
         const match = aiContent.match(/<commit-message>([\s\S]*?)<\/commit-message>/);
-        if (!match) {
-          return `⚠️  Could not parse commit message from AI response.\nResponse:\n${aiContent}`;
-        }
+        let commitMsg = '';
 
-        const commitMsg = match[1].trim();
+        if (match) {
+          commitMsg = match[1].trim();
+        } else {
+          // Fallback: Check if the content looks like a commit message (starts with typical conventional commit patterns)
+          const conventionalCommitRegex =
+            /^(?:[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|\w+)(\([^)]+\))?: .+/u;
+          const lines = aiContent.trim().split('\n');
+          if (conventionalCommitRegex.test(lines[0])) {
+            commitMsg = aiContent.trim();
+          } else {
+            return `⚠️  Could not parse commit message from AI response.\nResponse:\n${aiContent}`;
+          }
+        }
 
         // 7. Interactive Confirmation
         const answer = await prompt(

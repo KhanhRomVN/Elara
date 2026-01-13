@@ -23,6 +23,9 @@ import {
   getConversations as getMistralConversations,
   getConversationDetail as getMistralConversationDetail,
 } from './mistral';
+import { sendMessage as kimiChat } from './kimi';
+import { sendMessage as qwenChat } from './qwen';
+import { sendMessage as cohereChat } from './cohere';
 
 // ... (existing code)
 
@@ -101,6 +104,14 @@ expressApp.get('/v1/models', (_req, res) => {
         owned_by: 'anthropic',
       },
       { id: 'mistral-large-latest', object: 'model', created: 1677610602, owned_by: 'mistral' },
+      { id: 'moonshot-v1-8k', object: 'model', created: 1677610602, owned_by: 'moonshot' },
+      { id: 'moonshot-v1-32k', object: 'model', created: 1677610602, owned_by: 'moonshot' },
+      { id: 'moonshot-v1-128k', object: 'model', created: 1677610602, owned_by: 'moonshot' },
+      { id: 'moonshot-v1-128k', object: 'model', created: 1677610602, owned_by: 'moonshot' },
+      { id: 'qwen-max', object: 'model', created: 1677610602, owned_by: 'qwen' },
+      { id: 'qwen3-max-2025-09-23', object: 'model', created: 1677610602, owned_by: 'qwen' },
+      // Cohere
+      { id: 'command-r7b-12-2024', object: 'model', created: 1677610602, owned_by: 'cohere' },
     ],
   });
 });
@@ -153,7 +164,15 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
           ? 'ChatGPT'
           : model.includes('mistral')
             ? 'Mistral'
-            : 'DeepSeek';
+            : model.includes('moonshot')
+              ? 'Kimi'
+              : model.includes('moonshot')
+                ? 'Kimi'
+                : model.includes('qwen')
+                  ? 'Qwen'
+                  : model.includes('command')
+                    ? 'Cohere'
+                    : 'DeepSeek';
       const finalProvider = targetProvider || inferredProvider;
       account = accounts.find((a) => a.provider === finalProvider && a.status === 'Active');
     }
@@ -240,6 +259,14 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
         { model, messages, temperature: 0.7 }, // Add temperature if needed
         callbacks,
       );
+    } else if (account.provider === 'Kimi') {
+      await kimiChat(); // TODO: Implement proper chat payload passing
+    } else if (account.provider === 'Qwen') {
+      await qwenChat(account.credential, model, messages, callbacks.onContent);
+      callbacks.onDone();
+    } else if (account.provider === 'Cohere') {
+      await cohereChat(account.credential, model, messages, callbacks.onContent);
+      callbacks.onDone();
     } else {
       res.write(`data: {"error": "Provider not supported"}\n\n`);
       res.end();
@@ -608,6 +635,35 @@ expressApp.get('/v1/mistral/conversations/:id', async (req, res) => {
     console.error('[Server] Get Mistral Conversation Detail Error:', error);
     res.status(500).json({ error: error.message });
   }
+});
+
+// Get Kimi conversations (Placeholder)
+expressApp.get('/v1/kimi/conversations', async (req, res) => {
+  res.json([]);
+});
+
+// Get Kimi conversation detail (Placeholder)
+expressApp.get('/v1/kimi/conversations/:id', async (req, res) => {
+  res.json({ messages: [] });
+});
+
+// Get Qwen conversations (Placeholder)
+expressApp.get('/v1/qwen/conversations', async (req, res) => {
+  res.json([]);
+});
+
+// Get Qwen conversation detail (Placeholder)
+expressApp.get('/v1/qwen/conversations/:id', async (req, res) => {
+  res.json({ messages: [] });
+});
+
+// Get Cohere conversations (Placeholder)
+expressApp.get('/v1/cohere/conversations', async (req, res) => {
+  res.json([]);
+});
+
+expressApp.get('/v1/cohere/conversations/:id', async (req, res) => {
+  res.json({ messages: [] });
 });
 
 export const startServer = () => {

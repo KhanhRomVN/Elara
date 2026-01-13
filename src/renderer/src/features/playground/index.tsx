@@ -5,6 +5,9 @@ import claudeIcon from '../../assets/provider_icons/claude.svg';
 import deepseekIcon from '../../assets/provider_icons/deepseek.svg';
 import chatgptIcon from '../../assets/provider_icons/openai.svg';
 import mistralIcon from '../../assets/provider_icons/mistral.svg';
+import kimiIcon from '../../assets/provider_icons/kimi.svg';
+import qwenIcon from '../../assets/provider_icons/qwen.svg';
+import cohereIcon from '../../assets/provider_icons/cohere.svg';
 import { Switch } from '../../core/components/Switch';
 
 interface Message {
@@ -16,7 +19,7 @@ interface Message {
 
 interface Account {
   id: string;
-  provider: 'Claude' | 'DeepSeek' | 'ChatGPT' | 'Mistral';
+  provider: 'Claude' | 'DeepSeek' | 'ChatGPT' | 'Mistral' | 'Kimi' | 'Qwen' | 'Cohere';
   email: string;
   name?: string;
   picture?: string;
@@ -113,7 +116,7 @@ export const PlaygroundPage = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
 
   const [selectedProvider, setSelectedProvider] = useState<
-    'Claude' | 'DeepSeek' | 'ChatGPT' | 'Mistral' | ''
+    'Claude' | 'DeepSeek' | 'ChatGPT' | 'Mistral' | 'Kimi' | 'Qwen' | 'Cohere' | ''
   >('');
   const [selectedAccount, setSelectedAccount] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -221,7 +224,13 @@ export const PlaygroundPage = () => {
                 ? chatgptModel
                 : account.provider === 'Mistral'
                   ? 'mistral-large-latest'
-                  : 'deepseek-chat',
+                  : account.provider === 'Kimi'
+                    ? 'moonshot-v1-8k'
+                    : account.provider === 'Qwen'
+                      ? 'qwen-max'
+                      : account.provider === 'Cohere'
+                        ? 'command-r7b-12-2024'
+                        : 'deepseek-chat',
           messages: [
             ...messages.map((msg) => ({
               role: msg.role,
@@ -359,7 +368,13 @@ export const PlaygroundPage = () => {
             ? 'http://localhost:11434/v1/claude/conversations'
             : selectedProvider === 'Mistral'
               ? 'http://localhost:11434/v1/mistral/conversations'
-              : 'http://localhost:11434/v1/deepseek/sessions';
+              : selectedProvider === 'Kimi'
+                ? 'http://localhost:11434/v1/kimi/conversations'
+                : selectedProvider === 'Qwen'
+                  ? 'http://localhost:11434/v1/qwen/conversations'
+                  : selectedProvider === 'Cohere'
+                    ? 'http://localhost:11434/v1/cohere/conversations'
+                    : 'http://localhost:11434/v1/deepseek/sessions';
 
         const response = await fetch(`${endpoint}?email=${encodeURIComponent(account.email)}`);
 
@@ -380,11 +395,15 @@ export const PlaygroundPage = () => {
                     title: conv.title || 'Untitled',
                     date: new Date(conv.created_at || Date.now()).toLocaleDateString(),
                   }))
-                : data.map((session: any) => ({
-                    id: session.id,
-                    title: session.title || 'Untitled',
-                    date: new Date(session.updated_at * 1000).toLocaleDateString(),
-                  }));
+                : selectedProvider === 'Kimi' ||
+                    selectedProvider === 'Qwen' ||
+                    selectedProvider === 'Cohere'
+                  ? []
+                  : data.map((session: any) => ({
+                      id: session.id,
+                      title: session.title || 'Untitled',
+                      date: new Date(session.updated_at * 1000).toLocaleDateString(),
+                    }));
 
           setHistory(formattedHistory);
         } else {
@@ -424,7 +443,11 @@ export const PlaygroundPage = () => {
           ? `http://localhost:11434/v1/claude/conversations/${conversationId}`
           : selectedProvider === 'Mistral'
             ? `http://localhost:11434/v1/mistral/conversations/${conversationId}`
-            : `http://localhost:11434/v1/deepseek/sessions/${conversationId}/messages`;
+            : selectedProvider === 'Kimi'
+              ? `http://localhost:11434/v1/kimi/conversations/${conversationId}`
+              : selectedProvider === 'Qwen'
+                ? `http://localhost:11434/v1/qwen/conversations/${conversationId}`
+                : `http://localhost:11434/v1/deepseek/sessions/${conversationId}/messages`;
 
       const response = await fetch(`${endpoint}?email=${encodeURIComponent(account.email)}`);
 
@@ -437,7 +460,9 @@ export const PlaygroundPage = () => {
             ? data.name || data.summary || 'Untitled Conversation'
             : selectedProvider === 'Mistral'
               ? 'Conversation' // Mistral detail doesn't currently return title in my stub
-              : data.chat_session?.title || 'Untitled Conversation';
+              : selectedProvider === 'Kimi' || selectedProvider === 'Qwen'
+                ? 'Chat'
+                : data.chat_session?.title || 'Untitled Conversation';
 
         setConversationTitle(title);
 
@@ -463,17 +488,19 @@ export const PlaygroundPage = () => {
                   role: msg.role,
                   content: msg.content,
                 })) || []
-              : data.chat_messages
-                  ?.map((msg: any) => ({
-                    id: msg.message_id,
-                    role: msg.role === 'USER' ? ('user' as const) : ('assistant' as const),
-                    content:
-                      msg.fragments
-                        ?.map((f: any) => f.content || '')
-                        .join('')
-                        .trim() || '',
-                  }))
-                  .filter((m: Message) => m.content) || [];
+              : selectedProvider === 'Kimi' || selectedProvider === 'Qwen'
+                ? []
+                : data.chat_messages
+                    ?.map((msg: any) => ({
+                      id: msg.message_id,
+                      role: msg.role === 'USER' ? ('user' as const) : ('assistant' as const),
+                      content:
+                        msg.fragments
+                          ?.map((f: any) => f.content || '')
+                          .join('')
+                          .trim() || '',
+                    }))
+                    .filter((m: Message) => m.content) || [];
 
         setMessages(formattedMessages);
         setActiveChatId(conversationId);
@@ -527,6 +554,8 @@ export const PlaygroundPage = () => {
     { value: 'DeepSeek', label: 'DeepSeek', icon: deepseekIcon },
     { value: 'ChatGPT', label: 'ChatGPT', icon: chatgptIcon },
     { value: 'Mistral', label: 'Mistral', icon: mistralIcon },
+    { value: 'Kimi', label: 'Kimi', icon: kimiIcon },
+    { value: 'Qwen', label: 'Qwen', icon: qwenIcon },
   ];
 
   const accountOptions = filteredAccounts.map((acc) => ({
@@ -643,7 +672,15 @@ export const PlaygroundPage = () => {
                     ? claudeIcon
                     : selectedProvider === 'ChatGPT'
                       ? chatgptIcon
-                      : deepseekIcon
+                      : selectedProvider === 'Mistral'
+                        ? mistralIcon
+                        : selectedProvider === 'Kimi'
+                          ? kimiIcon
+                          : selectedProvider === 'Qwen'
+                            ? qwenIcon
+                            : selectedProvider === 'Cohere'
+                              ? cohereIcon
+                              : deepseekIcon
                 }
                 alt="Provider"
                 className="w-5 h-5"
