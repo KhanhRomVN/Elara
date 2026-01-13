@@ -139,6 +139,33 @@ const refreshGroqSession = async (account: Account): Promise<boolean> => {
   }
 };
 
+export const getModels = async (account: Account) => {
+  let sessionJwt = '';
+  const cookies = getCookies(account);
+  const jwtCookie = cookies.find((c: any) => c.name === 'stytch_session_jwt');
+  if (jwtCookie) sessionJwt = jwtCookie.value;
+
+  if (!sessionJwt) {
+    throw new Error('No session JWT found. Please login to Groq first.');
+  }
+
+  const orgId = getOrgIdFromJwt(sessionJwt) || orgIdCache[sessionJwt];
+
+  const response = await fetch('https://api.groq.com/internal/v1/models', {
+    headers: {
+      Authorization: `Bearer ${sessionJwt}`,
+      'groq-organization': orgId || '',
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch models: ${response.statusText}`);
+  }
+
+  return response.json();
+};
+
 export const chatCompletionStream = async (req: Request, res: Response, account: Account) => {
   try {
     let sessionJwt = '';
@@ -160,13 +187,6 @@ export const chatCompletionStream = async (req: Request, res: Response, account:
 
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { conversation_id, parent_message_id, ...cleanBody } = req.body;
-      // Force usage of the correct model found in logs
-      cleanBody.model = 'openai/gpt-oss-120b';
-      // cleanBody.model = 'openai/gpt-oss-120b'; // Keep original logic if needed or use dynamic
-      // The original code forced this model. I should probably keep valid logic.
-      // But user wants to use request model? Let's respect cleanBody.model but maybe check constraints.
-      // Actually original log said "Force usage...". I'll keep it compatible or use request model.
-      // Let's use cleanBody.model as it comes from client.
 
       return fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',

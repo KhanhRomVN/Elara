@@ -34,7 +34,7 @@ import {
   getConversationDetail as getPerplexityConversationDetail,
 } from './perplexity';
 import { sendMessage as cohereChat } from './cohere';
-import { chatCompletionStream as groqChat } from './groq';
+import { chatCompletionStream as groqChat, getModels as getGroqModels } from './groq';
 import * as gemini from './gemini';
 
 // ... (existing code)
@@ -688,6 +688,36 @@ expressApp.get('/v1/deepseek/sessions/:id/messages', async (req, res) => {
     res.json(history);
   } catch (error: any) {
     console.error('[Server] Get DeepSeek Chat History Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get Groq models
+expressApp.get('/v1/groq/models', async (req, res) => {
+  try {
+    const emailQuery = req.query.email as string;
+
+    if (!fs.existsSync(DATA_FILE)) {
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
+    }
+
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    let account = accounts.find((a) => a.email === emailQuery && a.provider === 'Groq');
+
+    if (!account) {
+      account = accounts.find((a) => a.provider === 'Groq' && a.status === 'Active');
+    }
+
+    if (!account) {
+      res.status(401).json({ error: 'No valid Groq account found' });
+      return;
+    }
+
+    const models = await getGroqModels(account);
+    res.json(models);
+  } catch (error: any) {
+    console.error('[Server] Get Groq Models Error:', error);
     res.status(500).json({ error: error.message });
   }
 });

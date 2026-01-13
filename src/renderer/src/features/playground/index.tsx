@@ -12,6 +12,7 @@ import perplexityIcon from '../../assets/provider_icons/perplexity.svg';
 import groqIcon from '../../assets/provider_icons/groq.svg';
 import geminiIcon from '../../assets/provider_icons/gemini.svg';
 import { Switch } from '../../core/components/Switch';
+import { GroqSidebarSettings, FunctionParams } from './components/GroqSidebarSettings';
 
 interface Message {
   id: string;
@@ -152,6 +153,23 @@ export const PlaygroundPage = () => {
   const [claudeModel, setClaudeModel] = useState('claude-sonnet-4-5-20250929');
   const [chatgptModel, setChatgptModel] = useState('gpt-4o');
 
+  // Groq State
+  const [groqModel, setGroqModel] = useState('openai/gpt-oss-120b');
+  const [groqModelsList, setGroqModelsList] = useState<any[]>([]);
+  const [groqSettingsOpen, setGroqSettingsOpen] = useState(false);
+  const [groqSettings, setGroqSettings] = useState({
+    temperature: 1,
+    maxTokens: 8192,
+    reasoning: 'medium' as 'none' | 'low' | 'medium' | 'high',
+    stream: true,
+    jsonMode: false,
+    tools: {
+      browserSearch: false,
+      codeInterpreter: false,
+    },
+    customFunctions: [] as FunctionParams[],
+  });
+
   const slogans = [
     'Feel Free Chat Free!!',
     'Experience the Power of AI',
@@ -192,7 +210,38 @@ export const PlaygroundPage = () => {
     };
 
     fetchAccounts();
+    fetchAccounts();
   }, []);
+
+  useEffect(() => {
+    const fetchGroqModels = async () => {
+      if (selectedProvider === 'Groq' && selectedAccount) {
+        try {
+          // @ts-ignore
+          const status = await window.api.server.start();
+          const port = status.port || 11434;
+
+          const acc = accounts.find((a) => a.id === selectedAccount);
+          if (!acc) return;
+
+          const res = await fetch(
+            `http://localhost:${port}/v1/groq/models?email=${encodeURIComponent(acc.email)}`,
+          );
+          if (res.ok) {
+            const data = await res.json();
+            if (data.data && Array.isArray(data.data)) {
+              setGroqModelsList(
+                data.data.sort((a: { id: string }, b: { id: any }) => a.id.localeCompare(b.id)),
+              );
+            }
+          }
+        } catch (e) {
+          console.error('Failed to fetch Groq models', e);
+        }
+      }
+    };
+    fetchGroqModels();
+  }, [selectedProvider, selectedAccount, accounts]);
 
   const filteredAccounts = selectedProvider
     ? accounts.filter((acc) => acc.provider === selectedProvider)
@@ -253,7 +302,9 @@ export const PlaygroundPage = () => {
                       ? 'qwen-max'
                       : account.provider === 'Cohere'
                         ? 'command-r7b-12-2024'
-                        : 'deepseek-chat',
+                        : account.provider === 'Groq'
+                          ? groqModel
+                          : 'deepseek-chat',
           messages: [
             ...messages.map((msg) => ({
               role: msg.role,
@@ -270,6 +321,31 @@ export const PlaygroundPage = () => {
           // New fields for context
           conversation_id: activeChatId !== 'new-session' ? activeChatId : undefined,
           parent_message_id: messages.length > 0 ? messages[messages.length - 1].id : undefined,
+
+          // Groq specific parameters
+          ...(account.provider === 'Groq'
+            ? {
+                temperature: groqSettings.temperature,
+                max_completion_tokens: groqSettings.maxTokens,
+                reasoning_effort:
+                  groqSettings.reasoning === 'none' ? undefined : groqSettings.reasoning,
+                response_format: groqSettings.jsonMode ? { type: 'json_object' } : undefined,
+                tools: [
+                  ...(groqSettings.tools.browserSearch ? [{ type: 'browser_search' }] : []),
+                  ...(groqSettings.tools.codeInterpreter ? [{ type: 'code_interpreter' }] : []),
+                  ...groqSettings.customFunctions.map((f) => ({
+                    type: 'function',
+                    function: {
+                      name: f.name,
+                      description: f.description,
+                      parameters: f.parameters ? JSON.parse(f.parameters) : {},
+                    },
+                  })),
+                ],
+                // Explicitly set stream based on settings if Groq
+                stream: groqSettings.stream,
+              }
+            : {}),
         }),
       });
 
@@ -694,6 +770,32 @@ export const PlaygroundPage = () => {
           </div>
         </>
       )}
+      {selectedProvider === 'Groq' && (
+        <div className="flex items-center gap-2 ml-2">
+          <div className="w-[200px]">
+            <CustomSelect
+              value={groqModel}
+              onChange={setGroqModel}
+              options={
+                groqModelsList.length > 0
+                  ? groqModelsList.map((m) => ({
+                      value: m.id,
+                      label: m.id,
+                    }))
+                  : [
+                      { value: 'openai/gpt-oss-120b', label: 'GPT OSS 120B' },
+                      { value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B' },
+                      { value: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B' },
+                      { value: 'mixtral-8x7b-32768', label: 'Mixtral 8x7B' },
+                      { value: 'gemma-7b-it', label: 'Gemma 7B' },
+                      { value: 'qwen/qwen3-32b', label: 'Qwen3 32B' },
+                    ]
+              }
+              placeholder="Select Model"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -755,20 +857,24 @@ export const PlaygroundPage = () => {
             <span className="font-medium text-white">New Chat</span>
           </button>
 
-          <div className="flex-1 overflow-y-auto space-y-1">
-            <p className="text-xs font-medium text-muted-foreground px-2 py-2">Recents</p>
-            {history.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => loadConversation(item.id)}
-                className={`w-full text-left px-3 py-2 rounded-md hover:bg-accent hover:text-accent-foreground text-sm truncate transition-colors flex items-center gap-2 ${
-                  activeChatId === item.id ? 'bg-accent' : ''
-                }`}
-              >
-                <span className="truncate">{item.title}</span>
-              </button>
-            ))}
-          </div>
+          {selectedProvider === 'Groq' ? (
+            <GroqSidebarSettings settings={groqSettings} onSettingsChange={setGroqSettings} />
+          ) : (
+            <div className="flex-1 overflow-y-auto space-y-1">
+              <p className="text-xs font-medium text-muted-foreground px-2 py-2">Recents</p>
+              {history.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => loadConversation(item.id)}
+                  className={`w-full text-left px-3 py-2 rounded-md hover:bg-accent hover:text-accent-foreground text-sm truncate transition-colors flex items-center gap-2 ${
+                    activeChatId === item.id ? 'bg-accent' : ''
+                  }`}
+                >
+                  <span className="truncate">{item.title}</span>
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* User Info (Bottom Sidebar) */}
           <div className="mt-auto border-t pt-4 flex items-center gap-3 shrink-0">
