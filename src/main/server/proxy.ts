@@ -38,55 +38,61 @@ export const startProxy = (): Promise<void> => {
       // Verbose log to verify traffic
       console.log(`[Proxy] Request: ${host}${url}`);
 
-      if (host && host.includes('chat.qwen.ai')) {
-        console.log(`[Proxy] Intercepting Qwen request: ${url}`);
-        // console.log('[Proxy] Request Headers:', JSON.stringify(ctx.clientToProxyRequest.headers, null, 2));
-
-        // Check Request Cookies
-        const reqCookies = ctx.clientToProxyRequest.headers.cookie;
-        if (reqCookies && reqCookies.includes('token=')) {
-          console.log('[Proxy] Found token in Request Cookie!');
-          proxyEvents.emit('qwen-cookies', reqCookies);
-          // We can return here if we only need one, but let's allow flow to continue
-        }
-
-        // Debug: Log all header keys to find the correct casing/name
-        // console.log(
-        //   '[Proxy] Request Header Keys:',
-        //   Object.keys(ctx.clientToProxyRequest.headers).join(', '),
-        // );
-
-        const capturedHeaders: Record<string, string> = {};
-        const headers = ctx.clientToProxyRequest.headers;
-
-        const bxUmidToken = headers['bx-umidtoken'];
-        if (bxUmidToken) capturedHeaders['bx-umidtoken'] = bxUmidToken;
-
-        const bxUa = headers['bx-ua'];
-        if (bxUa) capturedHeaders['bx-ua'] = bxUa;
-
-        const bxV = headers['bx-v'];
-        if (bxV) capturedHeaders['bx-v'] = bxV;
-
-        const xCsrfToken = headers['x-csrf-token'] || headers['x-xsrf-token'];
-        if (xCsrfToken) capturedHeaders['x-csrf-token'] = xCsrfToken;
-
-        if (Object.keys(capturedHeaders).length > 0) {
-          console.log(`[Proxy] Captured headers: ${Object.keys(capturedHeaders).join(', ')}`);
-          proxyEvents.emit('qwen-headers', capturedHeaders);
-        }
-
-        ctx.onResponse((ctx: any, callback: any) => {
-          // Check Response Set-Cookie
-          const resCookies = ctx.serverToProxyResponse.headers['set-cookie'];
-          if (resCookies) {
-            const cookieStr = Array.isArray(resCookies) ? resCookies.join('; ') : resCookies;
-            if (cookieStr.includes('token=')) {
-              console.log('[Proxy] Found token in Response Set-Cookie!');
-            }
+      if (host) {
+        // Qwen
+        if (host.includes('chat.qwen.ai')) {
+          console.log(`[Proxy] Intercepting Qwen request: ${url}`);
+          const reqCookies = ctx.clientToProxyRequest.headers.cookie;
+          if (reqCookies && reqCookies.includes('token=')) {
+            console.log('[Proxy] Found token in Qwen Request Cookie!');
+            proxyEvents.emit('qwen-cookies', reqCookies);
           }
-          return callback();
-        });
+
+          const capturedHeaders: Record<string, string> = {};
+          const headers = ctx.clientToProxyRequest.headers;
+          if (headers['bx-umidtoken']) capturedHeaders['bx-umidtoken'] = headers['bx-umidtoken'];
+          if (headers['bx-ua']) capturedHeaders['bx-ua'] = headers['bx-ua'];
+          if (headers['bx-v']) capturedHeaders['bx-v'] = headers['bx-v'];
+          if (headers['x-csrf-token']) capturedHeaders['x-csrf-token'] = headers['x-csrf-token'];
+
+          if (Object.keys(capturedHeaders).length > 0) {
+            proxyEvents.emit('qwen-headers', capturedHeaders);
+          }
+        }
+
+        // Groq
+        if (host.includes('console.groq.com')) {
+          console.log(`[Proxy] Intercepting Groq request: ${url}`);
+          const reqCookies = ctx.clientToProxyRequest.headers.cookie;
+          if (
+            reqCookies &&
+            (reqCookies.includes('stytch_session') || reqCookies.includes('stytch_session_jwt'))
+          ) {
+            console.log('[Proxy] Found session in Groq Request Cookie!');
+            proxyEvents.emit('groq-cookies', reqCookies);
+          }
+        }
+
+        // Gemini
+        if (host.includes('gemini.google.com') || host.includes('google.com')) {
+          const reqCookies = ctx.clientToProxyRequest.headers.cookie;
+          if (reqCookies && reqCookies.includes('__Secure-1PSID')) {
+            console.log(`[Proxy] Intercepting Gemini request: ${url}`);
+            console.log('[Proxy] Found __Secure-1PSID in Gemini Request Cookie!');
+            proxyEvents.emit('gemini-cookies', reqCookies);
+          }
+        }
+
+        // Perplexity
+        if (host.includes('www.perplexity.ai')) {
+          console.log(`[Proxy] Intercepting Perplexity request: ${url}`);
+          const reqCookies = ctx.clientToProxyRequest.headers.cookie;
+          // Look for session token
+          if (reqCookies && reqCookies.includes('__Secure-next-auth.session-token')) {
+            console.log('[Proxy] Found session token in Perplexity Request Cookie!');
+            proxyEvents.emit('perplexity-cookies', reqCookies);
+          }
+        }
       }
       return callback();
     });

@@ -7,7 +7,17 @@ import { AddAccountDialog } from './components/AddAccountDialog';
 
 interface Account {
   id: string;
-  provider: 'Claude' | 'DeepSeek' | 'ChatGPT' | 'Mistral' | 'Kimi' | 'Qwen' | 'Cohere';
+  provider:
+    | 'Claude'
+    | 'DeepSeek'
+    | 'ChatGPT'
+    | 'Mistral'
+    | 'Kimi'
+    | 'Qwen'
+    | 'Cohere'
+    | 'Perplexity'
+    | 'Groq'
+    | 'Gemini';
   email: string;
   credential: string;
   status: 'Active' | 'Rate Limit' | 'Error';
@@ -335,7 +345,13 @@ export const Accounts = () => {
                                         ? 'bg-purple-500/10 text-purple-500'
                                         : account.provider === 'Cohere'
                                           ? 'bg-teal-500/10 text-teal-500'
-                                          : 'bg-blue-500/10 text-blue-500',
+                                          : account.provider === 'Perplexity'
+                                            ? 'bg-cyan-500/10 text-cyan-500'
+                                            : account.provider === 'Groq'
+                                              ? 'bg-orange-600/10 text-orange-600'
+                                              : account.provider === 'Gemini'
+                                                ? 'bg-sky-500/10 text-sky-500'
+                                                : 'bg-blue-500/10 text-blue-500',
                             )}
                           >
                             {account.provider}

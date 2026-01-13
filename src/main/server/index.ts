@@ -28,7 +28,10 @@ import {
 } from './mistral';
 import { sendMessage as kimiChat } from './kimi';
 import { sendMessage as qwenChat, getChats as getQwenChats } from './qwen';
+import { chatCompletionStream as perplexityChat } from './perplexity';
 import { sendMessage as cohereChat } from './cohere';
+import { chatCompletionStream as groqChat } from './groq';
+import * as gemini from './gemini';
 
 // ... (existing code)
 
@@ -77,6 +80,37 @@ const updateAccountStats = (
   }
 };
 
+const getAccount = async (req: express.Request): Promise<Account | undefined> => {
+  const authHeader = req.headers.authorization;
+  const emailQuery = req.query.email as string;
+  // If provider header is present we might use it, but for now generic lookup
+  // In specific routes, we usually want specific provider.
+  // This helper is used by Gemini routes which implies Gemini provider.
+  // Actually, let's look at how it's used.
+  // expressApp.get('/v1/gemini/conversations', ... const account = await getAccount(req);
+  // It expects to find an account.
+
+  if (!fs.existsSync(DATA_FILE)) return undefined;
+  const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+  let account: Account | undefined;
+
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    account = accounts.find((a) => a.id === token);
+  }
+
+  if (!account && emailQuery) {
+    account = accounts.find((a) => a.email.toLowerCase() === emailQuery.toLowerCase());
+  }
+
+  // If not found, and we are in a /v1/gemini route, we might default to Gemini active account
+  if (!account && req.path.includes('/gemini')) {
+    account = accounts.find((a) => a.provider === 'Gemini' && a.status === 'Active');
+  }
+
+  return account;
+};
+
 const expressApp = express();
 expressApp.use(cors());
 expressApp.use(express.json());
@@ -115,6 +149,14 @@ expressApp.get('/v1/models', (_req, res) => {
       { id: 'qwen3-max-2025-09-23', object: 'model', created: 1677610602, owned_by: 'qwen' },
       // Cohere
       { id: 'command-r7b-12-2024', object: 'model', created: 1677610602, owned_by: 'cohere' },
+      // Groq
+      { id: 'llama3-70b-8192', object: 'model', created: 1677610602, owned_by: 'groq' },
+      { id: 'llama3-8b-8192', object: 'model', created: 1677610602, owned_by: 'groq' },
+      { id: 'mixtral-8x7b-32768', object: 'model', created: 1677610602, owned_by: 'groq' },
+      { id: 'gemma-7b-it', object: 'model', created: 1677610602, owned_by: 'groq' },
+      // Gemini
+      { id: 'gemini-pro', object: 'model', created: 1677610602, owned_by: 'google' },
+      { id: 'gemini-ultra', object: 'model', created: 1677610602, owned_by: 'google' },
     ],
   });
 });
@@ -169,13 +211,17 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
             ? 'Mistral'
             : model.includes('moonshot')
               ? 'Kimi'
-              : model.includes('moonshot')
-                ? 'Kimi'
-                : model.includes('qwen')
-                  ? 'Qwen'
-                  : model.includes('command')
-                    ? 'Cohere'
-                    : 'DeepSeek';
+              : model.includes('qwen')
+                ? 'Qwen'
+                : model.includes('command')
+                  ? 'Cohere'
+                  : model.includes('llama') || model.includes('mixtral') || model.includes('gemma')
+                    ? 'Groq'
+                    : model.includes('perplexity') || model.includes('turbo')
+                      ? 'Perplexity'
+                      : model.includes('gemini')
+                        ? 'Gemini'
+                        : 'DeepSeek';
       const finalProvider = targetProvider || inferredProvider;
       account = accounts.find((a) => a.provider === finalProvider && a.status === 'Active');
     }
@@ -270,6 +316,19 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
     } else if (account.provider === 'Cohere') {
       await cohereChat(account.credential, model, messages, callbacks.onContent);
       callbacks.onDone();
+    } else if (account.provider === 'Perplexity') {
+      await perplexityChat(
+        account.credential,
+        { model, messages, stream: true },
+        account.userAgent,
+        callbacks,
+      );
+    } else if (account.provider === 'Groq') {
+      await groqChat(req, res, account);
+      return;
+    } else if (account.provider === 'Gemini') {
+      await gemini.chatCompletionStream(req, res, account);
+      return;
     } else {
       res.write(`data: {"error": "Provider not supported"}\n\n`);
       res.end();
@@ -731,32 +790,69 @@ expressApp.get('/v1/mistral/conversations/:id', async (req, res) => {
 });
 
 // Get Kimi conversations (Placeholder)
-expressApp.get('/v1/kimi/conversations', async (req, res) => {
+expressApp.get('/v1/kimi/conversations', async (_req, res) => {
   res.json([]);
 });
 
 // Get Kimi conversation detail (Placeholder)
-expressApp.get('/v1/kimi/conversations/:id', async (req, res) => {
+expressApp.get('/v1/kimi/conversations/:id', async (_req, res) => {
   res.json({ messages: [] });
 });
 
 // Get Qwen conversations (Placeholder)
-expressApp.get('/v1/qwen/conversations', async (req, res) => {
+expressApp.get('/v1/qwen/conversations', async (_req, res) => {
   res.json([]);
 });
 
 // Get Qwen conversation detail (Placeholder)
-expressApp.get('/v1/qwen/conversations/:id', async (req, res) => {
+expressApp.get('/v1/qwen/conversations/:id', async (_req, res) => {
   res.json({ messages: [] });
 });
 
 // Get Cohere conversations (Placeholder)
-expressApp.get('/v1/cohere/conversations', async (req, res) => {
+expressApp.get('/v1/cohere/conversations', async (_req, res) => {
   res.json([]);
 });
 
-expressApp.get('/v1/cohere/conversations/:id', async (req, res) => {
+expressApp.get('/v1/cohere/conversations/:id', async (_req, res) => {
   res.json({ messages: [] });
+});
+
+// Get Perplexity conversations (Placeholder)
+expressApp.get('/v1/perplexity/conversations', async (_req, res) => {
+  res.json([]);
+});
+
+expressApp.get('/v1/perplexity/conversations/:id', async (_req, res) => {
+  res.json({ messages: [] });
+});
+
+// Get Groq conversations (Placeholder)
+expressApp.get('/v1/groq/conversations', async (_req, res) => {
+  res.json([]);
+});
+
+expressApp.get('/v1/groq/conversations/:id', async (_req, res) => {
+  res.json({ messages: [] });
+});
+
+// Gemini Routes
+expressApp.get('/v1/gemini/conversations', async (req, res) => {
+  const account = await getAccount(req);
+  if (!account) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  await gemini.getConversations(req, res, account);
+});
+
+expressApp.get('/v1/gemini/conversations/:id', async (req, res) => {
+  const account = await getAccount(req);
+  if (!account) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  await gemini.getConversation(req, res, account);
 });
 
 export const startServer = () => {

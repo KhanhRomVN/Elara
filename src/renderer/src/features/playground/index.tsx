@@ -8,6 +8,9 @@ import mistralIcon from '../../assets/provider_icons/mistral.svg';
 import kimiIcon from '../../assets/provider_icons/kimi.svg';
 import qwenIcon from '../../assets/provider_icons/qwen.svg';
 import cohereIcon from '../../assets/provider_icons/cohere.svg';
+import perplexityIcon from '../../assets/provider_icons/perplexity.svg';
+import groqIcon from '../../assets/provider_icons/groq.svg';
+import geminiIcon from '../../assets/provider_icons/gemini.png';
 import { Switch } from '../../core/components/Switch';
 
 interface Message {
@@ -19,7 +22,16 @@ interface Message {
 
 interface Account {
   id: string;
-  provider: 'Claude' | 'DeepSeek' | 'ChatGPT' | 'Mistral' | 'Kimi' | 'Qwen' | 'Cohere';
+  provider:
+    | 'Claude'
+    | 'DeepSeek'
+    | 'Groq'
+    | 'ChatGPT'
+    | 'Mistral'
+    | 'Kimi'
+    | 'Qwen'
+    | 'Cohere'
+    | 'Perplexity';
   email: string;
   name?: string;
   picture?: string;
@@ -116,7 +128,16 @@ export const PlaygroundPage = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
 
   const [selectedProvider, setSelectedProvider] = useState<
-    'Claude' | 'DeepSeek' | 'ChatGPT' | 'Mistral' | 'Kimi' | 'Qwen' | 'Cohere' | ''
+    | 'Claude'
+    | 'DeepSeek'
+    | 'ChatGPT'
+    | 'Mistral'
+    | 'Kimi'
+    | 'Qwen'
+    | 'Cohere'
+    | 'Perplexity'
+    | 'Groq'
+    | ''
   >('');
   const [selectedAccount, setSelectedAccount] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -374,7 +395,11 @@ export const PlaygroundPage = () => {
                   ? 'http://localhost:11434/v1/qwen/conversations'
                   : selectedProvider === 'Cohere'
                     ? 'http://localhost:11434/v1/cohere/conversations'
-                    : 'http://localhost:11434/v1/deepseek/sessions';
+                    : selectedProvider === 'Perplexity'
+                      ? 'http://localhost:11434/v1/perplexity/conversations'
+                      : selectedProvider === 'Groq'
+                        ? 'http://localhost:11434/v1/groq/conversations'
+                        : 'http://localhost:11434/v1/deepseek/sessions';
 
         const response = await fetch(`${endpoint}?email=${encodeURIComponent(account.email)}`);
 
@@ -453,7 +478,11 @@ export const PlaygroundPage = () => {
               ? `http://localhost:11434/v1/kimi/conversations/${conversationId}`
               : selectedProvider === 'Qwen'
                 ? `http://localhost:11434/v1/qwen/conversations/${conversationId}`
-                : `http://localhost:11434/v1/deepseek/sessions/${conversationId}/messages`;
+                : selectedProvider === 'Perplexity'
+                  ? `http://localhost:11434/v1/perplexity/conversations/${conversationId}`
+                  : selectedProvider === 'Groq'
+                    ? `http://localhost:11434/v1/groq/conversations/${conversationId}`
+                    : `http://localhost:11434/v1/deepseek/sessions/${conversationId}/messages`;
 
       const response = await fetch(`${endpoint}?email=${encodeURIComponent(account.email)}`);
 
@@ -562,6 +591,9 @@ export const PlaygroundPage = () => {
     { value: 'Mistral', label: 'Mistral', icon: mistralIcon },
     { value: 'Kimi', label: 'Kimi', icon: kimiIcon },
     { value: 'Qwen', label: 'Qwen', icon: qwenIcon },
+    { value: 'Perplexity', label: 'Perplexity', icon: perplexityIcon },
+    { value: 'Groq', label: 'Groq', icon: groqIcon },
+    { value: 'Gemini', label: 'Gemini', icon: geminiIcon },
   ];
 
   const accountOptions = filteredAccounts.map((acc) => ({
@@ -686,7 +718,9 @@ export const PlaygroundPage = () => {
                             ? qwenIcon
                             : selectedProvider === 'Cohere'
                               ? cohereIcon
-                              : deepseekIcon
+                              : selectedProvider === 'Groq'
+                                ? groqIcon
+                                : deepseekIcon
                 }
                 alt="Provider"
                 className="w-5 h-5"

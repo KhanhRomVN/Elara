@@ -33,6 +33,8 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
           result.account?.email === 'kimi@user.com' ||
           result.account?.email === 'qwen@user.com' ||
           result.account?.email === 'cohere@user.com' ||
+          result.account?.email === 'groq@user.com' ||
+          result.account?.email === 'gemini@user.com' ||
           !result.account?.email;
 
         if (needsManualEmail && result.account) {
@@ -199,6 +201,9 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
                     <option value="Mistral">Mistral</option>
                     <option value="Kimi">Kimi</option>
                     <option value="Qwen">Qwen</option>
+                    <option value="Perplexity">Perplexity</option>
+                    <option value="Groq">Groq</option>
+                    <option value="Gemini">Gemini</option>
                   </select>
                   <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700 dark:text-gray-200">
                     <svg

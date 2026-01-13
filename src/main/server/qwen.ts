@@ -3,6 +3,7 @@ import { join } from 'path';
 import { spawn, execSync } from 'child_process';
 import fs from 'fs';
 import { startProxy, stopProxy, proxyEvents } from './proxy';
+import { randomUUID } from 'crypto';
 
 const findChrome = (): string | null => {
   const commonPaths = [
@@ -217,7 +218,7 @@ export async function getProfile(cookies: string) {
 
 // Helper to create a new chat
 async function createChat(cookies: string, headers?: Record<string, string>): Promise<string> {
-  const { v4: uuidv4 } = require('uuid');
+  // const { v4: uuidv4 } = require('uuid');
   const tokenMatch = cookies.match(/token=([^;]+)/);
   const token = tokenMatch ? tokenMatch[1] : null;
 
@@ -235,7 +236,7 @@ async function createChat(cookies: string, headers?: Record<string, string>): Pr
         'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
       Origin: 'https://chat.qwen.ai',
       Referer: 'https://chat.qwen.ai/c/new-chat',
-      'x-request-id': uuidv4(),
+      'x-request-id': randomUUID(),
       Cookie: cookies,
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(headers || {}),
@@ -289,7 +290,7 @@ async function createChat(cookies: string, headers?: Record<string, string>): Pr
 
 // Get chat history
 export async function getChats(cookies: string, headers?: Record<string, string>): Promise<any[]> {
-  const { v4: uuidv4 } = require('uuid');
+  // const { v4: uuidv4 } = require('uuid');
   const tokenMatch = cookies.match(/token=([^;]+)/);
   const token = tokenMatch ? tokenMatch[1] : null;
 
@@ -307,7 +308,7 @@ export async function getChats(cookies: string, headers?: Record<string, string>
         'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
       Origin: 'https://chat.qwen.ai',
       Referer: 'https://chat.qwen.ai/',
-      'x-request-id': uuidv4(),
+      'x-request-id': randomUUID(),
       Cookie: cookies,
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(headers || {}),
@@ -356,7 +357,7 @@ export async function sendMessage(
   onProgress: (content: string) => void,
   headers?: Record<string, string>,
 ) {
-  const { v4: uuidv4 } = require('uuid');
+  // const { v4: uuidv4 } = require('uuid');
 
   // 1. Create chat if needed
   let chatId: string = '';
@@ -419,7 +420,7 @@ export async function sendMessage(
         'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
       Origin: 'https://chat.qwen.ai',
       Referer: `https://chat.qwen.ai/c/${chatId}`, // Use the new chat ID in referer
-      'x-request-id': uuidv4(),
+      'x-request-id': randomUUID(),
       'x-accel-buffering': 'no',
       Cookie: cookies,
       ...(token ? { Authorization: `Bearer ${token}` } : {}),

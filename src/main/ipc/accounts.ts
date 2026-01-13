@@ -8,6 +8,9 @@ import { fetchMistralProfile } from '../server/mistral';
 import { login as loginKimi, getProfile as getKimiProfile } from '../server/kimi';
 import { login as loginQwen, getProfile as getQwenProfile } from '../server/qwen';
 import { login as loginCohere, getProfile as getCohereProfile } from '../server/cohere';
+import { login as loginGroq } from '../server/groq';
+import { login as loginGemini } from '../server/gemini';
+import { login as loginPerplexity } from '../server/perplexity';
 
 const DATA_FILE = path.join(app.getPath('userData'), 'accounts.json');
 
@@ -17,8 +20,19 @@ if (!fs.existsSync(DATA_FILE)) {
 }
 
 export interface Account {
+  metadata?: any;
   id: string;
-  provider: 'Claude' | 'DeepSeek' | 'ChatGPT' | 'Mistral' | 'Kimi' | 'Qwen' | 'Cohere';
+  provider:
+    | 'Claude'
+    | 'DeepSeek'
+    | 'ChatGPT'
+    | 'Mistral'
+    | 'Kimi'
+    | 'Qwen'
+    | 'Cohere'
+    | 'Perplexity'
+    | 'Groq'
+    | 'Gemini';
   email: string;
   credential: string; // cookie or api key
   status: 'Active' | 'Rate Limit' | 'Error';
@@ -202,7 +216,17 @@ export const setupAccountsHandlers = () => {
     'accounts:login',
     async (
       _,
-      provider: 'Claude' | 'DeepSeek' | 'ChatGPT' | 'Mistral' | 'Kimi' | 'Qwen' | 'Cohere',
+      provider:
+        | 'Claude'
+        | 'DeepSeek'
+        | 'ChatGPT'
+        | 'Mistral'
+        | 'Kimi'
+        | 'Qwen'
+        | 'Cohere'
+        | 'Groq'
+        | 'Gemini'
+        | 'Perplexity',
     ) => {
       return new Promise(async (resolve) => {
         // Use a consistent, real Chrome user agent by stripping Electron/App identifiers
@@ -227,7 +251,11 @@ export const setupAccountsHandlers = () => {
                     ? 'https://chat.qwen.ai/auth'
                     : provider === 'Cohere'
                       ? 'https://dashboard.cohere.com/welcome/login'
-                      : 'https://chat.deepseek.com/login';
+                      : provider === 'Groq'
+                        ? 'https://console.groq.com'
+                        : provider === 'Gemini'
+                          ? 'https://gemini.google.com'
+                          : 'https://chat.deepseek.com/login';
 
         // Handle providers with self-managed login (no polling needed)
         if (provider === 'Kimi') {
@@ -333,6 +361,102 @@ export const setupAccountsHandlers = () => {
             resolve({ success: true, account: newAccount });
           } catch (e: any) {
             resolve({ success: false, error: e.message || 'Cohere login failed' });
+          }
+          return;
+        }
+
+        if (provider === 'Groq') {
+          try {
+            console.log('[Accounts] Starting Groq login flow (Real Browser)...');
+            const { cookies, email } = await loginGroq();
+            const finalEmail = email || 'groq@user.com';
+
+            const newAccount: Account = {
+              id: crypto.randomUUID(),
+              provider: 'Groq',
+              email: finalEmail,
+              credential: cookies,
+              status: 'Active',
+              usage: '0',
+              totalRequests: 0,
+              successfulRequests: 0,
+              totalDuration: 0,
+              tokensToday: 0,
+              statsDate: new Date().toISOString().split('T')[0],
+              lastActive: new Date().toISOString(),
+              userAgent,
+              name: undefined,
+              picture: undefined,
+            };
+
+            saveAccount(newAccount);
+            resolve({ success: true, account: newAccount });
+          } catch (e: any) {
+            resolve({ success: false, error: e.message || 'Groq login failed' });
+          }
+          return;
+        }
+
+        if (provider === 'Gemini') {
+          try {
+            console.log('[Accounts] Starting Gemini login flow (Real Browser)...');
+            const { cookies, email } = await loginGemini();
+            const finalEmail = email || 'gemini@user.com';
+
+            const newAccount: Account = {
+              id: crypto.randomUUID(),
+              provider: 'Gemini',
+              email: finalEmail,
+              credential: cookies,
+              status: 'Active',
+              usage: '0',
+              totalRequests: 0,
+              successfulRequests: 0,
+              totalDuration: 0,
+              tokensToday: 0,
+              statsDate: new Date().toISOString().split('T')[0],
+              lastActive: new Date().toISOString(),
+              userAgent,
+              name: undefined,
+              picture: undefined,
+            };
+
+            saveAccount(newAccount);
+            resolve({ success: true, account: newAccount });
+          } catch (e: any) {
+            resolve({ success: false, error: e.message || 'Gemini login failed' });
+          }
+          return;
+        }
+
+        if (provider === 'Perplexity') {
+          try {
+            console.log('[Accounts] Starting Perplexity login flow (Real Browser)...');
+            const { cookies, email } = await loginPerplexity();
+            const finalEmail = email || 'perplexity@user.com';
+
+            const newAccount: Account = {
+              id: crypto.randomUUID(),
+              provider: 'Perplexity',
+              email: finalEmail,
+              credential: cookies,
+              status: 'Active',
+              usage: '0',
+              totalRequests: 0,
+              successfulRequests: 0,
+              totalDuration: 0,
+              tokensToday: 0,
+              statsDate: new Date().toISOString().split('T')[0],
+              lastActive: new Date().toISOString(),
+              userAgent,
+              name: undefined,
+              picture: undefined,
+            };
+
+            saveAccount(newAccount);
+            resolve({ success: true, account: newAccount });
+          } catch (e: any) {
+            resolve({ success: false, error: e.message || 'Perplexity login failed' });
           }
           return;
         }
