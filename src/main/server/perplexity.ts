@@ -130,25 +130,42 @@ export async function chatCompletionStream(
             const dataStr = line.slice(6);
             try {
               const data = JSON.parse(dataStr);
+              console.log('[Perplexity] Received chunk of length:', dataStr.length);
 
               // Extract content from streaming response
               if (data.blocks) {
                 for (const block of data.blocks) {
-                  if (block.intended_usage === 'ask_text_0_markdown' && block.diff_block) {
-                    const patches = block.diff_block.patches;
-                    for (const patch of patches) {
-                      if (patch.value && patch.value.chunks) {
-                        for (const chunk of patch.value.chunks) {
-                          callbacks.onContent(chunk);
+                  if (block.intended_usage === 'ask_text_0_markdown') {
+                    console.log('[Perplexity] Found text block. Has diff:', !!block.diff_block);
+                    if (block.diff_block) {
+                      const patches = block.diff_block.patches;
+                      console.log('[Perplexity] Patch count:', patches?.length);
+                      for (const patch of patches) {
+                        if (patch.value && patch.value.chunks) {
+                          console.log('[Perplexity] Patch chunks:', patch.value.chunks.length);
+                          for (const chunk of patch.value.chunks) {
+                            console.log('[Perplexity] Emitting chunk:', chunk);
+                            callbacks.onContent(chunk);
+                          }
+                        } else {
+                          console.log(
+                            '[Perplexity] Patch has no value/chunks:',
+                            JSON.stringify(patch).slice(0, 100),
+                          );
                         }
                       }
+                    } else {
+                      console.log('[Perplexity] Text block has no diff_block');
                     }
+                  } else {
+                    // console.log('[Perplexity] Other block:', block.intended_usage);
                   }
                 }
               }
 
               // Check for final message
               if (data.final_sse_message) {
+                console.log('[Perplexity] Final SSE message received');
                 callbacks.onDone();
               }
             } catch (e) {
@@ -159,6 +176,7 @@ export async function chatCompletionStream(
       });
 
       response.on('end', () => {
+        console.log('[Perplexity] Response ended');
         callbacks.onDone();
       });
 
