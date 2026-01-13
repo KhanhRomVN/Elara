@@ -267,7 +267,8 @@ export const setupAccountsHandlers = () => {
         if (provider === 'Qwen') {
           try {
             console.log('[Accounts] Starting Qwen login flow...');
-            const { cookies } = await loginQwen();
+            // @ts-ignore
+            const { cookies, headers } = await loginQwen();
             console.log('[Accounts] Qwen login success, fetching profile...');
             const profile = await getQwenProfile(cookies);
             console.log('[Accounts] Qwen profile fetched:', profile);
@@ -278,6 +279,7 @@ export const setupAccountsHandlers = () => {
               provider: 'Qwen',
               email: email,
               credential: cookies,
+              headers: headers, // Save headers
               status: 'Active',
               usage: '0',
               totalRequests: 0,

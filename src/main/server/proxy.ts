@@ -40,6 +40,7 @@ export const startProxy = (): Promise<void> => {
 
       if (host && host.includes('chat.qwen.ai')) {
         console.log(`[Proxy] Intercepting Qwen request: ${url}`);
+        // console.log('[Proxy] Request Headers:', JSON.stringify(ctx.clientToProxyRequest.headers, null, 2));
 
         // Check Request Cookies
         const reqCookies = ctx.clientToProxyRequest.headers.cookie;
@@ -49,6 +50,32 @@ export const startProxy = (): Promise<void> => {
           // We can return here if we only need one, but let's allow flow to continue
         }
 
+        // Debug: Log all header keys to find the correct casing/name
+        // console.log(
+        //   '[Proxy] Request Header Keys:',
+        //   Object.keys(ctx.clientToProxyRequest.headers).join(', '),
+        // );
+
+        const capturedHeaders: Record<string, string> = {};
+        const headers = ctx.clientToProxyRequest.headers;
+
+        const bxUmidToken = headers['bx-umidtoken'];
+        if (bxUmidToken) capturedHeaders['bx-umidtoken'] = bxUmidToken;
+
+        const bxUa = headers['bx-ua'];
+        if (bxUa) capturedHeaders['bx-ua'] = bxUa;
+
+        const bxV = headers['bx-v'];
+        if (bxV) capturedHeaders['bx-v'] = bxV;
+
+        const xCsrfToken = headers['x-csrf-token'] || headers['x-xsrf-token'];
+        if (xCsrfToken) capturedHeaders['x-csrf-token'] = xCsrfToken;
+
+        if (Object.keys(capturedHeaders).length > 0) {
+          console.log(`[Proxy] Captured headers: ${Object.keys(capturedHeaders).join(', ')}`);
+          proxyEvents.emit('qwen-headers', capturedHeaders);
+        }
+
         ctx.onResponse((ctx: any, callback: any) => {
           // Check Response Set-Cookie
           const resCookies = ctx.serverToProxyResponse.headers['set-cookie'];
@@ -56,16 +83,6 @@ export const startProxy = (): Promise<void> => {
             const cookieStr = Array.isArray(resCookies) ? resCookies.join('; ') : resCookies;
             if (cookieStr.includes('token=')) {
               console.log('[Proxy] Found token in Response Set-Cookie!');
-              // We need to construct a valid cookie string for the client
-              // But since we just need the 'token' part or the full string for future requests,
-              // we might need to parse it.
-              // For now, let's just emit what we found. The login handler expects a cookie string.
-              // If we find 'token=' in Set-Cookie, we might want to wait for the next request
-              // OR reconstruct the cookie string.
-              // The safest bet is often the Request cookie of the *next* request,
-              // but let's emit this just in case we can use it.
-              // However, Set-Cookie format is "key=value; attributes", not just "key=value".
-              // Let's stick to Request cookies effectively, but log this to be sure we see it.
             }
           }
           return callback();

@@ -1,4 +1,4 @@
-import { BrowserWindow, session, net, app } from 'electron';
+import { net, app } from 'electron';
 import { join } from 'path';
 import { spawn, execSync } from 'child_process';
 import fs from 'fs';
@@ -74,8 +74,10 @@ export async function login() {
     chromeProcess.stderr.on('data', (data) => console.error(`[Qwen Chrome Err]: ${data}`));
   }
 
-  return new Promise<{ cookies: string }>((resolve, reject) => {
+  return new Promise<{ cookies: string; headers: Record<string, string> }>((resolve, reject) => {
     let resolved = false;
+    let capturedCookies = '';
+    let capturedHeaders: Record<string, string> = {};
 
     const cleanup = () => {
       if (!resolved) {
@@ -83,38 +85,87 @@ export async function login() {
         chromeProcess.kill();
         stopProxy();
         proxyEvents.off('qwen-cookies', onCookies);
+        proxyEvents.off('qwen-headers', onHeaders);
+      }
+    };
+
+    let cookiesFoundTime = 0;
+
+    // ...
+
+    const checkResolved = () => {
+      if (capturedCookies) {
+        if (!cookiesFoundTime) cookiesFoundTime = Date.now();
+
+        // Wait for bx-ua if we don't have it yet, unless it's been too long (30s)
+        const hasBxUa = capturedHeaders['bx-ua'];
+        const timeElapsed = Date.now() - cookiesFoundTime;
+
+        if (hasBxUa || timeElapsed > 30000) {
+          if (!hasBxUa)
+            console.warn(
+              '[Qwen] Warning: Timed out waiting for bx-ua header. Bot detection might be triggered.',
+            );
+          else console.log('[Qwen] Anti-Bot headers captured successfully.');
+
+          // Try to extract x-csrf-token from cookies if missing from headers
+          if (!capturedHeaders['x-csrf-token']) {
+            const csrfMatch = capturedCookies.match(/csrfToken=([^;]+)/);
+            if (csrfMatch) {
+              console.log('[Qwen] Extracted x-csrf-token from cookies');
+              capturedHeaders['x-csrf-token'] = csrfMatch[1];
+            } else {
+              console.warn('[Qwen] Warning: Could not find x-csrf-token in headers or cookies');
+              console.log('[Qwen] Full Cookies:', capturedCookies); // Debug to see what we have
+            }
+          }
+
+          // Delay slightly to ensure persistence
+          setTimeout(() => {
+            cleanup();
+            resolve({ cookies: capturedCookies, headers: capturedHeaders });
+          }, 1000);
+        } else {
+          console.log(
+            `[Qwen] Waiting for Anti-Bot headers... (${Math.round(timeElapsed / 1000)}s)`,
+          );
+        }
       }
     };
 
     const onCookies = (cookies: string) => {
       console.log('[Qwen] Cookies captured!');
-      cleanup();
-      resolve({ cookies });
+      capturedCookies = cookies;
+      checkResolved();
+    };
+
+    const onHeaders = (headers: Record<string, string>) => {
+      console.log('[Qwen] Headers captured:', Object.keys(headers));
+      capturedHeaders = { ...capturedHeaders, ...headers };
+      // If we got bx-ua, check if we can resolve
+      if (headers['bx-ua'] && capturedCookies) {
+        checkResolved();
+      }
     };
 
     proxyEvents.on('qwen-cookies', onCookies);
+    proxyEvents.on('qwen-headers', onHeaders);
 
     chromeProcess.on('close', (code) => {
       if (!resolved) {
-        console.log('[Qwen] Chrome closed with code:', code);
-        cleanup();
-        reject(new Error('Chrome user closed the window before login completed'));
+        if (capturedCookies) {
+          checkResolved();
+        } else {
+          console.log('[Qwen] Chrome closed with code:', code);
+          cleanup();
+          reject(new Error('Chrome user closed the window before login completed'));
+        }
       }
     });
   });
 }
 
 export async function getProfile(cookies: string) {
-  // Extract token if needed for Authorization header, though usually Cookie is enough
-  // Qwen log shows: Authorization: Bearer <token> is NOT used in the request log provided?
-  // Actually, look at qwen.md line 26 (signin request) -> set-cookie.
-  // Line 55 (GET auths) -> Cookie header only.
-  // Wait, let's check log...
-  // Line 96 (GET auths response) -> token is in `data.token`.
-  // Line 66 (GET auths request) -> Cookie field.
-
-  // It seems Qwen uses Cookie authentication primarily.
-
   return new Promise<{ name: string; avatar: string; email: string } | null>((resolve) => {
     const request = net.request({
       method: 'GET',
@@ -146,55 +197,135 @@ export async function getProfile(cookies: string) {
               resolve(null);
             }
           } catch (e) {
+            console.error('[Qwen] getProfile JSON Parse Error:', e);
             resolve(null);
           }
         } else {
+          console.error(`[Qwen] getProfile failed with status: ${response.statusCode}`);
           resolve(null);
         }
       });
     });
 
-    request.on('error', () => resolve(null));
+    request.on('error', (e) => {
+      console.error('[Qwen] getProfile Request Error:', e);
+      resolve(null);
+    });
+    request.end();
+  });
+}
+
+// Helper to create a new chat
+async function createChat(cookies: string, headers?: Record<string, string>): Promise<string> {
+  const { v4: uuidv4 } = require('uuid');
+  const tokenMatch = cookies.match(/token=([^;]+)/);
+  const token = tokenMatch ? tokenMatch[1] : null;
+
+  return new Promise((resolve, reject) => {
+    const request = net.request({
+      method: 'POST',
+      url: 'https://chat.qwen.ai/api/v2/chats/new',
+      partition: 'persist:qwen',
+    });
+
+    const finalHeaders = {
+      'Content-Type': 'application/json',
+      'User-Agent':
+        headers?.['User-Agent'] ||
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
+      Origin: 'https://chat.qwen.ai',
+      Referer: 'https://chat.qwen.ai/c/new-chat',
+      'x-request-id': uuidv4(),
+      Cookie: cookies,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(headers || {}),
+    } as Record<string, any>;
+
+    // Clean headers
+    Object.keys(finalHeaders).forEach((key) => {
+      if (!finalHeaders[key]) delete finalHeaders[key];
+    });
+
+    request.on('response', (response) => {
+      let data = '';
+      response.on('data', (chunk) => (data += chunk.toString()));
+      response.on('end', () => {
+        if (response.statusCode === 200) {
+          try {
+            const json = JSON.parse(data);
+            if (json.data && json.data.id) {
+              resolve(json.data.id);
+            } else {
+              reject(new Error('Failed to create chat: No ID in response'));
+            }
+          } catch (e) {
+            reject(e);
+          }
+        } else {
+          reject(new Error(`Create chat failed: ${response.statusCode} ${data}`));
+        }
+      });
+      response.on('error', reject);
+    });
+
+    request.on('error', reject);
+
+    // Set headers
+    Object.entries(finalHeaders).forEach(([k, v]) => request.setHeader(k, v as string));
+
+    const payload = {
+      title: 'New Chat',
+      models: ['qwen3-max-2025-09-23'],
+      chat_mode: 'normal',
+      chat_type: 't2t',
+      timestamp: Date.now(),
+      project_id: '',
+    };
+
+    request.write(JSON.stringify(payload));
     request.end();
   });
 }
 
 export async function sendMessage(
   cookies: string,
-  model: string,
+  _model: string,
   messages: any[],
   onProgress: (content: string) => void,
+  headers?: Record<string, string>,
 ) {
-  // Qwen sendMessage implementation
-  // Endpoint: POST https://chat.qwen.ai/api/v2/chat/completions?chat_id=...
-  // Payload involves `chat_id`, `parent_id` (null for new), `messages`.
-  // It seems complex to manage chat_id/parent_id state merely from a simple sendMessage call.
-  // For now, let's try a stateless approach or generate a new chat_id for each conversation if needed,
-  // but usually we want to append.
-
-  // Simplification: We'll create a new conversation for each message for now (or handle state later),
-  // BUT wait, looking at the log (line 99), `chat_id` is passed in query param.
-  // Payload includes `parent_id`.
-
-  // For a quick integration, let's try to just hit the endpoint.
-  // Requirement: We need a valid `chat_id`? Or can we omit it?
-  // Usually these web UIs create a chat ID first or generate one.
-  // Let's assume we can generate a UUID if needed.
-
   const { v4: uuidv4 } = require('uuid');
-  const chatId = uuidv4(); // Or reuse if we had context
-  const parentId = null; // New chat
 
-  // Prepare messages. Qwen expects:
-  // { "role": "user", "content": "..." }
-  // In the log (line 150):
-  // messages: [{ "id": "...", "role": "user", "content": "...", ... }]
+  // 1. Create chat if needed
+  let chatId: string;
+  try {
+    console.log('[Qwen] Creating new chat session...');
+    chatId = await createChat(cookies, headers);
+    console.log('[Qwen] Created Chat ID:', chatId);
+  } catch (e) {
+    console.error('[Qwen] Failed to create chat:', e);
+    throw e; // Stop if we can't create a chat
+  }
 
+  const parentId = null;
+
+  // Qwen internal API message structure
   const qwenMessages = messages.map((m) => ({
     role: m.role,
     content: m.content,
-    id: uuidv4(), // Generate ID for message
-    timestamp: Math.floor(Date.now() / 1000),
+    timestamp: Date.now(),
+    user_action: 'chat',
+    models: ['qwen3-max-2025-09-23'],
+    chat_type: 't2t',
+    feature_config: {
+      thinking_enabled: false,
+      output_schema: 'phase',
+      research_mode: 'normal',
+    },
+    extra: { meta: { subChatType: 't2t' } },
+    sub_chat_type: 't2t',
+    parent_id: null,
+    files: [],
   }));
 
   const payload = {
@@ -203,69 +334,103 @@ export async function sendMessage(
     incremental_output: true,
     chat_id: chatId,
     chat_mode: 'normal',
-    model: model || 'qwen3-max-2025-09-23', // Default from log
+    model: 'qwen3-max-2025-09-23',
     parent_id: parentId,
     messages: qwenMessages,
-    timestamp: Math.floor(Date.now() / 1000),
+    timestamp: Date.now(),
   };
 
+  // Extract token from cookies for Authorization header
+  const tokenMatch = cookies.match(/token=([^;]+)/);
+  const token = tokenMatch ? tokenMatch[1] : null;
+
   return new Promise<void>((resolve, reject) => {
-    const request = net.request({
-      method: 'POST',
-      url: `https://chat.qwen.ai/api/v2/chat/completions?chat_id=${chatId}`,
-      partition: 'persist:qwen',
+    const url = `https://chat.qwen.ai/api/v2/chat/completions?chat_id=${chatId}`;
+
+    const finalHeaders = {
+      'Content-Type': 'application/json',
+      'User-Agent':
+        headers?.['User-Agent'] ||
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
+      Origin: 'https://chat.qwen.ai',
+      Referer: `https://chat.qwen.ai/c/${chatId}`, // Use the new chat ID in referer
+      'x-request-id': uuidv4(),
+      'x-accel-buffering': 'no',
+      Cookie: cookies,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(headers || {}),
+    } as Record<string, any>;
+
+    // Ensure no undefined headers
+    Object.keys(finalHeaders).forEach((key) => {
+      if (!finalHeaders[key]) delete finalHeaders[key];
     });
 
-    request.setHeader('Cookie', cookies);
-    request.setHeader('Content-Type', 'application/json');
-    request.setHeader(
-      'User-Agent',
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    );
-    request.setHeader('Origin', 'https://chat.qwen.ai');
-    request.setHeader('Referer', `https://chat.qwen.ai/c/${chatId}`);
+    const request = net.request({
+      method: 'POST',
+      url,
+      partition: 'persist:qwen',
+      headers: finalHeaders as Record<string, string>,
+    });
 
-    request.write(JSON.stringify(payload));
+    request.on('error', (error) => {
+      console.error('[Qwen] Request Error:', error);
+      reject(error);
+    });
 
     request.on('response', (response) => {
-      if (response.statusCode !== 200) {
+      response.on('error', (err: any) => {
+        console.error('[Qwen] Stream Error:', err);
+        reject(err);
+      });
+
+      if (response.statusCode && response.statusCode >= 400) {
         console.error(`[Qwen] API Error: ${response.statusCode}`);
-        // consume data to see error
-        response.on('data', (d) => console.error(d.toString()));
-        reject(new Error(`Qwen API returned ${response.statusCode}`));
+        let errorBody = '';
+        response.on('data', (chunk) => {
+          errorBody += chunk.toString();
+        });
+
+        response.on('end', () => {
+          console.error('[Qwen] Error Body:', errorBody);
+          reject(new Error(`Qwen API returned ${response.statusCode}: ${errorBody.slice(0, 200)}`));
+        });
         return;
       }
 
       response.on('data', (chunk) => {
-        const lines = chunk.toString().split('\n');
+        // Raw logging preserved for verification
+        const chunkStr = chunk.toString();
+        console.log('[Qwen] Stream Data:', chunkStr);
+
+        const lines = chunkStr.split('\n');
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             const jsonStr = line.substring(6).trim();
             if (jsonStr === '[DONE]') return;
             try {
               const json = JSON.parse(jsonStr);
-              // Log format: {"choices": [{"delta": {"content": "..."}}]}
               if (json.choices && json.choices.length > 0) {
                 const delta = json.choices[0].delta;
                 if (delta && delta.content) {
+                  console.log('[Qwen] Chunk:', delta.content);
                   onProgress(delta.content);
                 }
               }
             } catch (e) {
-              // ignore parse error for partial chunks
+              // ignore
             }
           }
         }
       });
 
       response.on('end', () => {
+        console.log('[Qwen] Stream ended');
         resolve();
       });
-
-      response.on('error', (e: any) => reject(e));
     });
 
-    request.on('error', (e) => reject(e));
+    request.write(JSON.stringify(payload));
     request.end();
   });
 }
