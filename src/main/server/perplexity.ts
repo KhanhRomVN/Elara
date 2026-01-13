@@ -141,7 +141,10 @@ export async function chatCompletionStream(
                       const patches = block.diff_block.patches;
                       console.log('[Perplexity] Patch count:', patches?.length);
                       for (const patch of patches) {
-                        if (patch.value && patch.value.chunks) {
+                        if (typeof patch.value === 'string') {
+                          console.log('[Perplexity] Emitting string chunk:', patch.value);
+                          callbacks.onContent(patch.value);
+                        } else if (patch.value && patch.value.chunks) {
                           console.log('[Perplexity] Patch chunks:', patch.value.chunks.length);
                           for (const chunk of patch.value.chunks) {
                             console.log('[Perplexity] Emitting chunk:', chunk);
@@ -192,15 +195,192 @@ export async function chatCompletionStream(
   }
 }
 
-// Get Perplexity conversations (placeholder - would need to implement based on their API)
+// Get Perplexity conversations
 export async function getConversations(
   token: string,
   userAgent?: string,
   limit: number = 20,
 ): Promise<any[]> {
-  // Perplexity doesn't expose a simple history API in the docs provided
-  // Return empty array for now
-  return [];
+  return new Promise((resolve, reject) => {
+    try {
+      if (!token) {
+        resolve([]);
+        return;
+      }
+
+      const requestBody = {
+        limit: limit,
+        ascending: false,
+        offset: 0,
+      };
+
+      const request = net.request({
+        method: 'POST',
+        url: `${BASE_URL}/rest/thread/list_ask_threads?version=2.18&source=default`,
+      });
+
+      request.setHeader('Content-Type', 'application/json');
+      request.setHeader('Cookie', token);
+      request.setHeader('Origin', BASE_URL);
+      request.setHeader('Referer', `${BASE_URL}/`);
+      if (userAgent) request.setHeader('User-Agent', userAgent);
+
+      request.on('response', (response) => {
+        let body = '';
+        response.on('data', (chunk) => {
+          body += chunk.toString();
+        });
+
+        response.on('end', () => {
+          if (response.statusCode === 200) {
+            try {
+              const data = JSON.parse(body);
+              // Transform to generic format expected by frontend
+              const formatted = data.map((thread: any) => ({
+                id: thread.uuid, // Use uuid as ID
+                title: thread.title,
+                updated_at: new Date(thread.last_query_datetime).getTime() / 1000, // Unix timestamp in seconds
+                created_at: new Date(thread.last_query_datetime).getTime() / 1000, // fallback
+              }));
+              resolve(formatted);
+            } catch (e) {
+              console.error('[Perplexity] Failed to parse history:', e);
+              reject(e);
+            }
+          } else {
+            console.error(`[Perplexity] History API error ${response.statusCode}: ${body}`);
+            reject(new Error(`Perplexity API Error ${response.statusCode}`));
+          }
+        });
+      });
+
+      request.on('error', (err) => {
+        reject(err);
+      });
+
+      request.write(JSON.stringify(requestBody));
+      request.end();
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+// Get Perplexity conversation detail
+export async function getConversationDetail(
+  token: string,
+  id: string,
+  userAgent?: string,
+): Promise<any[]> {
+  return new Promise((resolve, reject) => {
+    try {
+      if (!token) {
+        resolve([]);
+        return;
+      }
+
+      const url = `${BASE_URL}/rest/thread/${id}?with_parent_info=true&with_schematized_response=true&version=2.18&source=default&limit=10&offset=0&from_first=true&supported_block_use_cases=answer_modes&supported_block_use_cases=media_items&supported_block_use_cases=knowledge_cards&supported_block_use_cases=inline_entity_cards&supported_block_use_cases=place_widgets&supported_block_use_cases=finance_widgets&supported_block_use_cases=prediction_market_widgets&supported_block_use_cases=sports_widgets&supported_block_use_cases=flight_status_widgets&supported_block_use_cases=news_widgets&supported_block_use_cases=shopping_widgets&supported_block_use_cases=jobs_widgets&supported_block_use_cases=search_result_widgets&supported_block_use_cases=inline_images&supported_block_use_cases=inline_assets&supported_block_use_cases=placeholder_cards&supported_block_use_cases=diff_blocks&supported_block_use_cases=inline_knowledge_cards&supported_block_use_cases=entity_group_v2&supported_block_use_cases=refinement_filters&supported_block_use_cases=canvas_mode&supported_block_use_cases=maps_preview&supported_block_use_cases=answer_tabs&supported_block_use_cases=price_comparison_widgets&supported_block_use_cases=preserve_latex&supported_block_use_cases=generic_onboarding_widgets&supported_block_use_cases=in_context_suggestions`;
+
+      const request = net.request({
+        method: 'GET',
+        url: url,
+      });
+
+      request.setHeader('Content-Type', 'application/json');
+      request.setHeader('Cookie', token);
+      request.setHeader('Origin', BASE_URL);
+      request.setHeader('Referer', `${BASE_URL}/`);
+      if (userAgent) request.setHeader('User-Agent', userAgent);
+
+      request.on('response', (response) => {
+        let body = '';
+        response.on('data', (chunk) => {
+          body += chunk.toString();
+        });
+
+        response.on('end', () => {
+          console.log(`[Perplexity] Detail response status: ${response.statusCode}`);
+          if (response.statusCode === 200) {
+            try {
+              console.log('[Perplexity] Parsing detail response...');
+              const data = JSON.parse(body);
+              console.log(
+                '[Perplexity] Detail entries count:',
+                data.entries ? data.entries.length : 0,
+              );
+
+              const messages: any[] = [];
+
+              if (data && data.entries) {
+                for (const entry of data.entries) {
+                  // User message
+                  if (entry.query_str) {
+                    messages.push({
+                      id: randomUUID(),
+                      role: 'user',
+                      content: entry.query_str,
+                      timestamp: new Date(),
+                    });
+                  }
+
+                  // Assistant message
+                  let assistantContent = '';
+                  if (entry.blocks) {
+                    console.log(
+                      '[Perplexity] Checking blocks for entry:',
+                      entry.blocks.length,
+                      entry.blocks.map((b: any) => b.intended_usage),
+                    );
+                    for (const block of entry.blocks) {
+                      if (
+                        block.intended_usage === 'ask_text_0_markdown' ||
+                        block.intended_usage === 'ask_text'
+                      ) {
+                        if (block.markdown_block && block.markdown_block.answer) {
+                          assistantContent = block.markdown_block.answer;
+                          break;
+                        }
+                      }
+                    }
+                  } else {
+                    console.log('[Perplexity] No blocks in entry');
+                  }
+
+                  if (assistantContent) {
+                    messages.push({
+                      id: entry.uuid || randomUUID(),
+                      role: 'assistant',
+                      content: assistantContent,
+                      timestamp: new Date(),
+                    });
+                  } else {
+                    console.log('[Perplexity] No assistant content found for entry');
+                  }
+                }
+              }
+
+              console.log('[Perplexity] Parsed messages count:', messages.length);
+              resolve(messages);
+            } catch (e) {
+              console.error('[Perplexity] Failed to parse detail:', e);
+              reject(e);
+            }
+          } else {
+            console.error(`[Perplexity] Detail API error ${response.statusCode}: ${body}`);
+            reject(new Error(`Perplexity API Error ${response.statusCode}`));
+          }
+        });
+      });
+
+      request.on('error', (err) => {
+        reject(err);
+      });
+
+      request.end();
+    } catch (error) {
+      reject(error);
+    }
+  });
 }
 
 const findChrome = (): string | null => {

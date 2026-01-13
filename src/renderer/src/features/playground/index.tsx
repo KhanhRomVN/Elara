@@ -525,17 +525,19 @@ export const PlaygroundPage = () => {
                 })) || []
               : selectedProvider === 'Kimi' || selectedProvider === 'Qwen'
                 ? []
-                : data.chat_messages
-                    ?.map((msg: any) => ({
-                      id: msg.message_id,
-                      role: msg.role === 'USER' ? ('user' as const) : ('assistant' as const),
-                      content:
-                        msg.fragments
-                          ?.map((f: any) => f.content || '')
-                          .join('')
-                          .trim() || '',
-                    }))
-                    .filter((m: Message) => m.content) || [];
+                : selectedProvider === 'Perplexity'
+                  ? data.messages || []
+                  : data.chat_messages
+                      ?.map((msg: any) => ({
+                        id: msg.message_id,
+                        role: msg.role === 'USER' ? ('user' as const) : ('assistant' as const),
+                        content:
+                          msg.fragments
+                            ?.map((f: any) => f.content || '')
+                            .join('')
+                            .trim() || '',
+                      }))
+                      .filter((m: Message) => m.content) || [];
 
         setMessages(formattedMessages);
         setActiveChatId(conversationId);

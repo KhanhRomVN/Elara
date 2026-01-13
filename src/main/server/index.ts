@@ -28,7 +28,11 @@ import {
 } from './mistral';
 import { sendMessage as kimiChat } from './kimi';
 import { sendMessage as qwenChat, getChats as getQwenChats } from './qwen';
-import { chatCompletionStream as perplexityChat } from './perplexity';
+import {
+  chatCompletionStream as perplexityChat,
+  getConversations as getPerplexityConversations,
+  getConversationDetail as getPerplexityConversationDetail,
+} from './perplexity';
 import { sendMessage as cohereChat } from './cohere';
 import { chatCompletionStream as groqChat } from './groq';
 import * as gemini from './gemini';
@@ -818,13 +822,97 @@ expressApp.get('/v1/cohere/conversations/:id', async (_req, res) => {
   res.json({ messages: [] });
 });
 
-// Get Perplexity conversations (Placeholder)
-expressApp.get('/v1/perplexity/conversations', async (_req, res) => {
-  res.json([]);
+// Get Perplexity conversations
+expressApp.get('/v1/perplexity/conversations', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const emailQuery = req.query.email as string;
+    const limitQuery = parseInt(req.query.limit as string) || 20;
+
+    if (!fs.existsSync(DATA_FILE)) {
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
+    }
+
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    let account: Account | undefined;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      account = accounts.find((a) => a.id === token);
+    }
+
+    if (!account && emailQuery) {
+      account = accounts.find(
+        (a) => a.email.toLowerCase() === emailQuery.toLowerCase() && a.provider === 'Perplexity',
+      );
+    }
+
+    if (!account) {
+      account = accounts.find((a) => a.provider === 'Perplexity' && a.status === 'Active');
+    }
+
+    if (!account) {
+      res.status(401).json({ error: 'No valid Perplexity account found' });
+      return;
+    }
+
+    const conversations = await getPerplexityConversations(
+      account.credential,
+      account.userAgent,
+      limitQuery,
+    );
+    res.json(conversations);
+  } catch (error: any) {
+    console.error('[Server] Get Perplexity Conversations Error:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
-expressApp.get('/v1/perplexity/conversations/:id', async (_req, res) => {
-  res.json({ messages: [] });
+expressApp.get('/v1/perplexity/conversations/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const authHeader = req.headers.authorization;
+    const emailQuery = req.query.email as string;
+
+    if (!fs.existsSync(DATA_FILE)) {
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
+    }
+
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    let account: Account | undefined;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      account = accounts.find((a) => a.id === token);
+    }
+
+    if (!account && emailQuery) {
+      account = accounts.find(
+        (a) => a.email.toLowerCase() === emailQuery.toLowerCase() && a.provider === 'Perplexity',
+      );
+    }
+
+    if (!account) {
+      account = accounts.find((a) => a.provider === 'Perplexity' && a.status === 'Active');
+    }
+
+    if (!account) {
+      res.status(401).json({ error: 'No valid Perplexity account found' });
+      return;
+    }
+
+    const messages = await getPerplexityConversationDetail(
+      account.credential,
+      id,
+      account.userAgent,
+    );
+    res.json({ messages });
+  } catch (error: any) {
+    console.error('[Server] Get Perplexity Detail Error:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Get Groq conversations (Placeholder)
