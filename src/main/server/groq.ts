@@ -151,15 +151,52 @@ export const getModels = async (account: Account) => {
 
   const orgId = getOrgIdFromJwt(sessionJwt) || orgIdCache[sessionJwt];
 
-  const response = await fetch('https://api.groq.com/internal/v1/models', {
-    headers: {
-      Authorization: `Bearer ${sessionJwt}`,
-      'groq-organization': orgId || '',
-      'Content-Type': 'application/json',
-    },
-  });
+  const makeRequest = async (jwt: string, organizationId: string | undefined) => {
+    return fetch('https://api.groq.com/internal/v1/models', {
+      headers: {
+        Authorization: `Bearer ${jwt}`,
+        'groq-organization': organizationId || '',
+        'Content-Type': 'application/json',
+        'User-Agent': USER_AGENT,
+        Origin: 'https://console.groq.com',
+        Referer: 'https://console.groq.com/',
+      },
+    });
+  };
+
+  let response = await makeRequest(sessionJwt, orgId);
+
+  if (response.status === 401) {
+    console.log('[Groq] GetModels Got 401. Attempting to refresh token...');
+    const refreshed = await refreshGroqSession(account);
+    if (refreshed) {
+      // Re-read account manually or trust the function updated.
+      // We need the new JWT here to retry.
+      const fs = await import('fs');
+      const path = await import('path');
+      const { app } = await import('electron');
+      const DATA_FILE = path.join(app.getPath('userData'), 'accounts.json');
+      const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+      const updatedAccount = accounts.find((a) => a.id === account.id);
+
+      if (updatedAccount) {
+        const newCookies = getCookies(updatedAccount); // Use helper
+        const newJwt = getCookieValue(newCookies, 'stytch_session_jwt');
+        if (newJwt) {
+          const newOrgId = getOrgIdFromJwt(newJwt) || orgIdCache[newJwt];
+          response = await makeRequest(newJwt, newOrgId); // Retry
+        }
+      }
+    } else {
+      console.error('[Groq] Refresh failed during getModels.');
+    }
+  }
 
   if (!response.ok) {
+    const errorText = await response.text();
+    console.error(
+      `[Groq] Failed to fetch models: ${response.status} ${response.statusText} - ${errorText}`,
+    );
     throw new Error(`Failed to fetch models: ${response.statusText}`);
   }
 

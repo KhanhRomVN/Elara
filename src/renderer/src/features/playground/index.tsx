@@ -13,6 +13,7 @@ import groqIcon from '../../assets/provider_icons/groq.svg';
 import geminiIcon from '../../assets/provider_icons/gemini.svg';
 import { Switch } from '../../core/components/Switch';
 import { GroqSidebarSettings, FunctionParams } from './components/GroqSidebarSettings';
+import { GroqModelSelector } from './components/GroqModelSelector';
 
 interface Message {
   id: string;
@@ -156,7 +157,6 @@ export const PlaygroundPage = () => {
   // Groq State
   const [groqModel, setGroqModel] = useState('openai/gpt-oss-120b');
   const [groqModelsList, setGroqModelsList] = useState<any[]>([]);
-  const [groqSettingsOpen, setGroqSettingsOpen] = useState(false);
   const [groqSettings, setGroqSettings] = useState({
     temperature: 1,
     maxTokens: 8192,
@@ -169,6 +169,41 @@ export const PlaygroundPage = () => {
     },
     customFunctions: [] as FunctionParams[],
   });
+
+  // Sidebar Resize State
+  const [sidebarWidth, setSidebarWidth] = useState(260);
+  const [isResizing, setIsResizing] = useState(false);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+
+  const startResizing = (e: React.MouseEvent) => {
+    setIsResizing(true);
+    e.preventDefault();
+  };
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (sidebarRef.current) {
+        const newWidth = e.clientX - sidebarRef.current.getBoundingClientRect().left;
+        if (newWidth > 150 && newWidth < 600) {
+          setSidebarWidth(newWidth);
+        }
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
 
   const slogans = [
     'Feel Free Chat Free!!',
@@ -223,6 +258,43 @@ export const PlaygroundPage = () => {
 
           const acc = accounts.find((a) => a.id === selectedAccount);
           if (!acc) return;
+
+          // Fetch from internal API to get detailed info
+          // We can try fetching directly from renderer if allowed, or we might need a proxy.
+          // Assuming direct fetch to https://api.groq.com/internal/v1/models works or using a proxy if we have one.
+          // The user specifically requested this URL.
+          // Since we might run into CORS, let's try to fetch it. If it fails, we might need a server-side proxy.
+
+          // However, the user mentioned getting response from "GET https://api.groq.com/internal/v1/models"
+          // I will try to fetch it directly. If it fails due to CORS, I'll need to use the Electron main process proxy or similar.
+          // For now, let's assume valid access if we have a token (acc.email might not be enough, usually need an API Key).
+          // But wait, the previous code used `http://localhost:${port}/v1/groq/models?email=...`
+          // which likely uses the backend to fetch. I should probably modify the backend to fetch from the internal API
+          // OR I can try to fetch from renderer if I have the token.
+          // Since I don't see the token here (it's in the main process store possibly), I should stick to the local proxy but
+          // maybe I need to update the local proxy (server/groq.ts) to hit the internal API or return more data.
+
+          // But the user request implies I should do it here or result in that data.
+          // Let's stick to the existing pattern: fetch from local proxy, but maybe I need to update the local proxy?
+          // The local proxy matches `v1/groq/models`.
+
+          // Let's update `src/main/server/groq.ts` effectively?
+          // User said "hover ... derived from response of GET ...".
+          // If I change the frontend to use `GroqModelSelector` which expects `GroqModel` shape,
+          // I need `groqModelsList` to contain that shape.
+
+          // Let's assume I can change the endpoint or just fetch it.
+          // If I change `index.tsx` to fetch from `https://api.groq.com/internal/v1/models`, I need the API Key.
+          // I don't have the API key in renderer (it's in `accounts` but maybe hidden or I need to request it).
+          // Actually `accounts` in `index.tsx` has `email` but not `apiKey`.
+
+          // So I probably need to update the backend `src/main/server/groq.ts` to fetch from the internal API instead of the public one
+          // OR returns the full object.
+
+          // Let's checking `src/main/server/groq.ts` first?
+          // I'll update the frontend to EXPECT the data, and if it's missing, I'll update the backend.
+
+          // For this step I'll just update the component usage and state type.
 
           const res = await fetch(
             `http://localhost:${port}/v1/groq/models?email=${encodeURIComponent(acc.email)}`,
@@ -772,25 +844,11 @@ export const PlaygroundPage = () => {
       )}
       {selectedProvider === 'Groq' && (
         <div className="flex items-center gap-2 ml-2">
-          <div className="w-[200px]">
-            <CustomSelect
+          <div className="w-[300px]">
+            <GroqModelSelector
               value={groqModel}
               onChange={setGroqModel}
-              options={
-                groqModelsList.length > 0
-                  ? groqModelsList.map((m) => ({
-                      value: m.id,
-                      label: m.id,
-                    }))
-                  : [
-                      { value: 'openai/gpt-oss-120b', label: 'GPT OSS 120B' },
-                      { value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B' },
-                      { value: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B' },
-                      { value: 'mixtral-8x7b-32768', label: 'Mixtral 8x7B' },
-                      { value: 'gemma-7b-it', label: 'Gemma 7B' },
-                      { value: 'qwen/qwen3-32b', label: 'Qwen3 32B' },
-                    ]
-              }
+              models={groqModelsList}
               placeholder="Select Model"
             />
           </div>
@@ -818,98 +876,111 @@ export const PlaygroundPage = () => {
           ))}
         </div>
       </div>
-      <div className="flex-1 flex overflow-hidden rounded-xl border bg-card">
+      <div className="flex-1 overflow-hidden rounded-xl border bg-card flex" ref={sidebarRef}>
         {/* Sidebar */}
-        <div className="w-64 border-r bg-muted/10 flex flex-col p-4 gap-4">
-          {/* Top Sidebar: Provider Icon */}
-          <div className="flex items-center gap-2 px-2 pb-4 border-b shrink-0">
-            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-background border shadow-sm">
-              <img
-                src={
-                  selectedProvider === 'Claude'
-                    ? claudeIcon
-                    : selectedProvider === 'ChatGPT'
-                      ? chatgptIcon
-                      : selectedProvider === 'Mistral'
-                        ? mistralIcon
-                        : selectedProvider === 'Kimi'
-                          ? kimiIcon
-                          : selectedProvider === 'Qwen'
-                            ? qwenIcon
-                            : selectedProvider === 'Cohere'
-                              ? cohereIcon
-                              : selectedProvider === 'Groq'
-                                ? groqIcon
-                                : deepseekIcon
-                }
-                alt="Provider"
-                className="w-5 h-5"
-              />
+        <div
+          className="flex flex-col h-full border-r bg-muted/10 shrink-0"
+          style={{ width: sidebarWidth }}
+        >
+          <div className="flex flex-col h-full p-4 gap-4 overflow-hidden">
+            {/* Top Sidebar: Provider Icon */}
+            <div className="flex items-center gap-2 px-2 pb-4 border-b shrink-0">
+              <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-background border shadow-sm">
+                <img
+                  src={
+                    selectedProvider === 'Claude'
+                      ? claudeIcon
+                      : selectedProvider === 'ChatGPT'
+                        ? chatgptIcon
+                        : selectedProvider === 'Mistral'
+                          ? mistralIcon
+                          : selectedProvider === 'Kimi'
+                            ? kimiIcon
+                            : selectedProvider === 'Qwen'
+                              ? qwenIcon
+                              : selectedProvider === 'Cohere'
+                                ? cohereIcon
+                                : selectedProvider === 'Groq'
+                                  ? groqIcon
+                                  : deepseekIcon
+                  }
+                  alt="Provider"
+                  className="w-5 h-5"
+                />
+              </div>
+              <span className="font-bold text-lg">{selectedProvider || 'P'}</span>
             </div>
-            <span className="font-bold text-lg">{selectedProvider || 'P'}</span>
-          </div>
 
-          <button
-            onClick={startNewChat}
-            className="flex items-center gap-2 w-full px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors shrink-0"
-          >
-            <Plus className="w-4 h-4 text-white" />
-            <span className="font-medium text-white">New Chat</span>
-          </button>
-
-          {selectedProvider === 'Groq' ? (
-            <GroqSidebarSettings settings={groqSettings} onSettingsChange={setGroqSettings} />
-          ) : (
-            <div className="flex-1 overflow-y-auto space-y-1">
-              <p className="text-xs font-medium text-muted-foreground px-2 py-2">Recents</p>
-              {history.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => loadConversation(item.id)}
-                  className={`w-full text-left px-3 py-2 rounded-md hover:bg-accent hover:text-accent-foreground text-sm truncate transition-colors flex items-center gap-2 ${
-                    activeChatId === item.id ? 'bg-accent' : ''
-                  }`}
-                >
-                  <span className="truncate">{item.title}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* User Info (Bottom Sidebar) */}
-          <div className="mt-auto border-t pt-4 flex items-center gap-3 shrink-0">
-            {account ? (
-              <>
-                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
-                  {account.picture ? (
-                    <img src={account.picture} className="w-full h-full object-cover" />
-                  ) : (
-                    <User className="h-4 w-4 text-primary" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{account.name || 'User'}</p>
-                  <p className="text-xs text-muted-foreground truncate">{account.email}</p>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
-                  <User className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate text-muted-foreground">No Account</p>
-                </div>
-              </>
-            )}
-            <button className="text-muted-foreground hover:text-foreground">
-              <MoreHorizontal className="h-4 w-4" />
+            <button
+              onClick={startNewChat}
+              className="flex items-center gap-2 w-full px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors shrink-0"
+            >
+              <Plus className="w-4 h-4 text-white" />
+              <span className="font-medium text-white">New Chat</span>
             </button>
+
+            {selectedProvider === 'Groq' ? (
+              <GroqSidebarSettings settings={groqSettings} onSettingsChange={setGroqSettings} />
+            ) : (
+              <div className="flex-1 overflow-y-auto space-y-1">
+                <p className="text-xs font-medium text-muted-foreground px-2 py-2">Recents</p>
+                {history.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => loadConversation(item.id)}
+                    className={`w-full text-left px-3 py-2 rounded-md hover:bg-accent hover:text-accent-foreground text-sm truncate transition-colors flex items-center gap-2 ${
+                      activeChatId === item.id ? 'bg-accent' : ''
+                    }`}
+                  >
+                    <span className="truncate">{item.title}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* User Info (Bottom Sidebar) */}
+            <div className="mt-auto border-t pt-4 flex items-center gap-3 shrink-0">
+              {account ? (
+                <>
+                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
+                    {account.picture ? (
+                      <img src={account.picture} className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="h-4 w-4 text-primary" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{account.name || 'User'}</p>
+                    <p className="text-xs text-muted-foreground truncate">{account.email}</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate text-muted-foreground">No Account</p>
+                  </div>
+                </>
+              )}
+              <button className="text-muted-foreground hover:text-foreground">
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
 
+        {/* Resizer Handle */}
+        <div
+          className="w-1 bg-border hover:bg-primary/50 cursor-col-resize transition-colors flex items-center justify-center group"
+          onMouseDown={startResizing}
+        >
+          <div className="h-8 w-[2px] bg-muted-foreground/20 group-hover:bg-primary rounded-full" />
+        </div>
+
         {/* Main Content */}
-        <div className="flex-1 flex flex-col relative">
+        <div className="flex-1 flex flex-col relative h-full min-w-0">
           {/* Only show Account Selectors at top right or similar, or keep them above chat? 
             For now, I'll place them floating or in the top bar if in chat, 
             but for the request "Section centered" usually implies a clean look. 
