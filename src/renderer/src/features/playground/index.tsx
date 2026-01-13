@@ -18,6 +18,8 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  backend_uuid?: string;
+  read_write_token?: string;
 }
 
 interface Account {
@@ -315,11 +317,19 @@ export const PlaygroundPage = () => {
               }
 
               const content = parsed.choices?.[0]?.delta?.content;
-              if (content) {
+              const backend_uuid = parsed.choices?.[0]?.delta?.backend_uuid;
+              const read_write_token = parsed.choices?.[0]?.delta?.read_write_token;
+
+              if (content || backend_uuid || read_write_token) {
                 setMessages((prev) =>
                   prev.map((msg) =>
                     msg.id === assistantMessageId
-                      ? { ...msg, content: msg.content + content }
+                      ? {
+                          ...msg,
+                          content: msg.content + (content || ''),
+                          backend_uuid: backend_uuid || msg.backend_uuid,
+                          read_write_token: read_write_token || msg.read_write_token,
+                        }
                       : msg,
                   ),
                 );
@@ -526,7 +536,13 @@ export const PlaygroundPage = () => {
               : selectedProvider === 'Kimi' || selectedProvider === 'Qwen'
                 ? []
                 : selectedProvider === 'Perplexity'
-                  ? data.messages || []
+                  ? data.messages?.map((msg: any) => ({
+                      id: msg.id || crypto.randomUUID(),
+                      role: msg.role,
+                      content: msg.content,
+                      backend_uuid: msg.backend_uuid,
+                      read_write_token: msg.read_write_token,
+                    })) || []
                   : data.chat_messages
                       ?.map((msg: any) => ({
                         id: msg.message_id,

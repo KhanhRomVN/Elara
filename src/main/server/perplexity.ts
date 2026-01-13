@@ -17,6 +17,7 @@ export async function chatCompletionStream(
     onContent: (content: string) => void;
     onDone: () => void;
     onError: (error: Error) => void;
+    onMetadata?: (metadata: any) => void;
   },
 ) {
   try {
@@ -34,14 +35,14 @@ export async function chatCompletionStream(
         search_focus: 'internet',
         sources: ['web'],
         search_recency_filter: null,
-        frontend_uuid: randomUUID(),
+        frontend_uuid: (payload as any).frontend_uuid || randomUUID(),
         mode: 'concise',
         model_preference: 'turbo',
         is_related_query: false,
         is_sponsored: false,
         frontend_context_uuid: randomUUID(),
         prompt_source: 'user',
-        query_source: 'home',
+        query_source: (payload as any).last_backend_uuid ? 'followup' : 'home',
         is_incognito: false,
         use_schematized_api: true,
         send_back_text_in_streaming_api: false,
@@ -87,6 +88,13 @@ export async function chatCompletionStream(
         force_enable_browser_agent: false,
         supported_features: ['browser_agent_permission_banner_v1.1'],
         version: '2.18',
+        ...((payload as any).last_backend_uuid
+          ? {
+              last_backend_uuid: (payload as any).last_backend_uuid,
+              read_write_token: (payload as any).read_write_token,
+              conversation_uuid: (payload as any).conversation_uuid,
+            }
+          : {}),
       },
       query_str: prompt,
     };
@@ -134,6 +142,14 @@ export async function chatCompletionStream(
 
               // Extract content from streaming response
               if (data.blocks) {
+                // Check if we have backend_uuid/read_write_token in this chunk to emit as metadata
+                if (data.backend_uuid && callbacks.onMetadata) {
+                  callbacks.onMetadata({
+                    backend_uuid: data.backend_uuid,
+                    read_write_token: data.read_write_token || (payload as any).read_write_token,
+                  });
+                }
+
                 for (const block of data.blocks) {
                   if (block.intended_usage === 'ask_text_0_markdown') {
                     console.log('[Perplexity] Found text block. Has diff:', !!block.diff_block);
@@ -352,6 +368,9 @@ export async function getConversationDetail(
                       role: 'assistant',
                       content: assistantContent,
                       timestamp: new Date(),
+                      // Store context for replying
+                      backend_uuid: entry.backend_uuid,
+                      read_write_token: data.read_write_token, // From top-level response
                     });
                   } else {
                     console.log('[Perplexity] No assistant content found for entry');

@@ -167,7 +167,8 @@ expressApp.get('/v1/models', (_req, res) => {
 
 expressApp.post('/v1/chat/completions', async (req, res) => {
   try {
-    const { model, messages, thinking, search, conversation_id, parent_message_id } = req.body;
+    const { model, messages, thinking, search, conversation_id, parent_message_id, temperature } =
+      req.body;
 
     // Priority: Headers -> Query Params
     const authHeader = req.headers.authorization;
@@ -321,11 +322,52 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
       await cohereChat(account.credential, model, messages, callbacks.onContent);
       callbacks.onDone();
     } else if (account.provider === 'Perplexity') {
+      // Check for Perplexity context in previous messages
+      let perplexityContext: any = {};
+      if (model.includes('perplexity') || model.includes('pplx')) {
+        const lastAssistantMessage = [...messages]
+          .reverse()
+          .find((m) => m.role === 'assistant' && (m as any).backend_uuid);
+        if (lastAssistantMessage) {
+          perplexityContext = {
+            last_backend_uuid: (lastAssistantMessage as any).backend_uuid,
+            read_write_token: (lastAssistantMessage as any).read_write_token,
+            conversation_uuid: (lastAssistantMessage as any).id, // Is this thread ID? API expects conversation_uuid?
+            // Actually API response doesn't explicitly return conversation_uuid in entries, but getConversations returns uuid.
+            // When getting details, we might need to store the conversation ID in the messages too?
+            // For now, let's assume if we have backend_uuid we are good for follow up.
+          };
+        }
+      }
+
       await perplexityChat(
         account.credential,
-        { model, messages, stream: true },
+        {
+          messages,
+          model,
+          temperature,
+          ...perplexityContext,
+        },
         account.userAgent,
-        callbacks,
+        {
+          onContent: (content) => {
+            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`);
+          },
+          onMetadata: (metadata) => {
+            res.write(`data: ${JSON.stringify({ choices: [{ delta: { ...metadata } }] })}\n\n`);
+          },
+          onDone: () => {
+            res.write('data: [DONE]\n\n');
+            res.end();
+          },
+          onError: (error) => {
+            console.error('Perplexity Chat Error:', error);
+            res.write(
+              `data: ${JSON.stringify({ error: { message: error.message || 'Unknown error' } })}\n\n`,
+            );
+            res.end();
+          },
+        },
       );
     } else if (account.provider === 'Groq') {
       await groqChat(req, res, account);
