@@ -813,7 +813,7 @@ export const setupAccountsHandlers = () => {
         activeOAuthServer.stop();
       }
       activeOAuthServer = new AntigravityAuthServer();
-      const { url } = await activeOAuthServer.start();
+      const url = await activeOAuthServer.start();
       return { success: true, url };
     } catch (error: any) {
       console.error('[Accounts] Antigravity Prepare OAuth Error:', error);
@@ -828,8 +828,8 @@ export const setupAccountsHandlers = () => {
 
     try {
       const code = await activeOAuthServer.waitForCode();
-      const tokenRes = await activeOAuthServer.exchangeCode(code);
-      const userInfo = await activeOAuthServer.getUserInfo(tokenRes.access_token);
+      const tokenRes: any = await activeOAuthServer.exchangeCode(code);
+      const userInfo: any = await activeOAuthServer.getUserInfo(tokenRes.access_token);
 
       activeOAuthServer.stop();
       activeOAuthServer = null;
@@ -869,8 +869,8 @@ export const setupAccountsHandlers = () => {
   // Handler for adding via Refresh Token manually
   ipcMain.handle('accounts:antigravity:add-by-token', async (_, refreshToken: string) => {
     try {
-      const tokenRes = await AntigravityAuthServer.refreshAccessToken(refreshToken);
-      const userInfo = await new AntigravityAuthServer().getUserInfo(tokenRes.access_token);
+      const tokenRes: any = await AntigravityAuthServer.refreshAccessToken(refreshToken);
+      const userInfo: any = await new AntigravityAuthServer().getUserInfo(tokenRes.access_token);
 
       // Inject the manual refresh token into the response if it wasn't returned (it usually isn't)
       if (!tokenRes.refresh_token) {

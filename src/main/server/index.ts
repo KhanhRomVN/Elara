@@ -35,6 +35,10 @@ import {
 } from './perplexity';
 import { sendMessage as cohereChat } from './cohere';
 import { chatCompletionStream as groqChat, getModels as getGroqModels } from './groq';
+import {
+  chatCompletionStream as antigravityChat,
+  getModels as getAntigravityModels,
+} from './antigravity';
 import * as gemini from './gemini';
 
 // ... (existing code)
@@ -374,6 +378,9 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
       return;
     } else if (account.provider === 'Gemini') {
       await gemini.chatCompletionStream(req, res, account);
+      return;
+    } else if (account.provider === 'Antigravity') {
+      await antigravityChat(req, res, account);
       return;
     } else {
       res.write(`data: {"error": "Provider not supported"}\n\n`);
@@ -718,6 +725,36 @@ expressApp.get('/v1/groq/models', async (req, res) => {
     res.json(models);
   } catch (error: any) {
     console.error('[Server] Get Groq Models Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get Antigravity models
+expressApp.get('/v1/antigravity/models', async (req, res) => {
+  try {
+    const emailQuery = req.query.email as string;
+
+    if (!fs.existsSync(DATA_FILE)) {
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
+    }
+
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    let account = accounts.find((a) => a.email === emailQuery && a.provider === 'Antigravity');
+
+    if (!account) {
+      account = accounts.find((a) => a.provider === 'Antigravity' && a.status === 'Active');
+    }
+
+    if (!account) {
+      res.status(401).json({ error: 'No valid Antigravity account found' });
+      return;
+    }
+
+    const models = await getAntigravityModels(account);
+    res.json(models);
+  } catch (error: any) {
+    console.error('[Server] Get Antigravity Models Error:', error);
     res.status(500).json({ error: error.message });
   }
 });

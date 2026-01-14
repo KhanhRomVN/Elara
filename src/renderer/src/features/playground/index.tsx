@@ -11,9 +11,12 @@ import cohereIcon from '../../assets/provider_icons/cohere.svg';
 import perplexityIcon from '../../assets/provider_icons/perplexity.svg';
 import groqIcon from '../../assets/provider_icons/groq.svg';
 import geminiIcon from '../../assets/provider_icons/gemini.svg';
+import antigravityIcon from '../../assets/provider_icons/antigravity.svg';
 import { Switch } from '../../core/components/Switch';
 import { GroqSidebarSettings, FunctionParams } from './components/GroqSidebarSettings';
 import { GroqModelSelector } from './components/GroqModelSelector';
+import { AntigravityModelSelector } from './components/AntigravityModelSelector';
+import { Bot } from 'lucide-react';
 
 interface Message {
   id: string;
@@ -35,7 +38,8 @@ interface Account {
     | 'Kimi'
     | 'Qwen'
     | 'Cohere'
-    | 'Perplexity';
+    | 'Perplexity'
+    | 'Antigravity';
   email: string;
   name?: string;
   picture?: string;
@@ -141,6 +145,7 @@ export const PlaygroundPage = () => {
     | 'Cohere'
     | 'Perplexity'
     | 'Groq'
+    | 'Antigravity'
     | ''
   >('');
   const [selectedAccount, setSelectedAccount] = useState<string>('');
@@ -153,6 +158,9 @@ export const PlaygroundPage = () => {
   const [searchEnabled, setSearchEnabled] = useState(false);
   const [claudeModel, setClaudeModel] = useState('claude-sonnet-4-5-20250929');
   const [chatgptModel, setChatgptModel] = useState('gpt-4o');
+  // Antigravity State
+  const [antigravityModel, setAntigravityModel] = useState('models/gemini-3-pro-preview');
+  const [antigravityModelsList, setAntigravityModelsList] = useState<any[]>([]);
 
   // Groq State
   const [groqModel, setGroqModel] = useState('openai/gpt-oss-120b');
@@ -311,6 +319,39 @@ export const PlaygroundPage = () => {
           console.error('Failed to fetch Groq models', e);
         }
       }
+
+      if (selectedProvider === 'Antigravity' && selectedAccount) {
+        try {
+          // @ts-ignore
+          const status = await window.api.server.start();
+          const port = status.port || 11434;
+          const acc = accounts.find((a) => a.id === selectedAccount);
+          if (!acc) return;
+
+          const res = await fetch(
+            `http://localhost:${port}/v1/antigravity/models?email=${encodeURIComponent(acc.email)}`,
+          );
+          if (res.ok) {
+            const data = await res.json();
+            if (data.models) {
+              if (Array.isArray(data.models)) {
+                setAntigravityModelsList(data.models);
+              } else {
+                // Convert object map to array of model objects, ensuring 'name' exists
+                const modelsArray = Object.entries(data.models).map(
+                  ([key, val]: [string, any]) => ({
+                    ...val,
+                    name: val.name || key,
+                  }),
+                );
+                setAntigravityModelsList(modelsArray);
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Failed to fetch Antigravity models', e);
+        }
+      }
     };
     fetchGroqModels();
   }, [selectedProvider, selectedAccount, accounts]);
@@ -376,7 +417,9 @@ export const PlaygroundPage = () => {
                         ? 'command-r7b-12-2024'
                         : account.provider === 'Groq'
                           ? groqModel
-                          : 'deepseek-chat',
+                          : account.provider === 'Antigravity'
+                            ? antigravityModel
+                            : 'deepseek-chat',
           messages: [
             ...messages.map((msg) => ({
               role: msg.role,
@@ -557,7 +600,9 @@ export const PlaygroundPage = () => {
                       ? 'http://localhost:11434/v1/perplexity/conversations'
                       : selectedProvider === 'Groq'
                         ? 'http://localhost:11434/v1/groq/conversations'
-                        : 'http://localhost:11434/v1/deepseek/sessions';
+                        : selectedProvider === 'Antigravity'
+                          ? 'http://localhost:11434/v1/antigravity/conversations'
+                          : 'http://localhost:11434/v1/deepseek/sessions';
 
         const response = await fetch(`${endpoint}?email=${encodeURIComponent(account.email)}`);
 
@@ -760,6 +805,7 @@ export const PlaygroundPage = () => {
     { value: 'Perplexity', label: 'Perplexity', icon: perplexityIcon },
     { value: 'Groq', label: 'Groq', icon: groqIcon },
     { value: 'Gemini', label: 'Gemini', icon: geminiIcon },
+    { value: 'Antigravity', label: 'Antigravity', icon: antigravityIcon },
   ];
 
   const accountOptions = filteredAccounts.map((acc) => ({
@@ -842,6 +888,7 @@ export const PlaygroundPage = () => {
           </div>
         </>
       )}
+
       {selectedProvider === 'Groq' && (
         <div className="flex items-center gap-2 ml-2">
           <div className="w-[300px]">
@@ -852,6 +899,22 @@ export const PlaygroundPage = () => {
               placeholder="Select Model"
             />
           </div>
+        </div>
+      )}
+      {selectedProvider === 'Antigravity' && (
+        <div className="w-[300px]">
+          <AntigravityModelSelector
+            value={antigravityModel}
+            onChange={setAntigravityModel}
+            models={
+              antigravityModelsList.length > 0
+                ? antigravityModelsList
+                : [
+                    { name: 'models/gemini-3-pro-preview' },
+                    { name: 'models/gemini-3-flash-preview' },
+                  ]
+            }
+          />
         </div>
       )}
     </div>
