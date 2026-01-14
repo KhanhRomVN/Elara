@@ -12,6 +12,7 @@ import perplexityIcon from '../../../assets/provider_icons/perplexity.svg';
 import groqIcon from '../../../assets/provider_icons/groq.svg';
 import geminiIcon from '../../../assets/provider_icons/gemini.svg';
 import antigravityIcon from '../../../assets/provider_icons/antigravity.svg';
+import zaiIcon from '../../../assets/provider_icons/zai.svg';
 
 interface AddAccountDialogProps {
   open: boolean;
@@ -282,6 +283,15 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
       color: 'bg-purple-500/10 text-purple-500 border-purple-200/20',
       loginMethod: 'Google OAuth',
       browserType: 'Auth Server',
+    },
+    {
+      id: 'Zai',
+      name: 'Zai',
+      description: 'Z.ai Chat',
+      icon: zaiIcon, // Placeholder reusing Gemini icon
+      color: 'bg-indigo-500/10 text-indigo-500 border-indigo-200/20',
+      loginMethod: 'Direct',
+      browserType: 'Real Browser',
     },
   ];
 

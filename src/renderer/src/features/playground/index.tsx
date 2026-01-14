@@ -17,7 +17,7 @@ import { GroqSidebarSettings, FunctionParams } from './components/GroqSidebarSet
 import { GroqModelSelector } from './components/GroqModelSelector';
 import { AntigravityModelSelector } from './components/AntigravityModelSelector';
 import { GeminiModelSelector } from './components/GeminiModelSelector';
-import { Bot } from 'lucide-react';
+import { ZaiModelSelector } from './components/ZaiModelSelector';
 
 interface Message {
   id: string;
@@ -42,7 +42,9 @@ interface Account {
     | 'Perplexity'
     | 'Groq'
     | 'Gemini'
-    | 'Antigravity';
+    | 'Gemini'
+    | 'Antigravity'
+    | 'Zai';
   email: string;
   name?: string;
   picture?: string;
@@ -148,8 +150,10 @@ export const PlaygroundPage = () => {
     | 'Cohere'
     | 'Perplexity'
     | 'Groq'
+    | 'Groq'
     | 'Antigravity'
     | 'Gemini'
+    | 'Zai'
     | ''
   >('');
   const [selectedAccount, setSelectedAccount] = useState<string>('');
@@ -169,6 +173,10 @@ export const PlaygroundPage = () => {
   // Gemini State
   const [geminiModel, setGeminiModel] = useState('fbb127bbb056c959'); // Default to "Nhanh" usually
   const [geminiModelsList, setGeminiModelsList] = useState<any[]>([]);
+
+  // Zai State
+  const [zaiModel, setZaiModel] = useState('glm-4.7');
+  const [zaiModelsList, setZaiModelsList] = useState<any[]>([]);
 
   // Groq State
   const [groqModel, setGroqModel] = useState('openai/gpt-oss-120b');
@@ -410,6 +418,28 @@ export const PlaygroundPage = () => {
           console.error('Failed to fetch Gemini models', e);
         }
       }
+
+      if (selectedProvider === 'Zai' && selectedAccount) {
+        try {
+          // @ts-ignore
+          const status = await window.api.server.start();
+          const port = status.port || 11434;
+          const acc = accounts.find((a) => a.id === selectedAccount);
+          if (acc) {
+            const res = await fetch(
+              `http://localhost:${port}/v1/zai/models?email=${encodeURIComponent(acc.email)}`,
+            );
+            if (res.ok) {
+              const data = await res.json();
+              if (data && Array.isArray(data.data)) {
+                setZaiModelsList(data.data);
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Failed to fetch Zai models', e);
+        }
+      }
     };
     fetchGroqModels();
   }, [selectedProvider, selectedAccount, accounts, geminiModel]);
@@ -479,7 +509,9 @@ export const PlaygroundPage = () => {
                             ? antigravityModel
                             : account.provider === 'Gemini'
                               ? geminiModel
-                              : 'deepseek-chat',
+                              : account.provider === 'Zai'
+                                ? zaiModel
+                                : 'deepseek-chat',
           messages: [
             ...messages.map((msg) => ({
               role: msg.role,
@@ -662,7 +694,9 @@ export const PlaygroundPage = () => {
                         ? 'http://localhost:11434/v1/groq/conversations'
                         : selectedProvider === 'Antigravity'
                           ? 'http://localhost:11434/v1/antigravity/conversations'
-                          : 'http://localhost:11434/v1/deepseek/sessions';
+                          : selectedProvider === 'Zai'
+                            ? 'http://localhost:11434/v1/zai/conversations'
+                            : 'http://localhost:11434/v1/deepseek/sessions';
 
         const response = await fetch(`${endpoint}?email=${encodeURIComponent(account.email)}`);
 
@@ -796,17 +830,19 @@ export const PlaygroundPage = () => {
                       backend_uuid: msg.backend_uuid,
                       read_write_token: msg.read_write_token,
                     })) || []
-                  : data.chat_messages
-                      ?.map((msg: any) => ({
-                        id: msg.message_id,
-                        role: msg.role === 'USER' ? ('user' as const) : ('assistant' as const),
-                        content:
-                          msg.fragments
-                            ?.map((f: any) => f.content || '')
-                            .join('')
-                            .trim() || '',
-                      }))
-                      .filter((m: Message) => m.content) || [];
+                  : selectedProvider === 'Zai'
+                    ? [] // Zai history structure TBD
+                    : data.chat_messages
+                        ?.map((msg: any) => ({
+                          id: msg.message_id,
+                          role: msg.role === 'USER' ? ('user' as const) : ('assistant' as const),
+                          content:
+                            msg.fragments
+                              ?.map((f: any) => f.content || '')
+                              .join('')
+                              .trim() || '',
+                        }))
+                        .filter((m: Message) => m.content) || [];
 
         setMessages(formattedMessages);
         setActiveChatId(conversationId);
@@ -862,10 +898,12 @@ export const PlaygroundPage = () => {
     { value: 'Mistral', label: 'Mistral', icon: mistralIcon },
     { value: 'Kimi', label: 'Kimi', icon: kimiIcon },
     { value: 'Qwen', label: 'Qwen', icon: qwenIcon },
+    { value: 'Cohere', label: 'Cohere', icon: cohereIcon },
     { value: 'Perplexity', label: 'Perplexity', icon: perplexityIcon },
     { value: 'Groq', label: 'Groq', icon: groqIcon },
     { value: 'Gemini', label: 'Gemini', icon: geminiIcon },
     { value: 'Antigravity', label: 'Antigravity', icon: antigravityIcon },
+    { value: 'Zai', label: 'Zai', icon: geminiIcon },
   ];
 
   const accountOptions = filteredAccounts.map((acc) => ({
@@ -967,6 +1005,16 @@ export const PlaygroundPage = () => {
             value={geminiModel}
             onChange={setGeminiModel}
             models={geminiModelsList}
+            disabled={loading || isStreaming}
+          />
+        </div>
+      )}
+      {selectedProvider === 'Zai' && (
+        <div className="w-[300px]">
+          <ZaiModelSelector
+            value={zaiModel}
+            onChange={setZaiModel}
+            models={zaiModelsList}
             disabled={loading || isStreaming}
           />
         </div>

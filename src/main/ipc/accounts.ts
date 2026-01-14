@@ -12,6 +12,7 @@ import { login as loginGroq } from '../server/groq';
 import { login as loginGemini } from '../server/gemini';
 import { login as loginPerplexity } from '../server/perplexity';
 import { AntigravityAuthServer } from '../server/antigravity';
+import { login as loginZai } from '../server/zai';
 import { proxyEvents } from '../server/proxy';
 
 const DATA_FILE = path.join(app.getPath('userData'), 'accounts.json');
@@ -35,7 +36,9 @@ export interface Account {
     | 'Perplexity'
     | 'Groq'
     | 'Gemini'
-    | 'Antigravity';
+    | 'Gemini'
+    | 'Antigravity'
+    | 'Zai';
   email: string;
   credential: string; // cookie or api key
   status: 'Active' | 'Rate Limit' | 'Error';
@@ -254,7 +257,10 @@ export const setupAccountsHandlers = () => {
         | 'Cohere'
         | 'Groq'
         | 'Gemini'
-        | 'Perplexity',
+        | 'Groq'
+        | 'Gemini'
+        | 'Perplexity'
+        | 'Zai',
     ) => {
       return new Promise(async (resolve) => {
         // Use a consistent, real Chrome user agent by stripping Electron/App identifiers
@@ -490,6 +496,39 @@ export const setupAccountsHandlers = () => {
             resolve({ success: true, account: newAccount });
           } catch (e: any) {
             resolve({ success: false, error: e.message || 'Perplexity login failed' });
+          }
+          return;
+        }
+
+        if (provider === 'Zai') {
+          try {
+            console.log('[Accounts] Starting Zai login flow (Real Browser)...');
+            const { cookies, email, metadata, name, avatar } = await loginZai();
+            const finalEmail = email || 'zai@user.com';
+
+            const newAccount: Account = {
+              id: crypto.randomUUID(),
+              provider: 'Zai',
+              email: finalEmail,
+              credential: cookies, // or metadata.token, but we keep structure
+              metadata: metadata,
+              status: 'Active',
+              usage: '0',
+              totalRequests: 0,
+              successfulRequests: 0,
+              totalDuration: 0,
+              tokensToday: 0,
+              statsDate: new Date().toISOString().split('T')[0],
+              lastActive: new Date().toISOString(),
+              userAgent,
+              name: name || undefined,
+              picture: avatar || undefined,
+            };
+
+            saveAccount(newAccount);
+            resolve({ success: true, account: newAccount });
+          } catch (e: any) {
+            resolve({ success: false, error: e.message || 'Zai login failed' });
           }
           return;
         }

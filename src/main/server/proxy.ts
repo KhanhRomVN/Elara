@@ -124,6 +124,17 @@ export const startProxy = (): Promise<void> => {
             proxyEvents.emit('perplexity-cookies', reqCookies);
           }
         }
+
+        // Zai
+        if (host.includes('chat.z.ai')) {
+          console.log(`[Proxy] Intercepting Zai request: ${url}`);
+          const authHeader = ctx.clientToProxyRequest.headers.authorization;
+          if (authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.split(' ')[1];
+            console.log('[Proxy] Found Bearer token in Zai Request!');
+            proxyEvents.emit('zai-token', token);
+          }
+        }
       }
       return callback();
     });

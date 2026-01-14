@@ -40,6 +40,7 @@ import {
   getModels as getAntigravityModels,
 } from './antigravity';
 import * as gemini from './gemini';
+import * as zai from './zai';
 
 // ... (existing code)
 
@@ -165,6 +166,8 @@ expressApp.get('/v1/models', (_req, res) => {
       // Gemini
       { id: 'gemini-pro', object: 'model', created: 1677610602, owned_by: 'google' },
       { id: 'gemini-ultra', object: 'model', created: 1677610602, owned_by: 'google' },
+      // Zai
+      { id: 'glm-4.7', object: 'model', created: 1677610602, owned_by: 'zai' },
     ],
   });
 });
@@ -230,7 +233,9 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
                       ? 'Perplexity'
                       : model.includes('gemini')
                         ? 'Gemini'
-                        : 'DeepSeek';
+                        : model.includes('glm')
+                          ? 'Zai'
+                          : 'DeepSeek';
       const finalProvider = targetProvider || inferredProvider;
       account = accounts.find((a) => a.provider === finalProvider && a.status === 'Active');
     }
@@ -378,6 +383,9 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
       return;
     } else if (account.provider === 'Gemini') {
       await gemini.chatCompletionStream(req, res, account);
+      return;
+    } else if (account.provider === 'Zai') {
+      await zai.chatCompletionStream(req, res, account);
       return;
     } else if (account.provider === 'Antigravity') {
       await antigravityChat(req, res, account);
