@@ -131,7 +131,7 @@ export const startProxy = (): Promise<void> => {
           const authHeader = ctx.clientToProxyRequest.headers.authorization;
           if (authHeader && authHeader.startsWith('Bearer ')) {
             const token = authHeader.split(' ')[1];
-            console.log('[Proxy] Found Bearer token in Zai Request!');
+            console.log('[Proxy] Found Bearer token in Zai Request! Token length:', token.length);
             proxyEvents.emit('zai-token', token);
           }
         }
@@ -147,6 +147,7 @@ export const startProxy = (): Promise<void> => {
         if (
           host.includes('gemini.google.com') ||
           host.includes('google.com') ||
+          host.includes('chat.z.ai') ||
           (host.includes('www.googleapis.com') &&
             ctx.clientToProxyRequest.url.includes('/userinfo'))
         ) {
@@ -205,6 +206,31 @@ export const startProxy = (): Promise<void> => {
                     console.error('[Proxy] Failed to parse User Info:', e);
                   }
                 }
+
+                // Logic for Zai User Info
+                if (
+                  host.includes('chat.z.ai') &&
+                  (ctx.clientToProxyRequest.url.includes('/api/v1/users/user/settings') ||
+                    ctx.clientToProxyRequest.url.includes('/api/v1/auths/signin'))
+                ) {
+                  try {
+                    const json = JSON.parse(body);
+                    // Check for typical structure: { "data": { ... } } or direct fields
+                    // User said responseBody has email, name, profile_image_url directly or in data?
+                    // Let's assume root or data.
+                    const data = json.data || json;
+                    if (data && (data.email || data.username || data.name)) {
+                      console.log('[Proxy] Found Zai User Info:', JSON.stringify(data));
+                      proxyEvents.emit('zai-user-info', {
+                        email: data.email,
+                        name: data.name || data.username,
+                        avatar: data.profile_image_url || data.avatar,
+                      });
+                    }
+                  } catch (e) {
+                    console.error('[Proxy] Failed to parse Zai User Info:', e);
+                  }
+                }
               });
 
               decoder.on('error', (err: any) => {
@@ -223,6 +249,45 @@ export const startProxy = (): Promise<void> => {
                   if (snlm0eMatch && snlm0eMatch[1]) {
                     console.log('[Proxy] Found SNlM0e in Gemini Response Body!');
                     proxyEvents.emit('gemini-metadata', { snlm0e: snlm0eMatch[1] });
+                  }
+                }
+
+                // Logic for User Info (Uncompressed)
+                if (
+                  host.includes('www.googleapis.com') &&
+                  ctx.clientToProxyRequest.url.includes('/userinfo')
+                ) {
+                  try {
+                    const userInfo = JSON.parse(body);
+                    console.log('[Proxy] Found User Info in Google API Response! (Uncompressed)');
+                    proxyEvents.emit('gemini-user-info', userInfo);
+                  } catch (e) {
+                    console.error('[Proxy] Failed to parse User Info (Uncompressed):', e);
+                  }
+                }
+
+                // Logic for Zai User Info (Uncompressed)
+                if (
+                  host.includes('chat.z.ai') &&
+                  (ctx.clientToProxyRequest.url.includes('/api/v1/users/user/settings') ||
+                    ctx.clientToProxyRequest.url.includes('/api/v1/auths/signin'))
+                ) {
+                  try {
+                    const json = JSON.parse(body);
+                    const data = json.data || json;
+                    if (data && (data.email || data.username || data.name)) {
+                      console.log(
+                        '[Proxy] Found Zai User Info (Uncompressed):',
+                        JSON.stringify(data),
+                      );
+                      proxyEvents.emit('zai-user-info', {
+                        email: data.email,
+                        name: data.name || data.username,
+                        avatar: data.profile_image_url || data.avatar,
+                      });
+                    }
+                  } catch (e) {
+                    console.error('[Proxy] Failed to parse Zai User Info (Uncompressed):', e);
                   }
                 }
               });

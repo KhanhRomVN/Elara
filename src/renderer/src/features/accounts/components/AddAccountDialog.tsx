@@ -50,6 +50,9 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     console.log('[AddAccountDialog] handleLogin called for provider:', provider);
+    if (provider === 'Zai') {
+      console.log('[AddAccountDialog] Logging in with Zai...');
+    }
 
     if (provider === 'Antigravity') {
       // Handled separately in render via specialized UI, but if form submitted:

@@ -504,6 +504,7 @@ export const setupAccountsHandlers = () => {
           try {
             console.log('[Accounts] Starting Zai login flow (Real Browser)...');
             const { cookies, email, metadata, name, avatar } = await loginZai();
+            console.log('[Accounts] Zai login successful. Captured email:', email, 'Name:', name);
             const finalEmail = email || 'zai@user.com';
 
             const newAccount: Account = {
@@ -525,9 +526,11 @@ export const setupAccountsHandlers = () => {
               picture: avatar || undefined,
             };
 
+            console.log('[Accounts] Saving Zai account:', JSON.stringify(newAccount, null, 2));
             saveAccount(newAccount);
             resolve({ success: true, account: newAccount });
           } catch (e: any) {
+            console.error('[Accounts] Zai login failed:', e);
             resolve({ success: false, error: e.message || 'Zai login failed' });
           }
           return;

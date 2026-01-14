@@ -49,7 +49,7 @@ export const chatCompletionStream = async (req: Request, res: Response, account:
       auto_web_search: true,
     };
 
-    console.log('[Zai] Sending chat request:', JSON.stringify(payload));
+    console.log('[Zai] Sending chat request payload:', JSON.stringify(payload, null, 2));
 
     const response = await fetch('https://chat.z.ai/api/v2/chat/completions', {
       method: 'POST',
@@ -65,9 +65,12 @@ export const chatCompletionStream = async (req: Request, res: Response, account:
       body: JSON.stringify(payload),
     });
 
+    console.log('[Zai] API Response Status:', response.status);
+    console.log('[Zai] API Response Headers:', JSON.stringify([...response.headers.entries()]));
+
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[Zai] API Error:', response.status, errorText);
+      console.error('[Zai] API Error Body:', errorText);
       res.status(response.status).json({ error: errorText });
       return;
     }
@@ -84,6 +87,8 @@ export const chatCompletionStream = async (req: Request, res: Response, account:
         const { done, value } = await reader.read();
         if (done) break;
         const chunk = decoder.decode(value);
+        // console.log('[Zai] Received chunk:', chunk); // Verbose log
+
         // Zai sends SSE format: "data: {...}"
         // We can just forward the chunk if it matches OpenAI format,
         // or we parse and re-emit.
@@ -211,7 +216,7 @@ export async function login() {
     };
 
     const onToken = (token: string) => {
-      console.log('[Zai] Token captured');
+      console.log('[Zai] Token captured. Length:', token.length);
       capturedToken = token;
       if (capturedUserInfo) finalize();
     };
