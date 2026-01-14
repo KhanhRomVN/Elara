@@ -57,6 +57,11 @@ if (!gotTheLock) {
     setupCommandsHandlers();
     setupStatsHandlers();
 
+    // Import and register proxy handlers
+    import('./ipc/proxy').then(({ registerProxyIpcHandlers }) => {
+      registerProxyIpcHandlers();
+    });
+
     // Start API server
     startServer();
 

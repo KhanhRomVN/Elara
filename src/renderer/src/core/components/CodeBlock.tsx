@@ -33,21 +33,27 @@ interface CodeBlockProps {
   onEditorMounted?: (editor: any) => void;
   readOnly?: boolean;
   onChange?: (value: string) => void;
+  maxLines?: number; // Maximum number of lines to display
 }
 
 const SYSTEMA_THEME = {
   base: 'vs-dark',
   inherit: true,
   rules: [
-    { token: 'string.key.json', foreground: '#e06c75' }, // Red/Pink for keys
-    { token: 'string.value.json', foreground: '#98c379' }, // Green for string values
-    { token: 'number', foreground: '#d19a66' }, // Orange for numbers
-    { token: 'keyword.json', foreground: '#56b6c2' }, // Cyan for booleans/null
-    { token: 'delimiter', foreground: '#abb2bf' }, // White/Grey for braces
+    { token: 'string.key.json', foreground: 'a78bfa' }, // Light Purple for keys
+    { token: 'string.value.json', foreground: '38bdf8' }, // Sky Blue for string values
+    { token: 'number', foreground: 'f472b6' }, // Pink for numbers
+    { token: 'keyword.json', foreground: '818cf8' }, // Indigo for keywords (true/false/null)
+    { token: 'delimiter', foreground: '94a3b8' }, // Slate Grey for delimiters
+    { token: 'comment', foreground: '64748b', fontStyle: 'italic' }, // Slate for comments
   ],
   colors: {
-    'editor.background': '#1e1e1e', // Default dark background
-    'editor.foreground': '#abb2bf',
+    'editor.background': '#020617', // Deep blue-black (slate-950)
+    'editor.foreground': '#e2e8f0', // Slate-200
+    'editorLineNumber.foreground': '#475569', // Slate-600
+    'editor.lineHighlightBackground': '#1e293b', // Slate-800
+    'editorCursor.foreground': '#38bdf8', // Sky blue cursor
+    'editor.selectionBackground': '#3b82f640', // Blue selection
   },
 };
 
@@ -61,9 +67,22 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
   onEditorMounted,
   readOnly = true,
   onChange,
+  maxLines = 50,
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const editorInstance = useRef<any>(null);
+
+  // Calculate height based on number of lines
+  const calculateHeight = (content: string, max: number) => {
+    const lines = content.split('\n').length;
+    const displayLines = Math.min(lines, max);
+    const lineHeight = 19; // Monaco default line height
+    const verticalPadding = 32; // Top + bottom padding (16px each)
+    const scrollbarHeight = lines > max ? 14 : 0; // Add scrollbar height if content exceeds max
+    return displayLines * lineHeight + verticalPadding + scrollbarHeight;
+  };
+
+  const editorHeight = calculateHeight(code, maxLines);
 
   useEffect(() => {
     let mounted = true;
@@ -244,7 +263,13 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
     };
   }, [themeConfig?.highlightLine, showLineNumbers]);
 
-  return <div ref={editorRef} className={`w-full h-full min-h-[200px] ${className || ''}`} />;
+  return (
+    <div
+      ref={editorRef}
+      className={`w-full ${className || ''}`}
+      style={{ height: `${editorHeight}px` }}
+    />
+  );
 };
 
 export { CodeBlock };

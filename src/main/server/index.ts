@@ -1,9 +1,15 @@
 import express from 'express';
 import cors from 'cors';
+import https from 'https';
+import http from 'http';
 import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import { Account } from '../ipc/accounts';
+import { getProxyConfig, getConfigManager } from './config';
+import { getCertificateManager } from './utils/cert-manager';
+import { createAuthMiddleware } from './auth-middleware';
+import { getAccountSelector } from './account-selector';
 import {
   chatCompletionStream as deepseekChat,
   getChatSessions,
@@ -48,8 +54,8 @@ import { statsManager } from '../core/stats';
 
 const DATA_FILE = path.join(app.getPath('userData'), 'accounts.json');
 
-let server: any = null;
-const API_PORT = 11434; // Using Ollama-like port
+let server: https.Server | http.Server | null = null;
+let isHttpsMode = false;
 const updateAccountStats = (
   accountId: string,
   stats: { tokens: number; duration: number; success: boolean },
@@ -123,6 +129,12 @@ const getAccount = async (req: express.Request): Promise<Account | undefined> =>
 const expressApp = express();
 expressApp.use(cors());
 expressApp.use(express.json());
+
+// Import management routes
+import ManagementRouter from './routes/management';
+
+// Register management routes (no auth required for localhost)
+expressApp.use('/v0/management', ManagementRouter);
 
 expressApp.get('/v1/models', (_req, res) => {
   res.json({
@@ -1089,28 +1101,105 @@ expressApp.get('/v1/gemini/conversations/:id', async (req, res) => {
   await gemini.getConversation(req, res, account);
 });
 
-export const startServer = () => {
-  if (server) return { success: true, port: API_PORT, message: 'Server already running' };
+export const startServer = async () => {
+  if (server) {
+    const config = getProxyConfig();
+    return { success: true, port: config.port, message: 'Server already running' };
+  }
 
-  return new Promise((resolve) => {
-    server = expressApp.listen(API_PORT, () => {
-      resolve({ success: true, port: API_PORT });
-    });
-    server.on('error', (e: any) => {
-      if (e.code === 'EADDRINUSE') {
-        resolve({ success: true, port: API_PORT, message: 'Joined existing server' });
-      } else {
-        console.error('[Server] Start Error:', e);
-        resolve({ success: false, error: e.message });
+  try {
+    const config = getProxyConfig();
+    const port = config.port;
+    const host = config.host;
+
+    console.log(
+      `[Server] Starting server on ${config.tls.enable ? 'https' : 'http'}://${host}:${port}`,
+    );
+    console.log(`[Server] Routing strategy: ${config.routing.strategy}`);
+    console.log(`[Server] Localhost only: ${config.localhostOnly}`);
+
+    return new Promise(async (resolve) => {
+      try {
+        if (config.tls.enable) {
+          // HTTPS mode
+          const certManager = getCertificateManager();
+          const certs = await certManager.ensureCertificates();
+
+          const httpsOptions = {
+            cert: fs.readFileSync(certs.cert),
+            key: fs.readFileSync(certs.key),
+          };
+
+          server = https.createServer(httpsOptions, expressApp);
+          isHttpsMode = true;
+
+          console.log(`[Server] HTTPS enabled with certificates:`);
+          console.log(`[Server]   Certificate: ${certs.cert}`);
+          console.log(`[Server]   Key: ${certs.key}`);
+        } else {
+          // HTTP mode
+          server = http.createServer(expressApp);
+          isHttpsMode = false;
+          console.log(`[Server] Running in HTTP mode`);
+        }
+
+        server.listen(port, host, () => {
+          console.log(
+            `[Server] Successfully started on ${config.tls.enable ? 'https' : 'http'}://${host}:${port}`,
+          );
+          console.log(`[Server] API Endpoints:`);
+          console.log(`[Server]   POST /v1/chat/completions`);
+          console.log(`[Server]   GET  /v1/models`);
+          console.log(`[Server]   GET  /v1beta/models (Gemini)`);
+          console.log(`[Server]   POST /v1/messages (Claude)`);
+          resolve({ success: true, port, https: config.tls.enable });
+        });
+
+        server.on('error', (e: any) => {
+          if (e.code === 'EADDRINUSE') {
+            console.error(`[Server] Port ${port} is already in use`);
+            resolve({
+              success: false,
+              error: `Port ${port} is already in use`,
+              code: 'EADDRINUSE',
+            });
+          } else {
+            console.error('[Server] Start Error:', e);
+            resolve({ success: false, error: e.message });
+          }
+        });
+      } catch (error: any) {
+        console.error('[Server] Failed to start:', error);
+        resolve({ success: false, error: error.message });
       }
     });
-  });
+  } catch (error: any) {
+    console.error('[Server] Configuration error:', error);
+    return { success: false, error: error.message };
+  }
 };
 
 export const stopServer = () => {
   if (!server) return { success: false, message: 'Server not running' };
 
-  server.close();
-  server = null;
-  return { success: true };
+  return new Promise((resolve) => {
+    server?.close(() => {
+      console.log('[Server] Server stopped');
+      server = null;
+      isHttpsMode = false;
+      resolve({ success: true });
+    });
+  });
+};
+
+export const getServerInfo = () => {
+  const config = getProxyConfig();
+  return {
+    running: server !== null,
+    port: config.port,
+    host: config.host,
+    https: config.tls.enable,
+    strategy: config.routing.strategy,
+    localhostOnly: config.localhostOnly,
+  };
 };

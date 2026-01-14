@@ -23,6 +23,16 @@ const api = {
   stats: {
     getStats: (): Promise<any> => ipcRenderer.invoke('stats:get'),
   },
+  proxy: {
+    getConfig: () => ipcRenderer.invoke('proxy:get-config'),
+    updateConfig: (updates: any) => ipcRenderer.invoke('proxy:update-config', updates),
+    resetConfig: () => ipcRenderer.invoke('proxy:reset-config'),
+    getServerInfo: () => ipcRenderer.invoke('proxy:get-server-info'),
+    getCertificateInfo: () => ipcRenderer.invoke('proxy:get-certificate-info'),
+    exportCertificate: () => ipcRenderer.invoke('proxy:export-certificate'),
+    deleteCertificates: () => ipcRenderer.invoke('proxy:delete-certificates'),
+    regenerateCertificates: () => ipcRenderer.invoke('proxy:regenerate-certificates'),
+  },
   shell: {
     execute: (command: string, cwd?: string): Promise<string> =>
       ipcRenderer.invoke('shell:execute', command, cwd),

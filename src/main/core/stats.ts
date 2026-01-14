@@ -78,6 +78,15 @@ class StatsManager {
     dayStats.tokens += tokens;
   }
 
+  public reset() {
+    this.data = {
+      daily: [],
+      totalRequests: 0,
+      totalTokens: 0,
+    };
+    this.save();
+  }
+
   public getStats() {
     const today = this.getTodayStr();
     const dayStats = this.data.daily.find((d) => d.date === today) || {

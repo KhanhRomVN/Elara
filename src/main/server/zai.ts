@@ -2,18 +2,10 @@ import { Request, Response } from 'express';
 import { Account } from '../ipc/accounts';
 import { app } from 'electron';
 import { join } from 'path';
-import { spawn, execSync } from 'child_process';
+import { spawn } from 'child_process';
 import fs from 'fs';
 import { startProxy, stopProxy, proxyEvents } from './proxy';
-
-const getCookies = (account: Account) => {
-  if (!account.credential) return [];
-  try {
-    return JSON.parse(account.credential);
-  } catch (error) {
-    return [];
-  }
-};
+import crypto from 'crypto';
 
 const getToken = (account: Account) => {
   // We store the token in the credential field for Zai (it's a Bearer token or cookie string)
@@ -34,19 +26,46 @@ export const chatCompletionStream = async (req: Request, res: Response, account:
   }
 
   try {
-    const { messages, model, stream } = req.body;
+    const { messages, model } = req.body;
 
     // Transform messages to Zai format if needed, but standard OpenAI format often works or needs minor tweaks.
     // Zai API expects "messages": [{ "role": "user", "content": "..." }]
 
-    // Construct payload
+    // Construct payload matching the user's working example
     const payload = {
+      stream: true,
       model: model || 'glm-4.7',
       messages: messages,
-      stream: true,
-      // Default params observed in logs
-      enable_thinking: true,
-      auto_web_search: true,
+      signature_prompt: messages.length > 0 ? messages[messages.length - 1].content : '',
+      params: {},
+      extra: {},
+      features: {
+        image_generation: false,
+        web_search: false,
+        auto_web_search: false,
+        preview_mode: true,
+        flags: [],
+        enable_thinking: true,
+      },
+      variables: {
+        '{{USER_NAME}}': 'User',
+        '{{USER_LOCATION}}': 'Unknown',
+        '{{CURRENT_DATETIME}}': new Date().toISOString().replace('T', ' ').split('.')[0],
+        '{{CURRENT_DATE}}': new Date().toISOString().split('T')[0],
+        '{{CURRENT_TIME}}': new Date().toTimeString().split(' ')[0],
+        '{{CURRENT_WEEKDAY}}': new Date().toLocaleDateString('en-US', { weekday: 'long' }),
+        '{{CURRENT_TIMEZONE}}': Intl.DateTimeFormat().resolvedOptions().timeZone,
+        '{{USER_LANGUAGE}}': 'en-US',
+      },
+      // Generate UUIDs for IDs if not provided
+      chat_id: crypto.randomUUID(),
+      id: crypto.randomUUID(),
+      current_user_message_id: crypto.randomUUID(),
+      current_user_message_parent_id: null,
+      background_tasks: {
+        title_generation: true,
+        tags_generation: true,
+      },
     };
 
     console.log('[Zai] Sending chat request payload:', JSON.stringify(payload, null, 2));
@@ -59,8 +78,14 @@ export const chatCompletionStream = async (req: Request, res: Response, account:
         'User-Agent':
           account.userAgent ||
           'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
+        'Accept-Encoding': 'identity', // Keep identity to avoid manual decompression issues
         Origin: 'https://chat.z.ai',
         Referer: 'https://chat.z.ai/',
+        'x-fe-version': 'prod-fe-1.0.200', // Added from user log
+        'sec-ch-ua-platform': '"Linux"',
+        'accept-language': 'en-US',
+        // Try faking signature with a previously valid one or a random hex string
+        'x-signature': '4f8e5f2e8a6297d08437ce49647f5f9ccf66b802adf434900a2a3b7cfc4c53f1',
       },
       body: JSON.stringify(payload),
     });
@@ -79,39 +104,52 @@ export const chatCompletionStream = async (req: Request, res: Response, account:
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
 
-    const reader = response.body?.getReader();
     const decoder = new TextDecoder();
+
+    if (response.headers.get('content-encoding') === 'br') {
+      // Handle Brotli decompression manually for Node.js fetch
+      const zlib = require('zlib');
+      const { Readable } = require('stream');
+
+      // Convert Web Stream to Node Stream
+      // @ts-ignore
+      const nodeStream = Readable.fromWeb(response.body);
+      const decompress = zlib.createBrotliDecompress();
+      const pipeline = nodeStream.pipe(decompress);
+
+      pipeline.on('data', (chunk: Buffer) => {
+        const text = chunk.toString('utf-8');
+        // parse SSE from text
+        const lines = text.split('\n');
+        for (const line of lines) {
+          processLine(line, res);
+        }
+      });
+
+      pipeline.on('end', () => {
+        res.end();
+      });
+
+      pipeline.on('error', (err: any) => {
+        console.error('[Zai] Decompression Error:', err);
+        res.end();
+      });
+
+      // Return early as we are handling stream via events
+      return;
+    }
+
+    const reader = response.body?.getReader();
 
     if (reader) {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         const chunk = decoder.decode(value);
-        // console.log('[Zai] Received chunk:', chunk); // Verbose log
-
-        // Zai sends SSE format: "data: {...}"
-        // We can just forward the chunk if it matches OpenAI format,
-        // or we parse and re-emit.
-        // Zai seems to use standard SSE but let's parse to be safe and ensure format compatibility.
 
         const lines = chunk.split('\n');
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const dataStr = line.slice(6).trim();
-            if (dataStr === '[DONE]') {
-              res.write('data: [DONE]\n\n');
-              continue;
-            }
-            try {
-              const data = JSON.parse(dataStr);
-              // Zai response format might need mapping to standard OpenAI if standard client is used
-              // Assuming Zai mimics OpenAI structure based on endpoint name
-              // If Zai returns { id:..., choices: [...] }, we can just forward.
-              res.write(`data: ${JSON.stringify(data)}\n\n`);
-            } catch (e) {
-              // ignore partial json
-            }
-          }
+          processLine(line, res);
         }
       }
     }
@@ -123,7 +161,23 @@ export const chatCompletionStream = async (req: Request, res: Response, account:
   }
 };
 
-export const getModels = async (req: Request, res: Response, account: Account) => {
+const processLine = (line: string, res: Response) => {
+  if (line.startsWith('data: ')) {
+    const dataStr = line.slice(6).trim();
+    if (dataStr === '[DONE]') {
+      res.write('data: [DONE]\n\n');
+      return;
+    }
+    try {
+      const data = JSON.parse(dataStr);
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    } catch (e) {
+      // ignore partial json
+    }
+  }
+};
+
+export const getModels = async (_req: Request, res: Response, _account: Account) => {
   // Return hardcoded models for now as Zai seems to have a fixed set or we verify later
   const models = [
     { id: 'glm-4.7', object: 'model', owned_by: 'Zai', name: 'GLM 4.7' },

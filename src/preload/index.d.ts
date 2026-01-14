@@ -41,8 +41,30 @@ interface API {
       history: Array<{ date: string; requests: number; tokens: number }>;
     }>;
   };
-  shell: {
-    execute: (command: string, cwd?: string) => Promise<string>;
+  proxy: {
+    getConfig: () => Promise<{ success: boolean; config?: any; error?: string }>;
+    updateConfig: (updates: any) => Promise<{ success: boolean; config?: any; error?: string }>;
+    resetConfig: () => Promise<{ success: boolean; config?: any; error?: string }>;
+    getServerInfo: () => Promise<{
+      success: boolean;
+      info?: {
+        running: boolean;
+        port: number;
+        host: string;
+        https: boolean;
+        strategy: string;
+        localhostOnly: boolean;
+      };
+      error?: string;
+    }>;
+    getCertificateInfo: () => Promise<{ success: boolean; info?: any; error?: string }>;
+    exportCertificate: () => Promise<{ success: boolean; certificate?: string; error?: string }>;
+    deleteCertificates: () => Promise<{ success: boolean; message?: string; error?: string }>;
+    regenerateCertificates: () => Promise<{
+      success: boolean;
+      certificates?: any;
+      error?: string;
+    }>;
   };
   // General IPC methods
   on: (channel: string, listener: (event: IpcRendererEvent, ...args: any[]) => void) => () => void;
