@@ -28,9 +28,18 @@ const getCookieValue = (cookies: any[], name: string) => {
 
 export const chatCompletionStream = async (req: Request, res: Response, account: Account) => {
   const cookies = getCookies(account);
+  console.log('[Gemini] Account:', account.email);
+  console.log('[Gemini] Cookies count:', cookies.length);
+
   const sid = getCookieValue(cookies, '__Secure-1PSID'); // or f.sid from account data
   const snlm0e = account.metadata?.snlm0e; // We need to store this in account
   const bl = account.metadata?.bl || 'boq_assistant-bard-web-server_20240319.13_p0'; // Fallback or dynamic
+
+  console.log('[Gemini] Extracted credentials:', {
+    sid: sid ? 'REDACTED (Present)' : 'MISSING',
+    snlm0e: snlm0e ? 'REDACTED (Present)' : 'MISSING',
+    bl,
+  });
 
   // Validations
   if (!sid || !snlm0e) {
@@ -40,6 +49,7 @@ export const chatCompletionStream = async (req: Request, res: Response, account:
 
   try {
     const { messages, model } = req.body;
+    console.log('[Gemini] Request body:', JSON.stringify(req.body, null, 2));
     const prompt = messages[messages.length - 1].content; // Simplified for now
 
     // Construct f.req payload
@@ -59,9 +69,10 @@ export const chatCompletionStream = async (req: Request, res: Response, account:
     ];
 
     const fReq = JSON.stringify(reqBody);
+    console.log('[Gemini] f.req payload:', fReq);
     const params = new URLSearchParams();
     params.append('f.req', fReq);
-    params.append('at', account.metadata?.at || ''); // xsrf token
+    params.append('at', account.metadata?.snlm0e || ''); // xsrf token (SNlM0e)
 
     const response = await fetch(
       `https://gemini.google.com/_/BardChatUi/data/assistant.lamda.BardFrontendService/StreamGenerate?bl=${bl}&f.sid=${account.metadata?.f_sid || ''}&hl=en&_reqid=${Date.now()}&rt=c`,
@@ -81,7 +92,7 @@ export const chatCompletionStream = async (req: Request, res: Response, account:
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Gemini API Error:', response.status, errorText);
+      console.error('[Gemini] API Error:', response.status, errorText);
       res.status(response.status).json({ error: errorText });
       return;
     }
@@ -89,6 +100,8 @@ export const chatCompletionStream = async (req: Request, res: Response, account:
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+
+    console.log('[Gemini] Response OK, starting stream...');
 
     // Parse streaming response (it's batched JSON)
     // We need a helper to parse Google's ")]}'\n" prefixed JSON stream
@@ -116,19 +129,104 @@ export const chatCompletionStream = async (req: Request, res: Response, account:
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
         buffer += chunk;
-        // Process buffer line by line
-        // Google keeps sending chunks.
-        // ...
-        // Sends back to client
-        res.write(
-          `data: ${JSON.stringify({
-            id: 'chatcmpl-' + randomUUID(),
-            object: 'chat.completion.chunk',
-            created: Date.now() / 1000,
-            model: model,
-            choices: [{ delta: { content: '...' }, index: 0, finish_reason: null }],
-          })}\n\n`,
-        );
+
+        // Process line by line
+        const lines = buffer.split('\n');
+        // Keep the last partial line in the buffer
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          // Skip garbage or keep-alive
+          if (line.includes(")]}'")) continue;
+
+          try {
+            const json = JSON.parse(line);
+
+            // Skip numeric headers (length prefixes)
+            if (typeof json === 'number') continue;
+
+            // Normalize to array of chunks
+            // Sometimes it is `["w", ...]` (legacy?) but verification shows `[["wrb.fr", ...]]`
+            const chunks = Array.isArray(json) && Array.isArray(json[0]) ? json : [json];
+
+            for (const item of chunks) {
+              // Check for valid data wrapper
+              if (Array.isArray(item) && typeof item[0] === 'string') {
+                const messageId = item[0];
+                // console.log('[Gemini] Chunk identifier:', messageId);
+
+                const payload = item[2];
+                if (typeof payload === 'string') {
+                  const innerJson = JSON.parse(payload);
+
+                  // Debug log structure
+                  // console.log('[Gemini] Inner JSON root type:', Array.isArray(innerJson) ? 'Array' : typeof innerJson);
+                  // if (Array.isArray(innerJson)) {
+                  //   console.log('[Gemini] Inner JSON length:', innerJson.length);
+                  //   // Safely log the structure structure
+                  //   console.log(
+                  //     '[Gemini] Inner JSON dump:',
+                  //     JSON.stringify(innerJson).substring(0, 300) + '...',
+                  //   );
+                  // }
+
+                  let textChunk = null;
+
+                  if (Array.isArray(innerJson)) {
+                    // Standard generic extraction attempt
+
+                    // Strategy 1: Look for "rc_" updates (standard streaming content)
+                    // Structure: [null, [ids], null, null, [[ "rc_...", ["text content"] ]]]
+                    // innerJson[4] is the updates array
+                    try {
+                      const candidates = innerJson?.[4];
+                      if (Array.isArray(candidates)) {
+                        for (const candidate of candidates) {
+                          if (Array.isArray(candidate) && candidate.length >= 2) {
+                            // candidate[0] is usually messageId "rc_..."
+                            const msgContent = candidate[1];
+                            if (Array.isArray(msgContent) && msgContent.length > 0) {
+                              if (typeof msgContent[0] === 'string') {
+                                textChunk = msgContent[0];
+                                break; // Found one
+                              }
+                            }
+                          }
+                        }
+                      }
+                    } catch (e) {
+                      // console.log('[Gemini] Error extraction path 1:', e);
+                    }
+
+                    // Strategy 2: Fallback path (sometimes observed in older traces or full sync)
+                    if (!textChunk) {
+                      const altChunk = innerJson?.[0]?.[1]?.[0];
+                      if (typeof altChunk === 'string') textChunk = altChunk;
+                    }
+                  }
+
+                  if (textChunk) {
+                    // console.log('[Gemini] Extracted text chunk length:', textChunk.length);
+                    res.write(
+                      `data: ${JSON.stringify({
+                        id: 'chatcmpl-' + randomUUID(),
+                        object: 'chat.completion.chunk',
+                        created: Date.now() / 1000,
+                        model: model,
+                        choices: [{ delta: { content: textChunk }, index: 0, finish_reason: null }],
+                      })}\n\n`,
+                    );
+                  }
+                }
+              } else {
+                // console.log('[Gemini] Ignored chunk structure:', JSON.stringify(item).substring(0, 50));
+              }
+            }
+          } catch (e) {
+            // console.error('Error parsing JSON chunk', e);
+          }
+        }
       }
     }
 
@@ -182,9 +280,11 @@ export async function login() {
   }
 
   const profilePath = join(app.getPath('userData'), 'profiles', 'gemini');
-  if (!fs.existsSync(profilePath)) {
-    fs.mkdirSync(profilePath, { recursive: true });
+  if (fs.existsSync(profilePath)) {
+    console.log('[Gemini] Clearing old profile...');
+    fs.rmSync(profilePath, { recursive: true, force: true });
   }
+  fs.mkdirSync(profilePath, { recursive: true });
 
   console.log('[Gemini] Starting Proxy...');
   await startProxy();
@@ -196,8 +296,8 @@ export async function login() {
     '--proxy-bypass-list=<-loopback>',
     '--ignore-certificate-errors',
     `--user-data-dir=${profilePath}`,
-    '--disable-http2',
-    '--disable-quic',
+    '--disable-http2', // Force HTTP/1.1 to simplify interception
+    '--disable-quic', // connection resiliency
     '--no-first-run',
     '--no-default-browser-check',
     '--disable-dev-shm-usage',
@@ -217,40 +317,139 @@ export async function login() {
     chromeProcess.stderr.on('data', (data) => console.error(`[Gemini Chrome Err]: ${data}`));
   }
 
-  return new Promise<{ cookies: string; email: string }>((resolve, reject) => {
+  return new Promise<{
+    cookies: string;
+    email: string;
+    name?: string;
+    avatar?: string;
+    metadata?: any;
+  }>((resolve, reject) => {
     let resolved = false;
     let capturedCookies = '';
+    let capturedMetadata: any = {};
+    let capturedUserInfo: any = null;
+    let finishTimer: NodeJS.Timeout | null = null;
 
     const cleanup = () => {
       if (!resolved) {
         resolved = true;
+        if (finishTimer) clearTimeout(finishTimer);
         chromeProcess.kill();
         stopProxy();
         proxyEvents.off('gemini-cookies', onCookies);
+        proxyEvents.off('gemini-metadata', onMetadata);
+        proxyEvents.off('gemini-user-info', onUserInfo);
       }
     };
 
-    const onCookies = (cookies: string) => {
-      console.log('[Gemini] Cookies captured!');
-      capturedCookies = cookies;
-      // Wait a bit to ensure potential other headers (not used yet) are captured if needed,
-      // or just enough for user to be fully logged in.
-      // For Google, sometimes multiple cookie sets come.
+    const finalize = () => {
+      if (resolved) return;
 
-      // We'll resolve after a short delay
-      setTimeout(() => {
-        cleanup();
-        resolve({ cookies: capturedCookies, email: 'gemini@user.com' });
-      }, 2000);
+      // Default values
+      let email = 'gemini@user.com';
+      let name = '';
+      let avatar = '';
+
+      if (capturedUserInfo) {
+        email = capturedUserInfo.email || email;
+        name = capturedUserInfo.name || '';
+        avatar = capturedUserInfo.picture || '';
+      }
+
+      cleanup();
+
+      resolve({
+        cookies: capturedCookies,
+        email,
+        name,
+        avatar,
+        metadata: capturedMetadata,
+      });
+    };
+
+    const checkForCompletion = () => {
+      // If we have everything, we can finish quickly
+      if (capturedCookies && capturedMetadata.snlm0e && capturedMetadata.bl && capturedUserInfo) {
+        console.log(
+          '[Gemini] All critical data captured (Cookies, SNlM0e, BL, UserInfo)! Finalizing...',
+        );
+        // Give a tiny buffer for any last moment updates, then finish
+        if (finishTimer) clearTimeout(finishTimer);
+        finishTimer = setTimeout(finalize, 2000);
+        return;
+      }
+
+      // If we have cookies and tokens but no UserInfo, wait a bit longer then finish
+      if (capturedCookies && capturedMetadata.snlm0e && capturedMetadata.bl) {
+        console.log(
+          '[Gemini] Credentials captured (Cookies, SNlM0e, BL). Waiting for UserInfo or timeout...',
+        );
+        if (!finishTimer) {
+          finishTimer = setTimeout(finalize, 8000); // Wait 8s for User Info
+        }
+      }
+    };
+
+    const restartInactivityTimer = () => {
+      // If we have some data but haven't finished, ensure we don't wait forever
+      // Every time we get data, we extend the "inactivity" timeout
+      if (finishTimer) clearTimeout(finishTimer);
+
+      // If we already have cookies, set a "sufficient" timeout
+      // If we don't have cookies yet, we just wait (global timeout handles the rest)
+      if (capturedCookies) {
+        finishTimer = setTimeout(finalize, 15000); // 15s inactivity timeout
+      }
+    };
+
+    const onMetadata = (metadata: any) => {
+      console.log('[Gemini] Metadata captured:', metadata);
+      capturedMetadata = { ...capturedMetadata, ...metadata };
+      checkForCompletion();
+    };
+
+    const onUserInfo = (userInfo: any) => {
+      console.log('[Gemini] User Info captured:', userInfo.email);
+      capturedUserInfo = userInfo;
+      checkForCompletion();
+    };
+
+    const onCookies = (cookies: string) => {
+      // Only log if it's the first time or significantly different (simplified verification)
+      if (!capturedCookies) console.log('[Gemini] Cookies captured!');
+      capturedCookies = cookies;
+
+      // We got cookies, trigger checks
+      checkForCompletion();
+
+      // Also ensure we have a fallback timer running if this is the first cookie
+      if (!finishTimer) {
+        restartInactivityTimer();
+      }
     };
 
     proxyEvents.on('gemini-cookies', onCookies);
+    proxyEvents.on('gemini-metadata', onMetadata);
+    proxyEvents.on('gemini-user-info', onUserInfo);
+
+    // Hard limit 2 minutes
+    setTimeout(() => {
+      if (!resolved) {
+        if (capturedCookies) {
+          console.log('[Gemini] Hard timeout reached, but have cookies. resolving...');
+          finalize();
+        } else {
+          cleanup();
+          reject(new Error('Login timed out (no cookies captured)'));
+        }
+      }
+    }, 120000);
 
     chromeProcess.on('close', (code) => {
       if (!resolved) {
         if (capturedCookies) {
-          cleanup();
-          resolve({ cookies: capturedCookies, email: 'gemini@user.com' });
+          console.log('[Gemini] Chrome closed, resolving with captured data.');
+          finalize();
         } else {
           console.log('[Gemini] Chrome closed with code:', code);
           cleanup();

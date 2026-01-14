@@ -428,7 +428,7 @@ export const setupAccountsHandlers = () => {
         if (provider === 'Gemini') {
           try {
             console.log('[Accounts] Starting Gemini login flow (Real Browser)...');
-            const { cookies, email } = await loginGemini();
+            const { cookies, email, metadata, name, avatar } = await loginGemini();
             const finalEmail = email || 'gemini@user.com';
 
             const newAccount: Account = {
@@ -436,6 +436,7 @@ export const setupAccountsHandlers = () => {
               provider: 'Gemini',
               email: finalEmail,
               credential: cookies,
+              metadata, // Save the critical tokens here
               status: 'Active',
               usage: '0',
               totalRequests: 0,
@@ -445,8 +446,8 @@ export const setupAccountsHandlers = () => {
               statsDate: new Date().toISOString().split('T')[0],
               lastActive: new Date().toISOString(),
               userAgent,
-              name: undefined,
-              picture: undefined,
+              name: name || undefined,
+              picture: avatar || undefined,
             };
 
             saveAccount(newAccount);

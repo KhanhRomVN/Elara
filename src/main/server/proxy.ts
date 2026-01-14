@@ -3,6 +3,8 @@ import path from 'path';
 import fs from 'fs';
 import { EventEmitter } from 'events';
 
+import zlib from 'zlib';
+
 // Use require to handle the export format of http-mitm-proxy compatible with TS
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { Proxy: MitmProxy } = require('http-mitm-proxy');
@@ -36,7 +38,7 @@ export const startProxy = (): Promise<void> => {
       const url = ctx.clientToProxyRequest.url;
 
       // Verbose log to verify traffic
-      console.log(`[Proxy] Request: ${host}${url}`);
+      // console.log(`[Proxy] Request: ${host}${url}`);
 
       if (host) {
         // Qwen
@@ -83,6 +85,28 @@ export const startProxy = (): Promise<void> => {
         // Gemini
         if (host.includes('gemini.google.com') || host.includes('google.com')) {
           const reqCookies = ctx.clientToProxyRequest.headers.cookie;
+
+          // Extract bl (Build Label)
+          if (url.includes('bl=') || url.includes('f.sid=')) {
+            try {
+              // URL constructor needs a base for relative paths
+              const fullUrl = new URL(url, 'https://gemini.google.com');
+              const bl = fullUrl.searchParams.get('bl');
+              if (bl) {
+                console.log(`[Proxy] Found Gemini Build Label (bl): ${bl}`);
+                proxyEvents.emit('gemini-metadata', { bl });
+              }
+
+              const fsid = fullUrl.searchParams.get('f.sid');
+              if (fsid) {
+                console.log(`[Proxy] Found Gemini f.sid: ${fsid}`);
+                proxyEvents.emit('gemini-metadata', { f_sid: fsid });
+              }
+            } catch (e) {
+              console.error('[Proxy] Error parsing BL/f.sid:', e);
+            }
+          }
+
           if (reqCookies && reqCookies.includes('__Secure-1PSID')) {
             console.log(`[Proxy] Intercepting Gemini request: ${url}`);
             console.log('[Proxy] Found __Secure-1PSID in Gemini Request Cookie!');
@@ -98,6 +122,100 @@ export const startProxy = (): Promise<void> => {
           if (reqCookies && reqCookies.includes('__Secure-next-auth.session-token')) {
             console.log('[Proxy] Found session token in Perplexity Request Cookie!');
             proxyEvents.emit('perplexity-cookies', reqCookies);
+          }
+        }
+      }
+      return callback();
+    });
+
+    proxy.onResponse((ctx: any, callback: any) => {
+      const host = ctx.clientToProxyRequest.headers.host;
+      console.log(`[Proxy] Debug - onResponse triggered for: ${host}`); // Global Debug Log
+
+      if (host) {
+        if (
+          host.includes('gemini.google.com') ||
+          host.includes('google.com') ||
+          (host.includes('www.googleapis.com') &&
+            ctx.clientToProxyRequest.url.includes('/userinfo'))
+        ) {
+          const encoding = ctx.serverToProxyResponse.headers['content-encoding'];
+          const contentType = ctx.serverToProxyResponse.headers['content-type'];
+
+          console.log(`[Proxy] Debug - Response Header: Encoding=${encoding}, Type=${contentType}`);
+
+          // Chỉ xử lý nếu là text/html hoặc application/json để tối ưu hiệu năng
+          if (
+            contentType &&
+            (contentType.includes('text/') ||
+              contentType.includes('application/json') ||
+              contentType.includes('application/javascript'))
+          ) {
+            let stream = ctx.serverToProxyResponse;
+            let decoder;
+
+            if (encoding === 'gzip') {
+              decoder = zlib.createGunzip();
+            } else if (encoding === 'br') {
+              decoder = zlib.createBrotliDecompress();
+            } else if (encoding === 'deflate') {
+              decoder = zlib.createInflate();
+            }
+
+            if (decoder) {
+              stream.pipe(decoder);
+
+              // Xử lý luồng đã giải nén
+              let body = '';
+              decoder.on('data', (chunk: Buffer) => {
+                body += chunk.toString('utf8');
+              });
+
+              decoder.on('end', () => {
+                // Logic for Gemini Metadata
+                if (host.includes('gemini.google.com') || host.includes('google.com')) {
+                  const snlm0eMatch = body.match(/\"SNlM0e\":\"([^\"]+)\"/);
+                  if (snlm0eMatch && snlm0eMatch[1]) {
+                    console.log('[Proxy] Found SNlM0e in Gemini Response Body!');
+                    proxyEvents.emit('gemini-metadata', { snlm0e: snlm0eMatch[1] });
+                  }
+                }
+
+                // Logic for User Info
+                if (
+                  host.includes('www.googleapis.com') &&
+                  ctx.clientToProxyRequest.url.includes('/userinfo')
+                ) {
+                  try {
+                    const userInfo = JSON.parse(body);
+                    console.log('[Proxy] Found User Info in Google API Response!');
+                    proxyEvents.emit('gemini-user-info', userInfo);
+                  } catch (e) {
+                    console.error('[Proxy] Failed to parse User Info:', e);
+                  }
+                }
+              });
+
+              decoder.on('error', (err: any) => {
+                console.error('[Proxy] Decompression Stream Error:', err);
+              });
+            } else {
+              // Không nén, đọc trực tiếp
+              let body = '';
+              ctx.serverToProxyResponse.on('data', (chunk: Buffer) => {
+                body += chunk.toString('utf8');
+              });
+              ctx.serverToProxyResponse.on('end', () => {
+                // Logic lặp lại (có thể refactor tách hàm sau)
+                if (host.includes('gemini.google.com') || host.includes('google.com')) {
+                  const snlm0eMatch = body.match(/\"SNlM0e\":\"([^\"]+)\"/);
+                  if (snlm0eMatch && snlm0eMatch[1]) {
+                    console.log('[Proxy] Found SNlM0e in Gemini Response Body!');
+                    proxyEvents.emit('gemini-metadata', { snlm0e: snlm0eMatch[1] });
+                  }
+                }
+              });
+            }
           }
         }
       }
