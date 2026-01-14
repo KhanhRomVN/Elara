@@ -16,6 +16,7 @@ import { Switch } from '../../core/components/Switch';
 import { GroqSidebarSettings, FunctionParams } from './components/GroqSidebarSettings';
 import { GroqModelSelector } from './components/GroqModelSelector';
 import { AntigravityModelSelector } from './components/AntigravityModelSelector';
+import { GeminiModelSelector } from './components/GeminiModelSelector';
 import { Bot } from 'lucide-react';
 
 interface Message {
@@ -39,6 +40,8 @@ interface Account {
     | 'Qwen'
     | 'Cohere'
     | 'Perplexity'
+    | 'Groq'
+    | 'Gemini'
     | 'Antigravity';
   email: string;
   name?: string;
@@ -146,6 +149,7 @@ export const PlaygroundPage = () => {
     | 'Perplexity'
     | 'Groq'
     | 'Antigravity'
+    | 'Gemini'
     | ''
   >('');
   const [selectedAccount, setSelectedAccount] = useState<string>('');
@@ -161,6 +165,10 @@ export const PlaygroundPage = () => {
   // Antigravity State
   const [antigravityModel, setAntigravityModel] = useState('models/gemini-3-pro-preview');
   const [antigravityModelsList, setAntigravityModelsList] = useState<any[]>([]);
+
+  // Gemini State
+  const [geminiModel, setGeminiModel] = useState('fbb127bbb056c959'); // Default to "Nhanh" usually
+  const [geminiModelsList, setGeminiModelsList] = useState<any[]>([]);
 
   // Groq State
   const [groqModel, setGroqModel] = useState('openai/gpt-oss-120b');
@@ -352,9 +360,38 @@ export const PlaygroundPage = () => {
           console.error('Failed to fetch Antigravity models', e);
         }
       }
+
+      if (selectedProvider === 'Gemini' && selectedAccount) {
+        try {
+          // @ts-ignore
+          const status = await window.api.server.start();
+          const port = status.port || 11434;
+          const acc = accounts.find((a) => a.id === selectedAccount);
+          if (!acc) return;
+
+          const res = await fetch(
+            `http://localhost:${port}/v1/gemini/models?email=${encodeURIComponent(acc.email)}`,
+          );
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data)) {
+              setGeminiModelsList(data);
+              // Auto-select first if current selection invalid or empty
+              if (
+                data.length > 0 &&
+                (!geminiModel || !data.find((m: any) => m.id === geminiModel))
+              ) {
+                setGeminiModel(data[0].id);
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Failed to fetch Gemini models', e);
+        }
+      }
     };
     fetchGroqModels();
-  }, [selectedProvider, selectedAccount, accounts]);
+  }, [selectedProvider, selectedAccount, accounts, geminiModel]);
 
   const filteredAccounts = selectedProvider
     ? accounts.filter((acc) => acc.provider === selectedProvider)
@@ -419,7 +456,9 @@ export const PlaygroundPage = () => {
                           ? groqModel
                           : account.provider === 'Antigravity'
                             ? antigravityModel
-                            : 'deepseek-chat',
+                            : account.provider === 'Gemini'
+                              ? geminiModel
+                              : 'deepseek-chat',
           messages: [
             ...messages.map((msg) => ({
               role: msg.role,
@@ -899,6 +938,16 @@ export const PlaygroundPage = () => {
               placeholder="Select Model"
             />
           </div>
+        </div>
+      )}
+      {selectedProvider === 'Gemini' && (
+        <div className="w-[300px]">
+          <GeminiModelSelector
+            value={geminiModel}
+            onChange={setGeminiModel}
+            models={geminiModelsList}
+            disabled={loading || isStreaming}
+          />
         </div>
       )}
       {selectedProvider === 'Antigravity' && (

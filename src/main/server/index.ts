@@ -759,6 +759,35 @@ expressApp.get('/v1/antigravity/models', async (req, res) => {
   }
 });
 
+// Get Gemini models
+expressApp.get('/v1/gemini/models', async (req, res) => {
+  try {
+    const emailQuery = req.query.email as string;
+
+    if (!fs.existsSync(DATA_FILE)) {
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
+    }
+
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    let account = accounts.find((a) => a.email === emailQuery && a.provider === 'Gemini');
+
+    if (!account) {
+      account = accounts.find((a) => a.provider === 'Gemini' && a.status === 'Active');
+    }
+
+    if (!account) {
+      res.status(401).json({ error: 'No valid Gemini account found' });
+      return;
+    }
+
+    await gemini.getModels(req, res, account);
+  } catch (error: any) {
+    console.error('[Server] Get Gemini Models Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Stop DeepSeek stream
 expressApp.post('/v1/deepseek/sessions/:id/stop', async (req, res) => {
   try {

@@ -247,6 +247,121 @@ export const getConversation = async (_req: Request, res: Response, _account: Ac
   res.json({});
 };
 
+export const getModels = async (req: Request, res: Response, account: Account) => {
+  const cookies = getCookies(account);
+  console.log('[Gemini] Fetching models for:', account.email);
+
+  const bl = account.metadata?.bl || 'boq_assistant-bard-web-server_20240319.13_p0';
+  const f_sid = account.metadata?.f_sid || '';
+  const snlm0e = account.metadata?.snlm0e || '';
+
+  if (!snlm0e) {
+    res.status(401).json({ error: 'Missing SNlM0e token' });
+    return;
+  }
+
+  try {
+    const fReq = JSON.stringify([[['otAQ7b', '[]', null, 'generic']]]);
+    const params = new URLSearchParams();
+    params.append('f.req', fReq);
+    params.append('at', snlm0e);
+
+    const response = await fetch(
+      `https://gemini.google.com/_/BardChatUi/data/batchexecute?rpcids=otAQ7b&source-path=%2Fapp&bl=${bl}&f.sid=${f_sid}&hl=en&_reqid=${Date.now()}&rt=c`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+          Cookie: account.credential,
+          'User-Agent': account.userAgent || '',
+          Origin: 'https://gemini.google.com',
+          Referer: 'https://gemini.google.com/',
+          'X-Same-Domain': '1',
+        },
+        body: params.toString(),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch models: ${response.status}`);
+    }
+
+    const text = await response.text();
+    // Parse the response
+    const lines = text.split('\n');
+    let models: any[] = [];
+
+    for (const line of lines) {
+      if (line.includes(")]}'")) continue;
+      try {
+        const json = JSON.parse(line);
+        // Normalize to array of chunks
+        const chunks = Array.isArray(json) && Array.isArray(json[0]) ? json : [json];
+
+        for (const item of chunks) {
+          if (Array.isArray(item) && item[0] === 'wrb.fr' && item[1] === 'otAQ7b') {
+            const payload = item[2];
+            if (typeof payload === 'string') {
+              const innerJson = JSON.parse(payload);
+              // The structure based on inspection:
+              // innerJson[15] appears to be the list of models?
+              // Let's traverse to find the list.
+              // Based on sample:
+              // inner[15] -> array of models.
+              // Each model: [id, name, description, ...]
+
+              // Verification from sample:
+              // "fbb..." -> Nhanh
+              // "5bf..." -> Tư duy
+              // "9d8..." -> Pro
+
+              // We will try to find this array.
+              // It seems to be at a high index, let's look for known IDs or patterns.
+              if (Array.isArray(innerJson)) {
+                for (const el of innerJson) {
+                  if (Array.isArray(el) && el.length > 0 && Array.isArray(el[0])) {
+                    // Potential candidate for list of models
+                    // Check if elements look like models
+                    const first = el[0];
+                    if (
+                      Array.isArray(first) &&
+                      typeof first[1] === 'string' &&
+                      typeof first[2] === 'string'
+                    ) {
+                      // Looks like a model list
+                      models = el.map((m: any) => ({
+                        id: m[0], // "fbb127bbb056c959"
+                        name: m[1], // "Nhanh"
+                        description: m[2], // "Trả lời nhanh"
+                        isDefault: m[19] === true || false,
+                      }));
+                    }
+                  }
+                }
+
+                // Hardcoded fallback index 15 as per some traces
+                if (models.length === 0 && Array.isArray(innerJson[15])) {
+                  models = innerJson[15].map((m: any) => ({
+                    id: m[0],
+                    name: m[1],
+                    description: m[2],
+                  }));
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    console.log('[Gemini] Found models:', models);
+    res.json(models);
+  } catch (error) {
+    console.error('Gemini Models Error:', error);
+    res.status(500).json({ error: 'Failed to fetch models' });
+  }
+};
+
 const findChrome = (): string | null => {
   const commonPaths = [
     '/usr/bin/google-chrome',
