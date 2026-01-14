@@ -797,6 +797,7 @@ export const setupAccountsHandlers = () => {
       const data = fs.readFileSync(DATA_FILE, 'utf-8');
       let accounts: Account[] = JSON.parse(data);
       accounts = accounts.filter((acc) => acc.id !== id);
+      fs.writeFileSync(DATA_FILE, JSON.stringify(accounts, null, 2));
       return { success: true };
     } catch (error) {
       console.error('Failed to delete account:', error);

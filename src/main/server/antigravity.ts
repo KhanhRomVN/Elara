@@ -1,8 +1,7 @@
 import http from 'http';
 import https from 'https';
 import crypto from 'crypto';
-import importUrls from 'url';
-const { URLSearchParams } = importUrls;
+import url from 'url';
 import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';

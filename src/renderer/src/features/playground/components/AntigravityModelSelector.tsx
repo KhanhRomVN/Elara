@@ -18,6 +18,7 @@ export const AntigravityModelSelector = ({
   disabled,
 }: AntigravityModelSelectorProps) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [now, setNow] = useState(Date.now());
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -29,6 +30,12 @@ export const AntigravityModelSelector = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [isOpen]);
 
   // Helper to format model label
   const getModelLabel = (modelName: string) => {
@@ -108,19 +115,27 @@ export const AntigravityModelSelector = ({
                         const pct = quota
                           ? quota.remainingFraction !== undefined
                             ? Math.round(quota.remainingFraction * 100)
-                            : 0
+                            : null
                           : null;
 
                         // Format Reset Time
-                        const resetTime = quota?.resetTime
-                          ? new Date(quota.resetTime).toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })
-                          : null;
-                        const resetTimeFull = quota?.resetTime
-                          ? new Date(quota.resetTime).toLocaleString()
-                          : null;
+                        const resetDate = quota?.resetTime ? new Date(quota.resetTime) : null;
+                        const resetTimeFull = resetDate ? resetDate.toLocaleString() : null;
+                        let countdownStr = '';
+
+                        if (resetDate && pct !== null && pct < 100) {
+                          const diff = resetDate.getTime() - now;
+                          if (diff > 0) {
+                            const hours = Math.floor(diff / (1000 * 60 * 60));
+                            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                            const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+                            countdownStr = `${hours.toString().padStart(2, '0')}:${minutes
+                              .toString()
+                              .padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                          } else {
+                            countdownStr = 'Ready';
+                          }
+                        }
 
                         return (
                           <Tooltip.Root key={modelName} delayDuration={0}>
@@ -138,23 +153,38 @@ export const AntigravityModelSelector = ({
                                 <div className="flex flex-col gap-0.5 max-w-[95%]">
                                   <div className="flex items-center gap-2">
                                     <span className="font-semibold truncate">{label}</span>
-                                    {pct !== null && (
-                                      <span
-                                        className={cn(
-                                          'text-[10px] px-1.5 py-0.5 rounded-full uppercase tracking-wider font-bold flex items-center gap-1',
-                                          pct > 50
-                                            ? 'bg-green-500/10 text-green-500'
-                                            : pct > 20
-                                              ? 'bg-yellow-500/10 text-yellow-500'
-                                              : 'bg-red-500/10 text-red-500',
-                                        )}
-                                      >
-                                        {pct}%{' '}
-                                        {resetTime && (
-                                          <span className="opacity-75">| {resetTime}</span>
-                                        )}
-                                      </span>
-                                    )}
+                                    {
+                                      /* Quota Badge */
+                                      (pct !== null || countdownStr) && (
+                                        <span
+                                          className={cn(
+                                            'text-[10px] px-1.5 py-0.5 rounded-full uppercase tracking-wider font-bold flex items-center gap-1',
+                                            pct !== null
+                                              ? pct > 50
+                                                ? 'bg-green-500/10 text-green-500'
+                                                : pct > 20
+                                                  ? 'bg-yellow-500/10 text-yellow-500'
+                                                  : 'bg-red-500/10 text-red-500'
+                                              : countdownStr === 'Ready'
+                                                ? 'bg-green-500/10 text-green-500' // Unknown percentage but Ready -> Green
+                                                : 'bg-yellow-500/10 text-yellow-500', // Unknown percentage and waiting -> Yellow/Warning
+                                          )}
+                                        >
+                                          {pct !== null && `${pct}% `}
+                                          {countdownStr && (
+                                            <span
+                                              className={cn(
+                                                'font-mono',
+                                                pct !== null &&
+                                                  'opacity-75 ml-1 border-l pl-1 border-current',
+                                              )}
+                                            >
+                                              {countdownStr}
+                                            </span>
+                                          )}
+                                        </span>
+                                      )
+                                    }
                                   </div>
                                   <span className="text-xs text-muted-foreground truncate">
                                     {modelName}
