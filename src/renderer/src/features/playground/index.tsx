@@ -362,12 +362,31 @@ export const PlaygroundPage = () => {
       }
 
       if (selectedProvider === 'Gemini' && selectedAccount) {
+        const acc = accounts.find((a) => a.id === selectedAccount);
+        if (!acc) return;
+
+        const cacheKey = `gemini-models-${acc.email}`;
+
+        // Load from cache first
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setGeminiModelsList(parsed);
+              if (!geminiModel || !parsed.find((m: any) => m.id === geminiModel)) {
+                setGeminiModel(parsed[0].id);
+              }
+            }
+          } catch (e) {
+            console.error('Failed to parse cached Gemini models', e);
+          }
+        }
+
         try {
           // @ts-ignore
           const status = await window.api.server.start();
           const port = status.port || 11434;
-          const acc = accounts.find((a) => a.id === selectedAccount);
-          if (!acc) return;
 
           const res = await fetch(
             `http://localhost:${port}/v1/gemini/models?email=${encodeURIComponent(acc.email)}`,
@@ -376,6 +395,8 @@ export const PlaygroundPage = () => {
             const data = await res.json();
             if (Array.isArray(data)) {
               setGeminiModelsList(data);
+              localStorage.setItem(cacheKey, JSON.stringify(data));
+
               // Auto-select first if current selection invalid or empty
               if (
                 data.length > 0 &&
