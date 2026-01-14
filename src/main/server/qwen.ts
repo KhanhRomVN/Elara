@@ -49,7 +49,7 @@ export async function login() {
 
   const args = [
     // Explicitly set proxy for both HTTP and HTTPS
-    '--proxy-server=http=127.0.0.1:8080;https=127.0.0.1:8080',
+    '--proxy-server=http=127.0.0.1:22122;https=127.0.0.1:22122',
     // Ensure localhost (if used) doesn't bypass, though usually unrelated to external sites
     '--proxy-bypass-list=<-loopback>',
     '--ignore-certificate-errors',

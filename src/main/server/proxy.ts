@@ -13,7 +13,7 @@ const proxy = new MitmProxy();
 export const proxyEvents = new EventEmitter();
 
 let isRunning = false;
-const PROXY_PORT = 8080;
+const PROXY_PORT = 22122;
 
 export const startProxy = (): Promise<void> => {
   return new Promise((resolve, reject) => {

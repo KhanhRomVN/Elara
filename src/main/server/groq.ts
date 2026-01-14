@@ -348,7 +348,7 @@ export async function login() {
   console.log('[Groq] Spawning Chrome at:', chromePath);
 
   const args = [
-    '--proxy-server=http=127.0.0.1:8080;https=127.0.0.1:8080',
+    '--proxy-server=http=127.0.0.1:22122;https=127.0.0.1:22122',
     '--proxy-bypass-list=<-loopback>',
     '--ignore-certificate-errors',
     `--user-data-dir=${profilePath}`,
