@@ -9,4 +9,10 @@ export const accountsAPI = {
   update: (id: string, updates: any) => ipcRenderer.invoke('accounts:update', { id, updates }),
   export: () => ipcRenderer.invoke('accounts:export'),
   import: () => ipcRenderer.invoke('accounts:import'),
+  // Antigravity specifcs
+  antigravity: {
+    prepareOAuth: () => ipcRenderer.invoke('accounts:antigravity:prepare-oauth'),
+    completeOAuth: () => ipcRenderer.invoke('accounts:antigravity:complete-oauth'),
+    addByToken: (token: string) => ipcRenderer.invoke('accounts:antigravity:add-by-token', token),
+  },
 };

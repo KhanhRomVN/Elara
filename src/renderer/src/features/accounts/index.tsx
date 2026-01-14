@@ -15,6 +15,7 @@ import cohereIcon from '../../assets/provider_icons/cohere.svg';
 import perplexityIcon from '../../assets/provider_icons/perplexity.svg';
 import groqIcon from '../../assets/provider_icons/groq.svg';
 import geminiIcon from '../../assets/provider_icons/gemini.svg';
+import antigravityIcon from '../../assets/provider_icons/antigravity.svg';
 
 const providerIcons: Record<string, string> = {
   Claude: claudeIcon,
@@ -27,6 +28,7 @@ const providerIcons: Record<string, string> = {
   Perplexity: perplexityIcon,
   Groq: groqIcon,
   Gemini: geminiIcon,
+  Antigravity: antigravityIcon,
 };
 
 interface Account {
@@ -41,7 +43,8 @@ interface Account {
     | 'Cohere'
     | 'Perplexity'
     | 'Groq'
-    | 'Gemini';
+    | 'Gemini'
+    | 'Antigravity';
   email: string;
   credential: string;
   status: 'Active' | 'Rate Limit' | 'Error';
@@ -375,7 +378,9 @@ export const Accounts = () => {
                                               ? 'bg-orange-600/10 text-orange-600'
                                               : account.provider === 'Gemini'
                                                 ? 'bg-sky-500/10 text-sky-500'
-                                                : 'bg-blue-500/10 text-blue-500',
+                                                : account.provider === 'Antigravity'
+                                                  ? 'bg-purple-500/10 text-purple-500'
+                                                  : 'bg-blue-500/10 text-blue-500',
                             )}
                           >
                             <img

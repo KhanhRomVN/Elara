@@ -11,6 +11,7 @@ import { login as loginCohere, getProfile as getCohereProfile } from '../server/
 import { login as loginGroq } from '../server/groq';
 import { login as loginGemini } from '../server/gemini';
 import { login as loginPerplexity } from '../server/perplexity';
+import { AntigravityAuthServer } from '../server/antigravity';
 import { proxyEvents } from '../server/proxy';
 
 const DATA_FILE = path.join(app.getPath('userData'), 'accounts.json');
@@ -33,7 +34,8 @@ export interface Account {
     | 'Cohere'
     | 'Perplexity'
     | 'Groq'
-    | 'Gemini';
+    | 'Gemini'
+    | 'Antigravity';
   email: string;
   credential: string; // cookie or api key
   status: 'Active' | 'Rate Limit' | 'Error';
@@ -795,10 +797,110 @@ export const setupAccountsHandlers = () => {
       const data = fs.readFileSync(DATA_FILE, 'utf-8');
       let accounts: Account[] = JSON.parse(data);
       accounts = accounts.filter((acc) => acc.id !== id);
-      fs.writeFileSync(DATA_FILE, JSON.stringify(accounts, null, 2));
       return { success: true };
     } catch (error) {
+      console.error('Failed to delete account:', error);
       return { success: false, error: 'Failed to delete account' };
+    }
+  });
+
+  // Antigravity OAuth Flow Handlers
+  let activeOAuthServer: AntigravityAuthServer | null = null;
+
+  ipcMain.handle('accounts:antigravity:prepare-oauth', async () => {
+    try {
+      if (activeOAuthServer) {
+        activeOAuthServer.stop();
+      }
+      activeOAuthServer = new AntigravityAuthServer();
+      const { url } = await activeOAuthServer.start();
+      return { success: true, url };
+    } catch (error: any) {
+      console.error('[Accounts] Antigravity Prepare OAuth Error:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('accounts:antigravity:complete-oauth', async () => {
+    if (!activeOAuthServer) {
+      return { success: false, error: 'OAuth session not started' };
+    }
+
+    try {
+      const code = await activeOAuthServer.waitForCode();
+      const tokenRes = await activeOAuthServer.exchangeCode(code);
+      const userInfo = await activeOAuthServer.getUserInfo(tokenRes.access_token);
+
+      activeOAuthServer.stop();
+      activeOAuthServer = null;
+
+      // Create Account
+      const email = userInfo.email;
+      const newAccount: Account = {
+        id: crypto.randomUUID(),
+        provider: 'Antigravity',
+        email: email,
+        credential: JSON.stringify(tokenRes), // Store full token response (access + refresh)
+        status: 'Active',
+        usage: '0',
+        totalRequests: 0,
+        successfulRequests: 0,
+        totalDuration: 0,
+        tokensToday: 0,
+        statsDate: new Date().toISOString().split('T')[0],
+        lastActive: new Date().toISOString(),
+        userAgent: getSafeUserAgent(),
+        name: userInfo.name,
+        picture: userInfo.picture,
+      };
+
+      saveAccount(newAccount);
+      return { success: true, account: newAccount };
+    } catch (error: any) {
+      console.error('[Accounts] Antigravity Complete OAuth Error:', error);
+      if (activeOAuthServer) {
+        activeOAuthServer.stop();
+        activeOAuthServer = null;
+      }
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Handler for adding via Refresh Token manually
+  ipcMain.handle('accounts:antigravity:add-by-token', async (_, refreshToken: string) => {
+    try {
+      const tokenRes = await AntigravityAuthServer.refreshAccessToken(refreshToken);
+      const userInfo = await new AntigravityAuthServer().getUserInfo(tokenRes.access_token);
+
+      // Inject the manual refresh token into the response if it wasn't returned (it usually isn't)
+      if (!tokenRes.refresh_token) {
+        tokenRes.refresh_token = refreshToken;
+      }
+
+      const email = userInfo.email;
+      const newAccount: Account = {
+        id: crypto.randomUUID(),
+        provider: 'Antigravity',
+        email: email,
+        credential: JSON.stringify(tokenRes),
+        status: 'Active',
+        usage: '0',
+        totalRequests: 0,
+        successfulRequests: 0,
+        totalDuration: 0,
+        tokensToday: 0,
+        statsDate: new Date().toISOString().split('T')[0],
+        lastActive: new Date().toISOString(),
+        userAgent: getSafeUserAgent(),
+        name: userInfo.name,
+        picture: userInfo.picture,
+      };
+
+      saveAccount(newAccount);
+      return { success: true, account: newAccount };
+    } catch (error: any) {
+      console.error('[Accounts] Antigravity Token Add Error:', error);
+      return { success: false, error: error.message };
     }
   });
 

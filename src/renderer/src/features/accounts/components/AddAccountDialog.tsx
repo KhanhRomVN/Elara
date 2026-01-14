@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { AlertCircle, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { AlertCircle, X, Copy, Check, ExternalLink, RefreshCw, Key } from 'lucide-react';
 
 import claudeIcon from '../../../assets/provider_icons/claude.svg';
 import deepseekIcon from '../../../assets/provider_icons/deepseek.svg';
@@ -11,6 +11,7 @@ import cohereIcon from '../../../assets/provider_icons/cohere.svg';
 import perplexityIcon from '../../../assets/provider_icons/perplexity.svg';
 import groqIcon from '../../../assets/provider_icons/groq.svg';
 import geminiIcon from '../../../assets/provider_icons/gemini.svg';
+import antigravityIcon from '../../../assets/provider_icons/antigravity.svg';
 
 interface AddAccountDialogProps {
   open: boolean;
@@ -27,9 +28,33 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
   const [actualUsername, setActualUsername] = useState('');
   const [accountId, setAccountId] = useState<string | null>(null);
 
+  // Antigravity Specific State
+  const [agTab, setAgTab] = useState<'oauth' | 'token'>('oauth');
+  const [agOAuthUrl, setAgOAuthUrl] = useState('');
+  const [agWaiting, setAgWaiting] = useState(false);
+  const [agToken, setAgToken] = useState('');
+
+  // Reset state when closing/opening
+  useEffect(() => {
+    if (open) {
+      setLoading(false);
+      setError('');
+      setShowEmailInput(false);
+      setAgOAuthUrl('');
+      setAgWaiting(false);
+      setAgToken('');
+    }
+  }, [open, provider]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     console.log('[AddAccountDialog] handleLogin called for provider:', provider);
+
+    if (provider === 'Antigravity') {
+      // Handled separately in render via specialized UI, but if form submitted:
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -67,6 +92,61 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
       if (!showEmailInput) {
         setLoading(false);
       }
+    }
+  };
+
+  const handleAgStartOAuth = async () => {
+    setLoading(true);
+    setError('');
+    setAgWaiting(true);
+    try {
+      // @ts-ignore
+      const prep = await window.api.accounts.antigravity.prepareOAuth();
+      if (!prep.success) {
+        throw new Error(prep.error);
+      }
+      setAgOAuthUrl(prep.url);
+
+      // Auto-open removed. User must copy/open link manually.
+      // window.open(prep.url, '_blank');
+
+      // Start waiting for completion
+      // @ts-ignore
+      const result = await window.api.accounts.antigravity.completeOAuth();
+      if (result.success) {
+        onOpenChange(false);
+        onSuccess();
+      } else {
+        setError(result.error || 'OAuth failed');
+      }
+    } catch (e: any) {
+      setError(e.message || 'Failed to start OAuth');
+    } finally {
+      setLoading(false);
+      setAgWaiting(false);
+    }
+  };
+
+  const handleAgTokenParams = async () => {
+    if (!agToken.trim()) {
+      setError('Please enter a refresh token');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      // @ts-ignore
+      const result = await window.api.accounts.antigravity.addByToken(agToken.trim());
+      if (result.success) {
+        onOpenChange(false);
+        onSuccess();
+      } else {
+        setError(result.error || 'Failed to add account');
+      }
+    } catch (e: any) {
+      setError(e.message || 'Error adding account');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -194,9 +274,144 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
       loginMethod: 'Google',
       browserType: 'Real Browser',
     },
+    {
+      id: 'Antigravity',
+      name: 'Antigravity',
+      description: 'Unified AI Gateway',
+      icon: antigravityIcon,
+      color: 'bg-purple-500/10 text-purple-500 border-purple-200/20',
+      loginMethod: 'Google OAuth',
+      browserType: 'Auth Server',
+    },
   ];
 
   const selectedProviderData = providers.find((p) => p.id === provider);
+
+  // Render Antigravity Tab Content
+  const renderAntigravityContent = () => {
+    return (
+      <div className="flex flex-col h-full">
+        {/* Tabs */}
+        <div className="flex border-b mb-6">
+          <button
+            type="button"
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${agTab === 'oauth' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+            onClick={() => setAgTab('oauth')}
+          >
+            Google OAuth
+          </button>
+          <button
+            type="button"
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${agTab === 'token' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+            onClick={() => setAgTab('token')}
+          >
+            Refresh Token
+          </button>
+        </div>
+
+        {/* Tab Panels */}
+        <div className="flex-1">
+          {agTab === 'oauth' && (
+            <div className="flex flex-col items-center justify-center space-y-6 py-4">
+              <div className="text-center space-y-2">
+                <h4 className="font-medium">Sign in with Google</h4>
+                <p className="text-sm text-muted-foreground max-w-sm">
+                  Authenticate securely via Google to access Antigravity services. A local server
+                  will start to handle the callback.
+                </p>
+              </div>
+
+              {!agOAuthUrl ? (
+                <button
+                  type="button"
+                  onClick={handleAgStartOAuth}
+                  disabled={loading}
+                  className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-8 py-2"
+                >
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  {loading ? 'Starting...' : 'Generate Login URL'}
+                </button>
+              ) : (
+                <div className="w-full space-y-4">
+                  <div className="p-3 bg-muted rounded-md border text-sm text-center">
+                    {agWaiting ? (
+                      <div className="flex flex-col items-center gap-2">
+                        <RefreshCw className="h-4 w-4 animate-spin text-primary" />
+                        <span>Waiting for you to complete login in the browser...</span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-2">
+                        <Check className="h-4 w-4 text-green-500" />
+                        <span>Login setup complete!</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      Login URL (Copy and open in browser)
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        readOnly
+                        value={agOAuthUrl}
+                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => navigator.clipboard.writeText(agOAuthUrl)}
+                        className="inline-flex items-center justify-center rounded-md border border-input bg-transparent px-3 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+                        title="Copy URL"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </button>
+                      <a
+                        href={agOAuthUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center rounded-md border border-input bg-transparent px-3 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+                        title="Open in Browser"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {agTab === 'token' && (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <label htmlFor="ref-token" className="text-sm font-medium">
+                  Refresh Token
+                </label>
+                <textarea
+                  id="ref-token"
+                  value={agToken}
+                  onChange={(e) => setAgToken(e.target.value)}
+                  placeholder="Paste your Google OAuth Refresh Token here (starts with '1//...')"
+                  className="flex min-h-[120px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 font-mono"
+                />
+              </div>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleAgTokenParams}
+                  disabled={loading || !agToken.trim()}
+                  className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-6 py-2"
+                >
+                  {loading ? 'Verifying...' : 'Add Account'}
+                  {!loading && <Key className="ml-2 h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
@@ -313,7 +528,7 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
             </div>
           </form>
         ) : (
-          <form onSubmit={handleLogin} className="p-6 pt-2 h-[600px] flex flex-col">
+          <div className="p-6 pt-2 h-[600px] flex flex-col">
             {error && (
               <div className="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-destructive">
                 <div className="flex gap-2 items-center text-sm font-medium">
@@ -324,64 +539,81 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
               </div>
             )}
 
-            <div className="flex-1 overflow-y-auto pr-2">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {providers.map((p) => (
-                  <div
-                    key={p.id}
-                    onClick={() => setProvider(p.id)}
-                    className={`cursor-pointer rounded-xl border p-4 transition-all hover:bg-accent hover:text-accent-foreground relative ${provider === p.id ? 'ring-2 ring-primary border-primary bg-accent/50' : 'bg-card'}`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className={`p-2 rounded-md ${p.color} border bg-background`}>
-                        <img src={p.icon} alt={p.name} className="w-6 h-6" />
+            <div className="flex-1 flex gap-4 overflow-hidden">
+              {/* Providers List - Left Side */}
+              <div className="w-1/3 overflow-y-auto pr-2 border-r">
+                <div className="space-y-2">
+                  {providers.map((p) => (
+                    <div
+                      key={p.id}
+                      onClick={() => setProvider(p.id)}
+                      className={`cursor-pointer rounded-lg border p-3 transition-all hover:bg-accent hover:text-accent-foreground ${provider === p.id ? 'ring-2 ring-primary border-primary bg-accent/50' : 'bg-card'}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`p-1.5 rounded-md ${p.color} border bg-background shrink-0`}
+                        >
+                          <img src={p.icon} alt={p.name} className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h4 className="font-medium text-sm">{p.name}</h4>
+                          <p className="text-[10px] text-muted-foreground">{p.description}</p>
+                        </div>
                       </div>
-                      {p.browserType === 'Real Browser' && (
-                        <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold text-muted-foreground border-zinc-700 bg-zinc-800/50">
-                          Real Browser
-                        </span>
-                      )}
                     </div>
-                    <div className="mt-3">
-                      <h4 className="font-semibold">{p.name}</h4>
-                      <p className="text-xs text-muted-foreground">{p.description}</p>
+                  ))}
+                </div>
+              </div>
+
+              {/* Right Content Area */}
+              <div className="flex-1 pl-2 overflow-y-auto">
+                {provider === 'Antigravity' ? (
+                  renderAntigravityContent()
+                ) : (
+                  <div className="flex flex-col h-full items-center justify-center text-center space-y-6">
+                    <div
+                      className={`p-4 rounded-full ${selectedProviderData?.color || 'bg-muted'} bg-opacity-20`}
+                    >
+                      <img src={selectedProviderData?.icon} className="w-12 h-12" alt={provider} />
                     </div>
-                    <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
-                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-zinc-500" />
-                      {p.loginMethod}
+                    <div className="space-y-2">
+                      <h3 className="text-lg font-semibold">
+                        Login to {selectedProviderData?.name}
+                      </h3>
+                      <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+                        {selectedProviderData?.loginMethod === 'Direct'
+                          ? 'We will attempt to log you in automatically via the browser.'
+                          : 'A secure browser window will open for you to log in.'}
+                      </p>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => handleLogin(e as any)}
+                      disabled={loading}
+                      className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-8 py-2 w-full max-w-xs"
+                    >
+                      {loading ? 'Waiting...' : `Login with ${provider}`}
+                    </button>
                   </div>
-                ))}
+                )}
               </div>
             </div>
 
-            <div className="flex flex-col-reverse sm:flex-row sm:justify-between sm:items-center pt-6 mt-auto border-t">
-              <div className="text-sm text-muted-foreground hidden sm:block">
-                {selectedProviderData && (
-                  <span>
-                    Selected:{' '}
-                    <span className="font-medium text-foreground">{selectedProviderData.name}</span>
-                  </span>
-                )}
+            <div className="flex justify-between items-center pt-4 border-t mt-4">
+              <div className="text-xs text-muted-foreground">
+                Selected:{' '}
+                <span className="font-medium text-foreground">{selectedProviderData?.name}</span>
               </div>
-              <div className="flex sm:space-x-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => onOpenChange(false)}
-                  className="flex-1 sm:flex-none inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 sm:flex-none inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-8 py-2 min-w-[120px]"
-                >
-                  {loading ? 'Waiting...' : `Login with ${provider}`}
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2"
+              >
+                Cancel
+              </button>
             </div>
-          </form>
+          </div>
         )}
       </div>
     </div>
