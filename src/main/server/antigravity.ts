@@ -1,6 +1,11 @@
 import http from 'http';
+import https from 'https';
 import crypto from 'crypto';
-import url from 'url';
+import importUrls from 'url';
+const { URLSearchParams } = importUrls;
+import fs from 'fs';
+import path from 'path';
+import { app } from 'electron';
 
 // Use dynamic import for node-fetch to support ESM in CJS context
 const fetch = async (url: any, init?: any) => {
@@ -15,6 +20,9 @@ const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const USERINFO_URL = 'https://www.googleapis.com/oauth2/v2/userinfo';
 // Updated to Production environment as per Antigravity-Manager
 const BASE_URL = 'https://cloudcode-pa.googleapis.com';
+
+// Force IPv4 to avoid EHOSTUNREACH on IPv6
+const httpsAgent = new https.Agent({ family: 4 });
 
 export class AntigravityAuthServer {
   private server: http.Server | null = null;
@@ -95,6 +103,7 @@ export class AntigravityAuthServer {
         grant_type: 'authorization_code',
         redirect_uri: redirectUri,
       }),
+      agent: httpsAgent,
     });
 
     if (!res.ok) {
@@ -108,6 +117,7 @@ export class AntigravityAuthServer {
   async getUserInfo(accessToken: string): Promise<any> {
     const res = await fetch(USERINFO_URL, {
       headers: { Authorization: `Bearer ${accessToken}` },
+      agent: httpsAgent,
     });
     if (!res.ok) throw new Error('Failed to fetch user info');
     return await res.json();
@@ -123,6 +133,7 @@ export class AntigravityAuthServer {
         refresh_token: refreshToken,
         grant_type: 'refresh_token',
       }),
+      agent: httpsAgent,
     });
 
     if (!res.ok) {
@@ -180,6 +191,28 @@ const updateAccountCredentials = async (account: Account, newTokens: any) => {
 export const getModels = async (account: Account) => {
   console.log('[Antigravity] getModels called');
   let accessToken = await ensureAccessToken(account);
+  const cachePath = path.join(app.getPath('userData'), 'antigravity_models_cache.json');
+
+  const defaultModels = {
+    models: {
+      'gemini-3-pro-preview': {
+        name: 'gemini-3-pro-preview',
+        displayName: 'Gemini 3 Pro (Preview)',
+        description: 'Complex reasoning, coding, and creative collaboration',
+        supportedGenerationMethods: ['generateContent', 'countTokens'],
+        inputTokenLimit: 32768,
+        outputTokenLimit: 8192,
+      },
+      'gemini-3-flash-preview': {
+        name: 'gemini-3-flash-preview',
+        displayName: 'Gemini 3 Flash (Preview)',
+        description: 'Fast and versatile performance for diverse tasks',
+        supportedGenerationMethods: ['generateContent', 'countTokens'],
+        inputTokenLimit: 32768,
+        outputTokenLimit: 8192,
+      },
+    },
+  };
 
   const fetchModels = async (token: string) => {
     // Only fetch from daily-cloudcode-pa, no need for project ID in body for this call usually?
@@ -197,6 +230,7 @@ export const getModels = async (account: Account) => {
         'User-Agent': 'antigravity/1.11.3 Darwin/arm64',
       },
       body: JSON.stringify({}), // Empty body as per CLIProxyAPI
+      agent: httpsAgent,
     });
 
     console.log(`[Antigravity] fetchAvailableModels Status: ${res.status}`);
@@ -221,24 +255,46 @@ export const getModels = async (account: Account) => {
         }
         console.log(`[Antigravity] Model: ${key}${usageStr}`);
       });
+      // Save to cache
+      try {
+        fs.writeFileSync(cachePath, JSON.stringify(data, null, 2));
+      } catch (err) {
+        console.error('[Antigravity] Failed to save cache:', err);
+      }
     }
 
     return data;
   };
 
   try {
-    return await fetchModels(accessToken);
-  } catch (e: any) {
-    if (e.message === '401') {
-      console.log('[Antigravity] Token expired, refreshing for getModels...');
-      const creds = JSON.parse(account.credential);
-      if (creds.refresh_token) {
-        const newTokens = await AntigravityAuthServer.refreshAccessToken(creds.refresh_token);
-        await updateAccountCredentials(account, newTokens);
-        return await fetchModels(newTokens.access_token);
+    try {
+      return await fetchModels(accessToken);
+    } catch (e: any) {
+      if (e.message === '401') {
+        console.log('[Antigravity] Token expired, refreshing for getModels...');
+        const creds = JSON.parse(account.credential);
+        if (creds.refresh_token) {
+          const newTokens = await AntigravityAuthServer.refreshAccessToken(creds.refresh_token);
+          await updateAccountCredentials(account, newTokens);
+          return await fetchModels(newTokens.access_token);
+        }
       }
+      throw e;
     }
-    throw e;
+  } catch (err) {
+    console.warn('[Antigravity] API failed, attempting fallback:', err);
+    try {
+      if (fs.existsSync(cachePath)) {
+        console.log('[Antigravity] Loading models from cache');
+        const cached = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
+        if (cached && cached.models) return cached;
+      }
+    } catch (cacheErr) {
+      console.error('[Antigravity] Failed to load cache:', cacheErr);
+    }
+
+    console.log('[Antigravity] Using default hardcoded models');
+    return defaultModels;
   }
 };
 
@@ -279,6 +335,7 @@ const fetchProjectID = async (accessToken: string): Promise<string> => {
       'X-Goog-Api-Client': 'antigravity/1.11.3',
     },
     body: JSON.stringify(payload),
+    agent: httpsAgent,
   });
 
   if (!res.ok) {
@@ -425,6 +482,7 @@ export const chatCompletionStream = async (req: any, res: any, account: Account)
         Accept: 'text/event-stream',
       },
       body: JSON.stringify(payload),
+      agent: httpsAgent,
     });
 
     console.log(`[Antigravity] Chat Response Status: ${response.status}`);
