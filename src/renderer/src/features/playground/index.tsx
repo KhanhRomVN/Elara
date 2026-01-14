@@ -677,26 +677,30 @@ export const PlaygroundPage = () => {
 
       setLoadingHistory(true);
       try {
+        // @ts-ignore
+        const status = await window.api.server.start();
+        const port = status.port || 11434;
+
         const endpoint =
           selectedProvider === 'Claude'
-            ? 'http://localhost:11434/v1/claude/conversations'
+            ? `http://localhost:${port}/v1/claude/conversations`
             : selectedProvider === 'Mistral'
-              ? 'http://localhost:11434/v1/mistral/conversations'
+              ? `http://localhost:${port}/v1/mistral/conversations`
               : selectedProvider === 'Kimi'
-                ? 'http://localhost:11434/v1/kimi/conversations'
+                ? `http://localhost:${port}/v1/kimi/conversations`
                 : selectedProvider === 'Qwen'
-                  ? 'http://localhost:11434/v1/qwen/conversations'
+                  ? `http://localhost:${port}/v1/qwen/conversations`
                   : selectedProvider === 'Cohere'
-                    ? 'http://localhost:11434/v1/cohere/conversations'
+                    ? `http://localhost:${port}/v1/cohere/conversations`
                     : selectedProvider === 'Perplexity'
-                      ? 'http://localhost:11434/v1/perplexity/conversations'
+                      ? `http://localhost:${port}/v1/perplexity/conversations`
                       : selectedProvider === 'Groq'
-                        ? 'http://localhost:11434/v1/groq/conversations'
+                        ? `http://localhost:${port}/v1/groq/conversations`
                         : selectedProvider === 'Antigravity'
-                          ? 'http://localhost:11434/v1/antigravity/conversations'
+                          ? `http://localhost:${port}/v1/antigravity/conversations`
                           : selectedProvider === 'Zai'
-                            ? 'http://localhost:11434/v1/zai/conversations'
-                            : 'http://localhost:11434/v1/deepseek/sessions';
+                            ? `http://localhost:${port}/v1/zai/conversations`
+                            : `http://localhost:${port}/v1/deepseek/sessions`;
 
         const response = await fetch(`${endpoint}?email=${encodeURIComponent(account.email)}`);
 
@@ -745,8 +749,19 @@ export const PlaygroundPage = () => {
       }
     };
 
+    if (selectedProvider === 'DeepSeek') {
+      console.log('[History] Fetching DeepSeek history for account:', account?.email);
+    }
+
     fetchHistory();
   }, [selectedProvider, selectedAccount, accounts]);
+
+  // Debug fetch history
+  useEffect(() => {
+    if (selectedProvider === 'DeepSeek') {
+      console.log('DeepSeek Selected. History:', history);
+    }
+  }, [history, selectedProvider]);
 
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [conversationTitle, setConversationTitle] = useState<string>('');
@@ -766,20 +781,24 @@ export const PlaygroundPage = () => {
         return;
       }
 
+      // @ts-ignore
+      const status = await window.api.server.start();
+      const port = status.port || 11434;
+
       const endpoint =
         selectedProvider === 'Claude'
-          ? `http://localhost:11434/v1/claude/conversations/${conversationId}`
+          ? `http://localhost:${port}/v1/claude/conversations/${conversationId}`
           : selectedProvider === 'Mistral'
-            ? `http://localhost:11434/v1/mistral/conversations/${conversationId}`
+            ? `http://localhost:${port}/v1/mistral/conversations/${conversationId}`
             : selectedProvider === 'Kimi'
-              ? `http://localhost:11434/v1/kimi/conversations/${conversationId}`
+              ? `http://localhost:${port}/v1/kimi/conversations/${conversationId}`
               : selectedProvider === 'Qwen'
-                ? `http://localhost:11434/v1/qwen/conversations/${conversationId}`
+                ? `http://localhost:${port}/v1/qwen/conversations/${conversationId}`
                 : selectedProvider === 'Perplexity'
-                  ? `http://localhost:11434/v1/perplexity/conversations/${conversationId}`
+                  ? `http://localhost:${port}/v1/perplexity/conversations/${conversationId}`
                   : selectedProvider === 'Groq'
-                    ? `http://localhost:11434/v1/groq/conversations/${conversationId}`
-                    : `http://localhost:11434/v1/deepseek/sessions/${conversationId}/messages`;
+                    ? `http://localhost:${port}/v1/groq/conversations/${conversationId}`
+                    : `http://localhost:${port}/v1/deepseek/sessions/${conversationId}/messages`;
 
       const response = await fetch(`${endpoint}?email=${encodeURIComponent(account.email)}`);
 

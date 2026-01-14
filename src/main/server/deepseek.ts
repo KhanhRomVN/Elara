@@ -215,6 +215,15 @@ export async function chatCompletionStream(
         req.setHeader('Authorization', token);
         req.setHeader('Origin', origin);
         req.setHeader('Referer', `${origin}/`);
+        // Add headers to mimic real browser
+        req.setHeader('sec-ch-ua-platform', '"Linux"');
+        req.setHeader(
+          'sec-ch-ua',
+          '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"',
+        );
+        req.setHeader('sec-ch-ua-mobile', '?0');
+        req.setHeader('accept-language', 'en-US,en;q=0.9');
+
         if (userAgent) req.setHeader('User-Agent', userAgent);
 
         Object.entries(additionalHeaders).forEach(([k, v]) => req.setHeader(k, v));
@@ -305,6 +314,14 @@ export async function chatCompletionStream(
     request.setHeader('X-Client-Locale', 'en_US');
     request.setHeader('X-Client-Platform', 'web');
     request.setHeader('X-Client-Version', '1.0.0-always');
+    // Add headers to mimic real browser
+    request.setHeader('sec-ch-ua-platform', '"Linux"');
+    request.setHeader(
+      'sec-ch-ua',
+      '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"',
+    );
+    request.setHeader('sec-ch-ua-mobile', '?0');
+    request.setHeader('accept-language', 'en-US,en;q=0.9');
 
     if (userAgent) request.setHeader('User-Agent', userAgent);
 
@@ -399,6 +416,15 @@ export async function getChatSessions(
     request.setHeader('x-app-version', '20241129.1');
     request.setHeader('x-client-version', '1.6.1');
     request.setHeader('x-client-platform', 'web');
+    // Add headers to mimic real browser
+    request.setHeader('sec-ch-ua-platform', '"Linux"');
+    request.setHeader(
+      'sec-ch-ua',
+      '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"',
+    );
+    request.setHeader('sec-ch-ua-mobile', '?0');
+    request.setHeader('accept-language', 'en-US,en;q=0.9');
+
     if (userAgent) request.setHeader('User-Agent', userAgent);
 
     return new Promise((resolve, reject) => {
@@ -410,6 +436,7 @@ export async function getChatSessions(
           if (response.statusCode === 200) {
             try {
               const parsed = JSON.parse(data);
+              logDeepSeekResponse(data);
               if (parsed.code === 0 && parsed.data?.biz_data?.chat_sessions) {
                 resolve(parsed.data.biz_data.chat_sessions);
               } else {
@@ -430,6 +457,21 @@ export async function getChatSessions(
   } catch (error: any) {
     console.error('[DeepSeek] Get Chat Sessions Error:', error);
     throw error;
+  }
+}
+
+// Add detailed logging to getChatSessions inner promise
+function logDeepSeekResponse(data: string) {
+  try {
+    const parsed = JSON.parse(data);
+    console.log('[DeepSeek] Response Code:', parsed.code);
+    console.log('[DeepSeek] Response Msg:', parsed.msg);
+    console.log('[DeepSeek] Data keys:', Object.keys(parsed.data || {}));
+    if (parsed.data?.biz_data?.chat_sessions) {
+      console.log('[DeepSeek] Session Count:', parsed.data.biz_data.chat_sessions.length);
+    }
+  } catch (e) {
+    console.log('[DeepSeek] Raw Response (first 100 chars):', data.substring(0, 100));
   }
 }
 
@@ -459,6 +501,15 @@ export async function getChatHistory(
     request.setHeader('x-app-version', '20241129.1');
     request.setHeader('x-client-version', '1.6.1');
     request.setHeader('x-client-platform', 'web');
+    // Add headers to mimic real browser
+    request.setHeader('sec-ch-ua-platform', '"Linux"');
+    request.setHeader(
+      'sec-ch-ua',
+      '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"',
+    );
+    request.setHeader('sec-ch-ua-mobile', '?0');
+    request.setHeader('accept-language', 'en-US,en;q=0.9');
+
     if (userAgent) request.setHeader('User-Agent', userAgent);
 
     return new Promise((resolve, reject) => {
@@ -520,6 +571,15 @@ export async function stopStream(
     request.setHeader('x-app-version', '20241129.1');
     request.setHeader('x-client-version', '1.6.1');
     request.setHeader('x-client-platform', 'web');
+    // Add headers to mimic real browser
+    request.setHeader('sec-ch-ua-platform', '"Linux"');
+    request.setHeader(
+      'sec-ch-ua',
+      '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"',
+    );
+    request.setHeader('sec-ch-ua-mobile', '?0');
+    request.setHeader('accept-language', 'en-US,en;q=0.9');
+
     if (userAgent) request.setHeader('User-Agent', userAgent);
 
     const body = JSON.stringify({
