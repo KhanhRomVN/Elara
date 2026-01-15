@@ -17,7 +17,7 @@ export const ChatArea = ({
   className,
 }: ChatAreaProps) => {
   return (
-    <div className={`flex flex-col h-full bg-background ${className || ''}`}>
+    <div className={`flex flex-col flex-1 min-h-0 bg-background ${className || ''}`}>
       {/* Conversation Title Header */}
       {conversationTitle && (
         <div className="border-b bg-background/95 backdrop-blur">

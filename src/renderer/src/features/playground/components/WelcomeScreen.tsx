@@ -1,5 +1,6 @@
 import { ReactNode, KeyboardEvent, ChangeEvent } from 'react';
 import { InputArea } from './InputArea';
+import { PendingAttachment } from '../types';
 
 interface WelcomeScreenProps {
   dropdowns: ReactNode;
@@ -16,7 +17,7 @@ interface WelcomeScreenProps {
   searchEnabled?: boolean;
   setSearchEnabled?: (enabled: boolean) => void;
   onFileSelect?: (files: FileList | File[] | null) => void;
-  attachments?: File[];
+  attachments?: PendingAttachment[];
   onRemoveAttachment?: (index: number) => void;
 }
 

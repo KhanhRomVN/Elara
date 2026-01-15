@@ -6,5 +6,6 @@ export interface StreamLineHandler {
     currentMessageId: string,
     setMessages: React.Dispatch<React.SetStateAction<Message[]>>,
     onTokenUpdate?: (tokens: number) => void,
+    onSessionId?: (sessionId: string) => void,
   ) => void;
 }

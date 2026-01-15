@@ -18,6 +18,7 @@ export interface ChatPayload {
   search?: boolean;
   conversation_id?: string;
   parent_message_id?: string;
+  ref_file_ids?: string[];
 }
 
 interface PoWChallenge {
@@ -197,8 +198,13 @@ export async function chatCompletionStream(
     onRaw?: (data: string) => void;
     onDone: () => void;
     onError: (error: Error) => void;
+    onSessionCreated?: (sessionId: string) => void;
   },
 ) {
+  console.log(
+    '[DeepSeek Chat Debug] Starting chatCompletionStream with payload:',
+    JSON.stringify(payload, null, 2),
+  );
   try {
     const apiBase = 'https://chat.deepseek.com/api/v0';
     const origin = 'https://chat.deepseek.com';
@@ -270,12 +276,21 @@ export async function chatCompletionStream(
       }
     }
 
+    if (callbacks.onSessionCreated) {
+      callbacks.onSessionCreated(sessionId);
+    }
+
     // 2. Request PoW Challenge
+    console.log('[DeepSeek Chat Debug] Requesting PoW Challenge...');
     const challengeRes = await makeRequest(
       `${apiBase}/chat/create_pow_challenge`,
       'POST',
       { target_path: '/api/v0/chat/completion' },
       { Referer: `${origin}/a/chat/s/${sessionId}` },
+    );
+    console.log(
+      '[DeepSeek Chat Debug] PoW Challenge received:',
+      challengeRes?.data?.biz_data?.challenge?.challenge,
     );
 
     const challengeData: PoWChallenge = challengeRes?.data?.biz_data?.challenge;
@@ -284,20 +299,25 @@ export async function chatCompletionStream(
     }
 
     // 3. Solve PoW
+    console.log('[DeepSeek Chat Debug] Solving PoW...');
     const powAnswer = await solvePoW(challengeData);
     const powResponseBase64 = Buffer.from(JSON.stringify(powAnswer)).toString('base64');
+    console.log('[DeepSeek Chat Debug] PoW Solved. Challenge:', powAnswer.challenge);
 
     // 4. Send Chat Completion
+    console.log('[DeepSeek Chat Debug] Sending Chat Completion Request...');
 
     // Payload matching deepseek4free
     const webPayload = {
       chat_session_id: sessionId,
       parent_message_id: payload.parent_message_id || null,
       prompt: payload.messages[payload.messages.length - 1].content,
-      ref_file_ids: [],
+      ref_file_ids: payload.ref_file_ids || [],
       thinking_enabled: payload.thinking ?? true, // Map our 'thinking' param to DeepSeek's 'thinking_enabled'
       search_enabled: payload.search ?? false, // Map our 'search' param to DeepSeek's 'search_enabled'
     };
+
+    console.log('[DeepSeek Chat Debug] Web Payload:', JSON.stringify(webPayload, null, 2));
 
     const request = net.request({
       method: 'POST',
@@ -347,7 +367,6 @@ export async function chatCompletionStream(
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-          console.log('[DeepSeek Server] Received line:', line.substring(0, 100));
           processLine(line);
         }
       });
@@ -388,7 +407,14 @@ export async function chatCompletionStream(
       }
     }
 
-    request.on('error', (err) => callbacks.onError(err));
+    request.on('error', (err) => {
+      console.error('[DeepSeek Chat Debug] Request Error:', err);
+      callbacks.onError(err);
+    });
+    request.on('finish', () => console.log('[DeepSeek Chat Debug] Request Finished (Flushed)'));
+    request.on('close', () => console.log('[DeepSeek Chat Debug] Request Closed'));
+    request.on('abort', () => console.log('[DeepSeek Chat Debug] Request Aborted'));
+
     request.write(JSON.stringify(webPayload));
     request.end();
   } catch (error: any) {
@@ -597,6 +623,162 @@ export async function stopStream(
 
       request.on('error', reject);
       request.write(body);
+      request.end();
+    });
+  } catch (error: any) {
+    throw error;
+  }
+}
+
+// Upload file to DeepSeek
+export async function uploadFile(
+  token: string,
+  fileContent: string, // Base64
+  fileName: string,
+  userAgent?: string,
+): Promise<string> {
+  try {
+    const apiBase = 'https://chat.deepseek.com/api/v0';
+    const origin = 'https://chat.deepseek.com';
+    const url = `${apiBase}/file/upload_file`;
+
+    // Helper for pre-upload requests (PoW)
+    const makeRequest = (
+      url: string,
+      method: string,
+      body?: any,
+      additionalHeaders: Record<string, string> = {},
+    ) => {
+      return new Promise<any>((resolve, reject) => {
+        const req = net.request({ method, url, useSessionCookies: true });
+        req.setHeader('Content-Type', 'application/json');
+        req.setHeader('Authorization', token.trim());
+        req.setHeader('Origin', origin);
+        req.setHeader('Referer', `${origin}/`);
+        if (userAgent) {
+          req.setHeader('User-Agent', userAgent.trim());
+        }
+
+        Object.entries(additionalHeaders).forEach(([k, v]) => req.setHeader(k, v));
+
+        req.on('response', (response) => {
+          let data = '';
+          response.on('data', (chunk) => (data += chunk.toString()));
+          response.on('end', () => {
+            if (response.statusCode >= 200 && response.statusCode < 400) {
+              try {
+                resolve(JSON.parse(data));
+              } catch (e) {
+                resolve(data);
+              }
+            } else {
+              reject(new Error(`Request to ${url} failed: ${response.statusCode} ${data}`));
+            }
+          });
+          response.on('error', reject);
+        });
+
+        req.on('error', reject);
+
+        if (body) {
+          req.write(JSON.stringify(body));
+        }
+        req.end();
+      });
+    };
+
+    // 1. Get PoW Challenge
+    const challengeRes = await makeRequest(`${apiBase}/chat/create_pow_challenge`, 'POST', {
+      target_path: '/api/v0/file/upload_file',
+    });
+
+    const challengeData = challengeRes?.data?.biz_data?.challenge;
+    if (!challengeData) {
+      console.warn('DeepSeek Upload: Failed to get PoW challenge, proceeding without it.');
+    }
+
+    let powResponseBase64 = '';
+    if (challengeData) {
+      try {
+        const powAnswer = await solvePoW(challengeData);
+        powResponseBase64 = Buffer.from(JSON.stringify(powAnswer)).toString('base64');
+      } catch (e) {
+        console.error('DeepSeek Upload: Failed to solve PoW', e);
+      }
+    }
+
+    // Convert base64 to Buffer
+    const buffer = Buffer.from(fileContent.replace(/^data:.*,/, ''), 'base64');
+
+    // Construct Multipart Body manually since we can't easily use FormData with net.request
+    const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
+
+    // Simpler Manual Construction for correctness:
+    const crlf = '\r\n';
+    const header = `--${boundary}${crlf}Content-Disposition: form-data; name="file"; filename="${fileName}"${crlf}Content-Type: application/octet-stream${crlf}${crlf}`;
+    const footer = `${crlf}--${boundary}--${crlf}`;
+
+    const payloadBuffer = Buffer.concat([Buffer.from(header), buffer, Buffer.from(footer)]);
+
+    const request = net.request({
+      method: 'POST',
+      url,
+      useSessionCookies: true,
+    });
+
+    const headersToSet: Record<string, string> = {
+      Authorization: token.trim(),
+      Origin: origin,
+      Referer: `${origin}/`,
+      Accept: '*/*',
+      'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      'x-client-locale': 'en_US',
+      'x-app-version': '20241129.1',
+      'x-client-version': '1.6.1',
+      'x-client-platform': 'web',
+      'x-file-size': buffer.length.toString(),
+    };
+
+    if (powResponseBase64) {
+      headersToSet['x-ds-pow-response'] = powResponseBase64;
+    }
+
+    if (userAgent) {
+      headersToSet['User-Agent'] = userAgent.trim();
+    }
+
+    Object.entries(headersToSet).forEach(([key, value]) => {
+      request.setHeader(key, value);
+    });
+
+    return new Promise((resolve, reject) => {
+      let data = '';
+
+      request.on('response', (response) => {
+        response.on('data', (chunk) => (data += chunk.toString()));
+        response.on('end', () => {
+          if (response.statusCode === 200) {
+            try {
+              const parsed = JSON.parse(data);
+              console.log('[DeepSeek Upload Debug] Response:', JSON.stringify(parsed, null, 2));
+              if (parsed.code === 0 && parsed.data?.biz_data?.id) {
+                console.log('[DeepSeek Upload Debug] Captured File ID:', parsed.data.biz_data.id);
+                resolve(parsed.data.biz_data.id);
+              } else {
+                reject(new Error(`Failed to upload file: ${parsed.msg || 'Unknown error'}`));
+              }
+            } catch (e) {
+              reject(e);
+            }
+          } else {
+            console.error('DeepSeek Upload Failed:', response.statusCode, data);
+            reject(new Error(`Failed to upload file: ${response.statusCode}`));
+          }
+        });
+      });
+
+      request.on('error', reject);
+      request.write(payloadBuffer);
       request.end();
     });
   } catch (error: any) {

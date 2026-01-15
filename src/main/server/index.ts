@@ -13,6 +13,7 @@ import {
   getChatSessions,
   getChatHistory,
   stopStream,
+  uploadFile,
 } from './deepseek';
 import {
   chatCompletionStream as claudeChat,
@@ -117,7 +118,7 @@ const getAccount = async (req: express.Request): Promise<Account | undefined> =>
 
 const expressApp = express();
 expressApp.use(cors());
-expressApp.use(express.json());
+expressApp.use(express.json({ limit: '50mb' }));
 
 // Import management routes
 import ManagementRouter from './routes/management';
@@ -174,8 +175,16 @@ expressApp.get('/v1/models', (_req, res) => {
 
 expressApp.post('/v1/chat/completions', async (req, res) => {
   try {
-    const { model, messages, thinking, search, conversation_id, parent_message_id, temperature } =
-      req.body;
+    const {
+      model,
+      messages,
+      thinking,
+      search,
+      conversation_id,
+      parent_message_id,
+      temperature,
+      ref_file_ids,
+    } = req.body;
 
     // Priority: Headers -> Query Params
     const authHeader = req.headers.authorization;
@@ -295,13 +304,25 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
     if (account.provider === 'DeepSeek') {
       await deepseekChat(
         account.credential,
-        { model, messages, stream: true, thinking, search, conversation_id, parent_message_id },
+        {
+          model,
+          messages,
+          stream: true,
+          thinking,
+          search,
+          conversation_id,
+          parent_message_id,
+          ref_file_ids,
+        },
         account.userAgent,
         {
           ...callbacks,
           onRaw: (data: string) => {
             // Forward raw data chunks directly
             res.write(`data: ${data}\n\n`);
+          },
+          onSessionCreated: (sessionId: string) => {
+            res.write(`event: session_created\ndata: ${sessionId}\n\n`);
           },
         },
       );
@@ -761,6 +782,34 @@ expressApp.post('/v1/deepseek/sessions/:id/stop', async (req, res) => {
     res.json({ success: true });
   } catch (error: any) {
     console.error('[Server] Stop DeepSeek Stream Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Upload file to DeepSeek
+expressApp.post('/v1/deepseek/files', async (req, res) => {
+  try {
+    const { file, fileName, email } = req.body;
+
+    if (!fs.existsSync(DATA_FILE)) {
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
+    }
+
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    const account = accounts.find(
+      (a) => a.email.toLowerCase() === email.toLowerCase() && a.provider === 'DeepSeek',
+    );
+
+    if (!account) {
+      res.status(401).json({ error: 'No valid DeepSeek account found' });
+      return;
+    }
+
+    const fileId = await uploadFile(account.credential, file, fileName, account.userAgent);
+    res.json({ id: fileId });
+  } catch (error: any) {
+    console.error('[Server] Upload DeepSeek File Error:', error);
     res.status(500).json({ error: error.message });
   }
 });

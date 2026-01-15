@@ -22,6 +22,15 @@ export interface Attachment {
   mimeType?: string;
 }
 
+export interface PendingAttachment {
+  id: string; // UI unique ID
+  file: File;
+  status: 'pending' | 'uploading' | 'completed' | 'error';
+  fileId?: string; // Server returned ID
+  previewUrl: string;
+  progress?: number;
+}
+
 export type Provider =
   | 'Claude'
   | 'DeepSeek'

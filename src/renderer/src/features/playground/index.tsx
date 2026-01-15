@@ -21,7 +21,7 @@ import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
 import { InputArea } from './components/InputArea';
 import { WelcomeScreen } from './components/WelcomeScreen';
-import { Message, Account } from './types';
+import { Message, Account, PendingAttachment } from './types';
 import { getStreamHandler } from './stream-handlers';
 
 // Interfaces moved to types.ts
@@ -137,15 +137,84 @@ export const PlaygroundPage = () => {
 
   const [thinkingEnabled, setThinkingEnabled] = useState(true);
   const [searchEnabled, setSearchEnabled] = useState(false);
-  const [attachments, setAttachments] = useState<File[]>([]);
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [tokenCount, setTokenCount] = useState(0);
+  const [inputTokenCount, setInputTokenCount] = useState(0);
   const [accumulatedUsage, setAccumulatedUsage] = useState(0);
 
-  const handleFileSelect = (files: FileList | File[] | null) => {
+  const handleFileSelect = async (files: FileList | File[] | null) => {
     if (!files) return;
     const newFiles = itemsToFileArray(files);
-    setAttachments((prev) => [...prev, ...newFiles]);
+
+    // Create new PendingAttachments
+    const newAttachments: PendingAttachment[] = newFiles.map((file) => ({
+      id: Math.random().toString(36).substring(7),
+      file,
+      status: 'pending',
+      previewUrl: URL.createObjectURL(file),
+      progress: 0,
+    }));
+
+    setAttachments((prev) => [...prev, ...newAttachments]);
     console.log('Selected files:', newFiles);
+
+    // Trigger uploads immediately if provider is DeepSeek
+    // (Or for all providers if we plan to support them later)
+    if (selectedProvider === 'DeepSeek') {
+      // @ts-ignore
+      const serverStatus = await window.api.server.start(); // Ensure server running
+      const port = serverStatus.port;
+      const account = accounts.find((acc) => acc.id === selectedAccount);
+
+      if (account) {
+        newAttachments.forEach(async (att) => {
+          // Update status to uploading
+          setAttachments((prev) =>
+            prev.map((p) => (p.id === att.id ? { ...p, status: 'uploading' } : p)),
+          );
+
+          try {
+            const uploadUrl = `http://localhost:${port}/v1/deepseek/files`;
+            const base64 = await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result as string);
+              reader.readAsDataURL(att.file);
+            });
+
+            const uploadRes = await fetch(uploadUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                file: base64,
+                fileName: att.file.name,
+                email: account.email,
+              }),
+            });
+
+            if (uploadRes.ok) {
+              const data = await uploadRes.json();
+              if (data.id) {
+                console.log(`Uploaded ${att.file.name}, ID: ${data.id}`);
+                setAttachments((prev) =>
+                  prev.map((p) =>
+                    p.id === att.id ? { ...p, status: 'completed', fileId: data.id } : p,
+                  ),
+                );
+              } else {
+                throw new Error('No ID returned');
+              }
+            } else {
+              throw new Error('Upload failed');
+            }
+          } catch (error) {
+            console.error(`Error uploading ${att.file.name}:`, error);
+            setAttachments((prev) =>
+              prev.map((p) => (p.id === att.id ? { ...p, status: 'error' } : p)),
+            );
+          }
+        });
+      }
+    }
   };
 
   // Helper to normalize file input
@@ -218,6 +287,28 @@ export const PlaygroundPage = () => {
       document.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isResizing]);
+
+  // Input Token Counting Effect
+  useEffect(() => {
+    const updateInputTokenCount = async () => {
+      if (!input) {
+        setInputTokenCount(0);
+        return;
+      }
+
+      let modelId = 'Xenova/Llama-2-7b-chat-tokenizer';
+      if (selectedProvider === 'DeepSeek') {
+        // DeepSeek uses Llama-based tokenizer. Xenova/Llama-3-8b-instruct is a good approximation for V3
+        // The user logs showed LlamaTokenizerFast.
+        modelId = 'Xenova/Llama-3-8b-instruct';
+      } else if (selectedProvider === 'Claude') {
+        modelId = 'Xenova/Llama-2-7b-chat-tokenizer';
+      }
+    };
+
+    const timer = setTimeout(updateInputTokenCount, 500);
+    return () => clearTimeout(timer);
+  }, [input, selectedProvider, deepseekModel]);
 
   /* Unused variables/functions removed */
 
@@ -402,7 +493,9 @@ export const PlaygroundPage = () => {
 
     setMessages((prev) => [...prev, userMessage]);
     const currentInput = input;
+    const currentAttachments = attachments;
     setInput('');
+    setAttachments([]);
     setLoading(true);
 
     try {
@@ -424,6 +517,30 @@ export const PlaygroundPage = () => {
       const controller = new AbortController();
       setAbortController(controller);
       console.log('Starting request with controller:', controller);
+
+      // Handle Attachments (Use already uploaded IDs)
+      const uploadedFileIds: string[] = [];
+      console.error(
+        '[Frontend Debug] handleSend - currentAttachments:',
+        JSON.stringify(currentAttachments, null, 2),
+      );
+
+      if (currentAttachments.length > 0) {
+        // Collect IDs from completed uploads
+        currentAttachments.forEach((att) => {
+          if (att.fileId) {
+            uploadedFileIds.push(att.fileId);
+          } else {
+            console.error('[Frontend Debug] Attachment missing fileId:', att);
+          }
+        });
+
+        console.error('[Frontend Debug] uploadedFileIds:', uploadedFileIds);
+
+        // If DeepSeek and there are attachments but no IDs (e.g. failed or still uploading), we might warn or skip?
+        // Ideally we should block send until upload done?
+        // But for now, we just send what we have.
+      }
 
       const response = await fetch(url, {
         signal: controller.signal,
@@ -463,6 +580,7 @@ export const PlaygroundPage = () => {
           stream: true,
           thinking: account.provider === 'DeepSeek' ? thinkingEnabled : undefined,
           search: account.provider === 'DeepSeek' ? searchEnabled : undefined,
+          ref_file_ids: uploadedFileIds.length > 0 ? uploadedFileIds : undefined,
           // New fields for context
           conversation_id: activeChatId !== 'new-session' ? activeChatId : undefined,
           parent_message_id:
@@ -471,7 +589,6 @@ export const PlaygroundPage = () => {
                   // For DeepSeek, use the last assistant message's deepseek_message_id
                   const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
                   const parentId = lastAssistant?.deepseek_message_id;
-                  console.log('[Playground] DeepSeek parent_message_id:', parentId);
                   return parentId;
                 })()
               : messages.length > 0
@@ -540,13 +657,21 @@ export const PlaygroundPage = () => {
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
+          if (line.startsWith('data: ') || line.startsWith('event: ')) {
+            const data = line.startsWith('data: ') ? line.slice(6) : line;
             if (data === '[DONE]') continue;
-            console.log('[Playground] Received chunk:', data.substring(0, 50) + '...');
-            streamHandler.processLine(data, assistantMessageId, setMessages, (usage) => {
-              setAccumulatedUsage((prev) => prev + usage);
-            });
+            streamHandler.processLine(
+              data,
+              assistantMessageId,
+              setMessages,
+              (usage) => {
+                setAccumulatedUsage((prev) => prev + usage);
+              },
+              (sessionId) => {
+                console.log('Session Created:', sessionId);
+                setActiveChatId(sessionId);
+              },
+            );
           }
         }
       }
@@ -1000,7 +1125,7 @@ export const PlaygroundPage = () => {
                 </div>
                 {/* Right side actions if any */}
                 <div className="w-24 text-right text-xs text-muted-foreground mr-2">
-                  {(tokenCount + accumulatedUsage).toLocaleString()} tokens
+                  {(tokenCount + accumulatedUsage + inputTokenCount).toLocaleString()} tokens
                 </div>
               </div>
 

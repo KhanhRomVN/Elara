@@ -1,8 +1,18 @@
-import { Plus, Upload, StopCircle, ArrowUpFromDot, Sparkles, Globe } from 'lucide-react';
+import {
+  Plus,
+  Upload,
+  StopCircle,
+  ArrowUpFromDot,
+  Sparkles,
+  Globe,
+  Loader2,
+  X,
+  FileText,
+} from 'lucide-react';
 import { ChangeEvent, KeyboardEvent, useRef, useState, ClipboardEvent, DragEvent } from 'react';
+import { PendingAttachment } from '../types';
 import { cn } from '../../../shared/lib/utils';
 import { FilePreviewModal } from './FilePreviewModal';
-import { getFileIconPath } from '../../../shared/utils/fileIconMapper';
 
 interface InputAreaProps {
   input: string;
@@ -23,7 +33,7 @@ interface InputAreaProps {
   setSearchEnabled?: (enabled: boolean) => void;
   innerClassName?: string;
   onFileSelect?: (files: FileList | File[] | null) => void;
-  attachments?: File[];
+  attachments?: PendingAttachment[];
   onRemoveAttachment?: (index: number) => void;
 }
 
@@ -140,35 +150,52 @@ export const InputArea = ({
         {/* Attachments Preview - Outside Main Input Box */}
         {attachments && attachments.length > 0 && (
           <div className="flex gap-2 pb-2 overflow-x-auto custom-scrollbar">
-            {attachments.map((file, index) => (
+            {attachments.map((att, index) => (
               <div
-                key={index}
-                onClick={() => setPreviewFile(file)}
-                className="relative group shrink-0 w-48 h-14 rounded-lg border bg-muted/20 cursor-pointer hover:ring-2 hover:ring-primary/20 transition-all flex items-center p-2 "
+                key={att.id}
+                onClick={() => setPreviewFile(att.file)}
+                className={cn(
+                  'relative group shrink-0 w-48 h-14 rounded-lg border bg-muted/20 cursor-pointer hover:ring-2 hover:ring-primary/20 transition-all flex items-center p-2',
+                  att.status === 'error' && 'border-destructive/50 bg-destructive/10',
+                )}
               >
-                <div className="w-10 h-10 shrink-0 rounded-md overflow-hidden bg-background/50 flex items-center justify-center shadow-sm">
-                  {file.type.startsWith('image/') ? (
+                <div className="w-10 h-10 shrink-0 rounded-md overflow-hidden bg-background/50 flex items-center justify-center shadow-sm relative">
+                  {att.file.type.startsWith('image/') ? (
                     <img
-                      src={URL.createObjectURL(file)}
-                      alt={file.name}
-                      className="w-full h-full object-cover"
-                      onLoad={(e) => URL.revokeObjectURL(e.currentTarget.src)}
+                      src={att.previewUrl || URL.createObjectURL(att.file)}
+                      alt={att.file.name}
+                      className={cn(
+                        'w-full h-full object-cover',
+                        att.status === 'uploading' && 'opacity-50',
+                      )}
                     />
                   ) : (
-                    <img src={getFileIconPath(file.name)} className="w-6 h-6" alt="icon" />
+                    <FileText className="w-6 h-6 text-muted-foreground" />
+                  )}
+
+                  {att.status === 'uploading' && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-background/50">
+                      <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                    </div>
                   )}
                 </div>
 
-                <div className="flex flex-col min-w-0 flex-1">
-                  <span className="text-xs font-medium truncate leading-tight" title={file.name}>
-                    {file.name}
+                <div className="flex flex-col min-w-0 flex-1 ml-2">
+                  <span
+                    className="text-xs font-medium truncate leading-tight"
+                    title={att.file.name}
+                  >
+                    {att.file.name}
                   </span>
-                  <span className="text-[10px] text-muted-foreground">
-                    {file.size < 1024
-                      ? `${file.size} B`
-                      : file.size < 1024 * 1024
-                        ? `${(file.size / 1024).toFixed(1)} KB`
-                        : `${(file.size / (1024 * 1024)).toFixed(1)} MB`}
+                  <span className="text-[10px] text-muted-foreground flex items-center justify-between">
+                    <span>
+                      {att.file.size < 1024
+                        ? `${att.file.size} B`
+                        : att.file.size < 1024 * 1024
+                          ? `${(att.file.size / 1024).toFixed(1)} KB`
+                          : `${(att.file.size / (1024 * 1024)).toFixed(1)} MB`}
+                    </span>
+                    {att.status === 'error' && <span className="text-destructive ml-1">Error</span>}
                   </span>
                 </div>
 
@@ -181,19 +208,7 @@ export const InputArea = ({
                     className="absolute top-1 right-1 p-0.5 rounded-full bg-background/80 hover:bg-destructive hover:text-destructive-foreground text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
                   >
                     <span className="sr-only">Remove</span>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="w-3 h-3"
-                    >
-                      <path d="M18 6 6 18" />
-                      <path d="m6 6 12 12" />
-                    </svg>
+                    <X className="w-3 h-3" />
                   </button>
                 )}
               </div>
