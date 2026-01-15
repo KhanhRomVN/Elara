@@ -1,7 +1,7 @@
 import { StreamLineHandler } from './types';
 
 export const deepseekHandler: StreamLineHandler = {
-  processLine: (line, currentMessageId, setMessages) => {
+  processLine: (line, currentMessageId, setMessages, onTokenUpdate) => {
     try {
       // Handle SSE events (e.g., "event: ready")
       if (line.startsWith('event:')) {
@@ -12,7 +12,7 @@ export const deepseekHandler: StreamLineHandler = {
       if (!line.trim() || !line.trim().startsWith('{')) return;
 
       const parsed = JSON.parse(line);
-      console.log('[DeepSeek Handler] Parsed JSON:', parsed);
+      // console.log('[DeepSeek Handler] Parsed JSON:', parsed);
 
       // Handle ready event data to capture message IDs
       if (parsed.request_message_id !== undefined && parsed.response_message_id !== undefined) {
@@ -156,6 +156,17 @@ export const deepseekHandler: StreamLineHandler = {
             return { ...msg, thinking_elapsed: parsed.v };
           });
         });
+      }
+
+      // Handle Batch operations for token usage
+      if (parsed.o === 'BATCH' && Array.isArray(parsed.v)) {
+        const tokenUsageItem = parsed.v.find((item: any) => item.p === 'accumulated_token_usage');
+        if (tokenUsageItem && typeof tokenUsageItem.v === 'number') {
+          console.log('[DeepSeek Handler] Token usage update:', tokenUsageItem.v);
+          if (onTokenUpdate) {
+            onTokenUpdate(tokenUsageItem.v);
+          }
+        }
       }
     } catch (e) {
       console.error('Error parsing DeepSeek data:', e, 'Line:', line);

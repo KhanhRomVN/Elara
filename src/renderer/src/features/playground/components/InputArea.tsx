@@ -109,7 +109,7 @@ export const InputArea = ({
   };
 
   return (
-    <div className={cn('bg-background border-t relative', className)}>
+    <div className={cn('bg-background relative', className)}>
       <input
         type="file"
         ref={fileInputRef}

@@ -138,6 +138,8 @@ export const PlaygroundPage = () => {
   const [thinkingEnabled, setThinkingEnabled] = useState(true);
   const [searchEnabled, setSearchEnabled] = useState(false);
   const [attachments, setAttachments] = useState<File[]>([]);
+  const [tokenCount, setTokenCount] = useState(0);
+  const [accumulatedUsage, setAccumulatedUsage] = useState(0);
 
   const handleFileSelect = (files: FileList | File[] | null) => {
     if (!files) return;
@@ -166,6 +168,9 @@ export const PlaygroundPage = () => {
   // Groq State
   const [groqModel, setGroqModel] = useState('openai/gpt-oss-120b');
   const [groqModelsList, setGroqModelsList] = useState<any[]>([]);
+
+  // DeepSeek State
+  const [deepseekModel, setDeepseekModel] = useState('deepseek-ai/DeepSeek-V3.2');
   const [groqSettings, setGroqSettings] = useState({
     temperature: 1,
     maxTokens: 8192,
@@ -365,6 +370,29 @@ export const PlaygroundPage = () => {
   const handleSend = async () => {
     if (!input.trim() || !selectedAccount) return;
 
+    // Reset accumulated usage on new message send if needed,
+    // or keep it accumulating. Assuming reset per turn or separate display.
+    // If we want total session usage, we might not reset here, but `accumulatedUsage`
+    // seems to be for the *current* stream if it's "accumulated_token_usage" from deepseek
+    // which usually means "for this response".
+    // However, the user request says "+ dồn vào tổng token ở headerbar".
+    // Let's reset it at start of send to be safe, or if it's total session property?
+    // The log says "accumulated_token_usage", v: 148.
+    // If it comes in final BATCH, it's likely total for that generation.
+    // We will simply add it to our display.
+    // Let's NOT reset it here if we want to add to the total count over time.
+    // But wait, `tokenCount` is re-calculated from messages.
+    // So `accumulatedUsage` should probably be just for the current streaming response
+    // and then once the message is in `messages` state, `calculateTokens` might count it?
+    // Actually `calculateTokens` counts naive tokens (length/4 etc) or via model.
+    // Getting exact usage from server is better.
+    // Let's store it in a way that persists.
+    // Actually, simpler: just set it when we get it.
+
+    // Commit the accumulated usage from the previous turn to the total
+    setTokenCount((prev) => prev + accumulatedUsage);
+    setAccumulatedUsage(0);
+
     const userMessage: Message = {
       id: crypto.randomUUID(),
       role: 'user',
@@ -421,7 +449,7 @@ export const PlaygroundPage = () => {
                           ? antigravityModel
                           : account.provider === 'Gemini'
                             ? geminiModel
-                            : 'deepseek-chat',
+                            : deepseekModel,
           messages: [
             ...messages.map((msg) => ({
               role: msg.role,
@@ -516,7 +544,9 @@ export const PlaygroundPage = () => {
             const data = line.slice(6);
             if (data === '[DONE]') continue;
             console.log('[Playground] Received chunk:', data.substring(0, 50) + '...');
-            streamHandler.processLine(data, assistantMessageId, setMessages);
+            streamHandler.processLine(data, assistantMessageId, setMessages, (usage) => {
+              setAccumulatedUsage((prev) => prev + usage);
+            });
           }
         }
       }
@@ -756,6 +786,24 @@ export const PlaygroundPage = () => {
                       }))
                       .filter((m: Message) => m.content) || [];
 
+        // Calculate total tokens for DeepSeek from history
+        if (selectedProvider === 'DeepSeek' && data.chat_messages) {
+          const totalTokens = data.chat_messages.reduce((acc: number, msg: any) => {
+            return acc + (msg.accumulated_token_usage || 0);
+          }, 0);
+          setTokenCount(totalTokens);
+        } else {
+          // Reset or recalculate for other providers if needed, though they might not have this field
+          // For now we rely on the realtime accumulation for new chats
+          // and this history load for old chats.
+          // If it's not DeepSeek, we might want to recalculate using local tokenizer if we had one,
+          // but since we removed it, we might just set to 0 or leave as is.
+          // Better to set to 0 to avoid stale data from previous chat
+          if (selectedProvider !== 'DeepSeek') {
+            setTokenCount(0);
+          }
+        }
+
         setMessages(formattedMessages);
         setActiveChatId(conversationId);
       } else {
@@ -795,8 +843,12 @@ export const PlaygroundPage = () => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-background">
-      <div className="flex-1 flex overflow-hidden">
+    <div className="h-full flex flex-col bg-background p-4 gap-4">
+      <div>
+        <h2 className="text-2xl font-bold tracking-tight">Playground</h2>
+        <p className="text-muted-foreground">Experiment with different AI models.</p>
+      </div>
+      <div className="flex-1 flex overflow-hidden border border-dashed border-zinc-500/25 rounded-lg relative">
         {/* Sidebar */}
         <div ref={sidebarRef} className="relative flex-shrink-0" style={{ width: sidebarWidth }}>
           <div className="h-full overflow-y-auto border-r bg-muted/10 w-full">
@@ -847,7 +899,7 @@ export const PlaygroundPage = () => {
                     placeholder="Select Provider"
                   />
                   {selectedProvider && (
-                    <div className="space-y-4">
+                    <div className="flex flex-row items-center gap-4">
                       <CustomSelect
                         value={selectedAccount}
                         onChange={setSelectedAccount}
@@ -903,6 +955,22 @@ export const PlaygroundPage = () => {
                           models={geminiModelsList}
                         />
                       )}
+
+                      {selectedProvider === 'DeepSeek' && (
+                        <div className="w-[300px]">
+                          <CustomSelect
+                            value={deepseekModel}
+                            onChange={setDeepseekModel}
+                            options={[
+                              {
+                                value: 'deepseek-ai/DeepSeek-V3.2',
+                                label: 'deepseek-ai/DeepSeek-V3.2',
+                              },
+                            ]}
+                            placeholder="Select Model"
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -931,7 +999,9 @@ export const PlaygroundPage = () => {
                   {conversationTitle || 'New Chat'}
                 </div>
                 {/* Right side actions if any */}
-                <div className="w-10" />
+                <div className="w-24 text-right text-xs text-muted-foreground mr-2">
+                  {(tokenCount + accumulatedUsage).toLocaleString()} tokens
+                </div>
               </div>
 
               <ChatArea messages={messages} loading={loading} isStreaming={isStreaming} />
