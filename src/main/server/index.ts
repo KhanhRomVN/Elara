@@ -6,10 +6,8 @@ import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import { Account } from '../ipc/accounts';
-import { getProxyConfig, getConfigManager } from './config';
-import { getCertificateManager } from './utils/cert-manager';
-import { createAuthMiddleware } from './auth-middleware';
-import { getAccountSelector } from './account-selector';
+import { getProxyConfig } from './config';
+
 import {
   chatCompletionStream as deepseekChat,
   getChatSessions,
@@ -23,10 +21,6 @@ import {
   deleteConversation,
   stopResponse,
 } from './claude';
-import {
-  chatCompletionStream as chatgptChat,
-  getConversations as getChatGPTConversations,
-} from './chatgpt';
 import {
   chatCompletionStream as mistralChat,
   getConversations as getMistralConversations,
@@ -46,9 +40,6 @@ import {
   getModels as getAntigravityModels,
 } from './antigravity';
 import * as gemini from './gemini';
-import * as zai from './zai';
-
-// ... (existing code)
 
 import { statsManager } from '../core/stats';
 
@@ -130,6 +121,7 @@ expressApp.use(express.json());
 
 // Import management routes
 import ManagementRouter from './routes/management';
+import { getCertificateManager } from './utils/cert-manager';
 
 // Register management routes (no auth required for localhost)
 expressApp.use('/v0/management', ManagementRouter);
@@ -176,8 +168,6 @@ expressApp.get('/v1/models', (_req, res) => {
       // Gemini
       { id: 'gemini-pro', object: 'model', created: 1677610602, owned_by: 'google' },
       { id: 'gemini-ultra', object: 'model', created: 1677610602, owned_by: 'google' },
-      // Zai
-      { id: 'glm-4.7', object: 'model', created: 1677610602, owned_by: 'zai' },
     ],
   });
 });
@@ -243,9 +233,7 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
                       ? 'Perplexity'
                       : model.includes('gemini')
                         ? 'Gemini'
-                        : model.includes('glm')
-                          ? 'Zai'
-                          : 'DeepSeek';
+                        : 'DeepSeek';
       const finalProvider = targetProvider || inferredProvider;
       account = accounts.find((a) => a.provider === finalProvider && a.status === 'Active');
     }
@@ -324,13 +312,6 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
         account.userAgent,
         callbacks,
       );
-    } else if (account.provider === 'ChatGPT') {
-      await chatgptChat(
-        account.credential,
-        { model, messages, stream: true, conversation_id, parent_message_id },
-        account.userAgent,
-        callbacks,
-      );
     } else if (account.provider === 'Mistral') {
       await mistralChat(
         account.credential,
@@ -338,7 +319,7 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
         callbacks,
       );
     } else if (account.provider === 'Kimi') {
-      await kimiChat(); // TODO: Implement proper chat payload passing
+      await kimiChat();
     } else if (account.provider === 'Qwen') {
       await qwenChat(account.credential, model, messages, callbacks.onContent);
       callbacks.onDone();
@@ -398,9 +379,6 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
       return;
     } else if (account.provider === 'Gemini') {
       await gemini.chatCompletionStream(req, res, account);
-      return;
-    } else if (account.provider === 'Zai') {
-      await zai.chatCompletionStream(req, res, account);
       return;
     } else if (account.provider === 'Antigravity') {
       await antigravityChat(req, res, account);
@@ -538,54 +516,6 @@ expressApp.delete('/v1/claude/conversations/:id', async (req, res) => {
     await deleteConversation(account.credential, id, account.userAgent);
     res.json({ success: true });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Get ChatGPT conversation history
-expressApp.get('/v1/chatgpt/conversations', async (req, res) => {
-  try {
-    const authHeader = req.headers.authorization;
-    const emailQuery = req.query.email as string;
-    const offset = parseInt(req.query.offset as string) || 0;
-    const limit = parseInt(req.query.limit as string) || 20;
-
-    if (!fs.existsSync(DATA_FILE)) {
-      res.status(500).json({ error: 'Accounts database not found' });
-      return;
-    }
-
-    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
-    let account: Account | undefined;
-
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.split(' ')[1];
-      account = accounts.find((a) => a.id === token);
-    }
-
-    if (!account && emailQuery) {
-      account = accounts.find(
-        (a) => a.provider === 'ChatGPT' && a.email.toLowerCase() === emailQuery.toLowerCase(),
-      );
-    }
-
-    if (!account) {
-      account = accounts.find((a) => a.provider === 'ChatGPT' && a.status === 'Active');
-    }
-
-    if (!account) {
-      // ChatGPT provider currently manages session internally via singleton,
-      // but usually needs an 'Active' account record to proceed in Elara logic.
-      // If we don't find one, we might fail or try anyway if the singleton has session?
-      // But adhering to pattern: return 401.
-      res.status(401).json({ error: 'No active ChatGPT account found' });
-      return;
-    }
-
-    const history = await getChatGPTConversations(offset, limit);
-    res.json(history);
-  } catch (error: any) {
-    console.error('[Server] ChatGPT History Error:', error);
     res.status(500).json({ error: error.message });
   }
 });

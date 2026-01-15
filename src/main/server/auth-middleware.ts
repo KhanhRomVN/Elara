@@ -70,18 +70,13 @@ const detectProvider = (req: Request): string | undefined => {
   if (path.includes('/antigravity')) {
     return 'Antigravity';
   }
-  if (path.includes('/zai')) {
-    return 'Zai';
-  }
 
   // Detect from model name
   if (model) {
     if (model.includes('gemini')) return 'Gemini';
     if (model.includes('claude')) return 'Claude';
-    if (model.includes('gpt')) return 'ChatGPT';
     if (model.includes('deepseek')) return 'DeepSeek';
     if (model.includes('llama') || model.includes('mixtral')) return 'Groq';
-    if (model.includes('glm')) return 'Zai';
   }
 
   // Check X-Provider header

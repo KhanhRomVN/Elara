@@ -3,7 +3,7 @@ import { User, ChevronDown } from 'lucide-react';
 import { cn } from '../../shared/lib/utils';
 import claudeIcon from '../../assets/provider_icons/claude.svg';
 import deepseekIcon from '../../assets/provider_icons/deepseek.svg';
-import chatgptIcon from '../../assets/provider_icons/openai.svg';
+
 import mistralIcon from '../../assets/provider_icons/mistral.svg';
 import kimiIcon from '../../assets/provider_icons/kimi.svg';
 import qwenIcon from '../../assets/provider_icons/qwen.svg';
@@ -16,7 +16,7 @@ import { FunctionParams } from './components/GroqSidebarSettings';
 import { GroqModelSelector } from './components/GroqModelSelector';
 import { AntigravityModelSelector } from './components/AntigravityModelSelector';
 import { GeminiModelSelector } from './components/GeminiModelSelector';
-import { ZaiModelSelector } from './components/ZaiModelSelector';
+
 import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
 import { InputArea } from './components/InputArea';
@@ -118,7 +118,6 @@ export const PlaygroundPage = () => {
   const [selectedProvider, setSelectedProvider] = useState<
     | 'Claude'
     | 'DeepSeek'
-    | 'ChatGPT'
     | 'Mistral'
     | 'Kimi'
     | 'Qwen'
@@ -128,7 +127,6 @@ export const PlaygroundPage = () => {
     | 'Groq'
     | 'Antigravity'
     | 'Gemini'
-    | 'Zai'
     | ''
   >('');
   const [selectedAccount, setSelectedAccount] = useState<string>('');
@@ -156,7 +154,7 @@ export const PlaygroundPage = () => {
     return Array.from(items);
   };
   const [claudeModel, setClaudeModel] = useState('claude-sonnet-4-5-20250929');
-  const [chatgptModel, setChatgptModel] = useState('gpt-4o');
+
   // Antigravity State
   const [antigravityModel, setAntigravityModel] = useState('models/gemini-3-pro-preview');
   const [antigravityModelsList, setAntigravityModelsList] = useState<any[]>([]);
@@ -164,10 +162,6 @@ export const PlaygroundPage = () => {
   // Gemini State
   const [geminiModel, setGeminiModel] = useState('fbb127bbb056c959'); // Default to "Nhanh" usually
   const [geminiModelsList, setGeminiModelsList] = useState<any[]>([]);
-
-  // Zai State
-  const [zaiModel, setZaiModel] = useState('glm-4.7');
-  const [zaiModelsList, setZaiModelsList] = useState<any[]>([]);
 
   // Groq State
   const [groqModel, setGroqModel] = useState('openai/gpt-oss-120b');
@@ -360,28 +354,6 @@ export const PlaygroundPage = () => {
           console.error('Failed to fetch Gemini models', e);
         }
       }
-
-      if (selectedProvider === 'Zai' && selectedAccount) {
-        try {
-          // @ts-ignore
-          const status = await window.api.server.start();
-          const port = status.port || 11434;
-          const acc = accounts.find((a) => a.id === selectedAccount);
-          if (acc) {
-            const res = await fetch(
-              `http://localhost:${port}/v1/zai/models?email=${encodeURIComponent(acc.email)}`,
-            );
-            if (res.ok) {
-              const data = await res.json();
-              if (data && Array.isArray(data.data)) {
-                setZaiModelsList(data.data);
-              }
-            }
-          }
-        } catch (e) {
-          console.error('Failed to fetch Zai models', e);
-        }
-      }
     };
     fetchGroqModels();
   }, [selectedProvider, selectedAccount, accounts, geminiModel]);
@@ -435,25 +407,21 @@ export const PlaygroundPage = () => {
           model:
             account.provider === 'Claude'
               ? claudeModel
-              : account.provider === 'ChatGPT'
-                ? chatgptModel
-                : account.provider === 'Mistral'
-                  ? 'mistral-large-latest'
-                  : account.provider === 'Kimi'
-                    ? 'moonshot-v1-8k'
-                    : account.provider === 'Qwen'
-                      ? 'qwen-max'
-                      : account.provider === 'Cohere'
-                        ? 'command-r7b-12-2024'
-                        : account.provider === 'Groq'
-                          ? groqModel
-                          : account.provider === 'Antigravity'
-                            ? antigravityModel
-                            : account.provider === 'Gemini'
-                              ? geminiModel
-                              : account.provider === 'Zai'
-                                ? zaiModel
-                                : 'deepseek-chat',
+              : account.provider === 'Mistral'
+                ? 'mistral-large-latest'
+                : account.provider === 'Kimi'
+                  ? 'moonshot-v1-8k'
+                  : account.provider === 'Qwen'
+                    ? 'qwen-max'
+                    : account.provider === 'Cohere'
+                      ? 'command-r7b-12-2024'
+                      : account.provider === 'Groq'
+                        ? groqModel
+                        : account.provider === 'Antigravity'
+                          ? antigravityModel
+                          : account.provider === 'Gemini'
+                            ? geminiModel
+                            : 'deepseek-chat',
           messages: [
             ...messages.map((msg) => ({
               role: msg.role,
@@ -627,9 +595,7 @@ export const PlaygroundPage = () => {
                         ? `http://localhost:${port}/v1/groq/conversations`
                         : selectedProvider === 'Antigravity'
                           ? `http://localhost:${port}/v1/antigravity/conversations`
-                          : selectedProvider === 'Zai'
-                            ? `http://localhost:${port}/v1/zai/conversations`
-                            : `http://localhost:${port}/v1/deepseek/sessions`;
+                          : `http://localhost:${port}/v1/deepseek/sessions`;
 
         const response = await fetch(`${endpoint}?email=${encodeURIComponent(account.email)}`);
 
@@ -778,19 +744,17 @@ export const PlaygroundPage = () => {
                       backend_uuid: msg.backend_uuid,
                       read_write_token: msg.read_write_token,
                     })) || []
-                  : selectedProvider === 'Zai'
-                    ? [] // Zai history structure TBD
-                    : data.chat_messages
-                        ?.map((msg: any) => ({
-                          id: msg.message_id,
-                          role: msg.role === 'USER' ? ('user' as const) : ('assistant' as const),
-                          content:
-                            msg.fragments
-                              ?.map((f: any) => f.content || '')
-                              .join('')
-                              .trim() || '',
-                        }))
-                        .filter((m: Message) => m.content) || [];
+                  : data.chat_messages
+                      ?.map((msg: any) => ({
+                        id: msg.message_id,
+                        role: msg.role === 'USER' ? ('user' as const) : ('assistant' as const),
+                        content:
+                          msg.fragments
+                            ?.map((f: any) => f.content || '')
+                            .join('')
+                            .trim() || '',
+                      }))
+                      .filter((m: Message) => m.content) || [];
 
         setMessages(formattedMessages);
         setActiveChatId(conversationId);
@@ -871,7 +835,6 @@ export const PlaygroundPage = () => {
                     options={[
                       { value: 'DeepSeek', label: 'DeepSeek', icon: deepseekIcon },
                       { value: 'Claude', label: 'Claude', icon: claudeIcon },
-                      { value: 'ChatGPT', label: 'ChatGPT', icon: chatgptIcon },
                       { value: 'Mistral', label: 'Mistral', icon: mistralIcon },
                       { value: 'Kimi', label: 'Kimi', icon: kimiIcon },
                       { value: 'Qwen', label: 'Qwen', icon: qwenIcon },
@@ -880,11 +843,6 @@ export const PlaygroundPage = () => {
                       { value: 'Groq', label: 'Groq', icon: groqIcon },
                       { value: 'Antigravity', label: 'Antigravity', icon: antigravityIcon },
                       { value: 'Gemini', label: 'Gemini', icon: geminiIcon },
-                      {
-                        value: 'Zai',
-                        label: 'Z.AI',
-                        icon: <img src="https://chat.z.ai/favicon.ico" className="w-5 h-5" />,
-                      },
                     ]}
                     placeholder="Select Provider"
                   />
@@ -910,23 +868,6 @@ export const PlaygroundPage = () => {
                             options={[
                               { value: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5' },
                               { value: 'claude-opus-4-5-20251101', label: 'Claude Opus 4.5' },
-                            ]}
-                            placeholder="Select Model"
-                          />
-                        </div>
-                      )}
-
-                      {selectedProvider === 'ChatGPT' && (
-                        <div className="w-[300px]">
-                          <CustomSelect
-                            value={chatgptModel}
-                            onChange={setChatgptModel}
-                            options={[
-                              { value: 'auto', label: 'Auto' },
-                              { value: 'gpt-4o', label: 'GPT-4o' },
-                              { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-                              { value: 'o1-preview', label: 'o1 Preview' },
-                              { value: 'o1-mini', label: 'o1 Mini' },
                             ]}
                             placeholder="Select Model"
                           />
@@ -960,14 +901,6 @@ export const PlaygroundPage = () => {
                           value={geminiModel}
                           onChange={setGeminiModel}
                           models={geminiModelsList}
-                        />
-                      )}
-
-                      {selectedProvider === 'Zai' && selectedAccount && (
-                        <ZaiModelSelector
-                          value={zaiModel}
-                          onChange={setZaiModel}
-                          models={zaiModelsList}
                         />
                       )}
                     </div>

@@ -3,7 +3,7 @@ import { AlertCircle, X, Copy, Check, ExternalLink, RefreshCw, Key } from 'lucid
 
 import claudeIcon from '../../../assets/provider_icons/claude.svg';
 import deepseekIcon from '../../../assets/provider_icons/deepseek.svg';
-import openaiIcon from '../../../assets/provider_icons/openai.svg';
+
 import mistralIcon from '../../../assets/provider_icons/mistral.svg';
 import kimiIcon from '../../../assets/provider_icons/kimi.svg';
 import qwenIcon from '../../../assets/provider_icons/qwen.svg';
@@ -12,7 +12,6 @@ import perplexityIcon from '../../../assets/provider_icons/perplexity.svg';
 import groqIcon from '../../../assets/provider_icons/groq.svg';
 import geminiIcon from '../../../assets/provider_icons/gemini.svg';
 import antigravityIcon from '../../../assets/provider_icons/antigravity.svg';
-import zaiIcon from '../../../assets/provider_icons/zai.svg';
 
 interface AddAccountDialogProps {
   open: boolean;
@@ -50,9 +49,6 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     console.log('[AddAccountDialog] handleLogin called for provider:', provider);
-    if (provider === 'Zai') {
-      console.log('[AddAccountDialog] Logging in with Zai...');
-    }
 
     if (provider === 'Antigravity') {
       // Handled separately in render via specialized UI, but if form submitted:
@@ -206,15 +202,7 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
       loginMethod: 'Direct / Google',
       browserType: 'Electron Window',
     },
-    {
-      id: 'ChatGPT',
-      name: 'ChatGPT',
-      description: 'Most Popular',
-      icon: openaiIcon,
-      color: 'bg-green-500/10 text-green-500 border-green-200/20',
-      loginMethod: 'Direct / Google',
-      browserType: 'Electron Window',
-    },
+
     {
       id: 'Mistral',
       name: 'Mistral',
@@ -286,15 +274,6 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
       color: 'bg-purple-500/10 text-purple-500 border-purple-200/20',
       loginMethod: 'Google OAuth',
       browserType: 'Auth Server',
-    },
-    {
-      id: 'Zai',
-      name: 'Zai',
-      description: 'Z.ai Chat',
-      icon: zaiIcon, // Placeholder reusing Gemini icon
-      color: 'bg-indigo-500/10 text-indigo-500 border-indigo-200/20',
-      loginMethod: 'Direct',
-      browserType: 'Real Browser',
     },
   ];
 

@@ -2,7 +2,7 @@ import { Plus, User, MoreHorizontal } from 'lucide-react';
 import { Account, HistoryItem, Provider } from '../types';
 import claudeIcon from '../../../assets/provider_icons/claude.svg';
 import deepseekIcon from '../../../assets/provider_icons/deepseek.svg';
-import chatgptIcon from '../../../assets/provider_icons/openai.svg';
+
 import mistralIcon from '../../../assets/provider_icons/mistral.svg';
 import kimiIcon from '../../../assets/provider_icons/kimi.svg';
 import qwenIcon from '../../../assets/provider_icons/qwen.svg';
@@ -46,19 +46,17 @@ export const Sidebar = ({
               src={
                 selectedProvider === 'Claude'
                   ? claudeIcon
-                  : selectedProvider === 'ChatGPT'
-                    ? chatgptIcon
-                    : selectedProvider === 'Mistral'
-                      ? mistralIcon
-                      : selectedProvider === 'Kimi'
-                        ? kimiIcon
-                        : selectedProvider === 'Qwen'
-                          ? qwenIcon
-                          : selectedProvider === 'Cohere'
-                            ? cohereIcon
-                            : selectedProvider === 'Groq'
-                              ? groqIcon
-                              : deepseekIcon
+                  : selectedProvider === 'Mistral'
+                    ? mistralIcon
+                    : selectedProvider === 'Kimi'
+                      ? kimiIcon
+                      : selectedProvider === 'Qwen'
+                        ? qwenIcon
+                        : selectedProvider === 'Cohere'
+                          ? cohereIcon
+                          : selectedProvider === 'Groq'
+                            ? groqIcon
+                            : deepseekIcon
               }
               alt="Provider"
               className="w-5 h-5"

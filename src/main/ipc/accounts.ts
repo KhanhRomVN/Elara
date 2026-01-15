@@ -12,7 +12,6 @@ import { login as loginGroq } from '../server/groq';
 import { login as loginGemini } from '../server/gemini';
 import { login as loginPerplexity } from '../server/perplexity';
 import { AntigravityAuthServer } from '../server/antigravity';
-import { login as loginZai } from '../server/zai';
 import { proxyEvents } from '../server/proxy';
 
 const DATA_FILE = path.join(app.getPath('userData'), 'accounts.json');
@@ -28,7 +27,6 @@ export interface Account {
   provider:
     | 'Claude'
     | 'DeepSeek'
-    | 'ChatGPT'
     | 'Mistral'
     | 'Kimi'
     | 'Qwen'
@@ -37,8 +35,8 @@ export interface Account {
     | 'Groq'
     | 'Gemini'
     | 'Gemini'
-    | 'Antigravity'
-    | 'Zai';
+    | 'Antigravity';
+
   email: string;
   credential: string; // cookie or api key
   status: 'Active' | 'Rate Limit' | 'Error';
@@ -248,7 +246,6 @@ export const setupAccountsHandlers = () => {
       provider:
         | 'Claude'
         | 'DeepSeek'
-        | 'ChatGPT'
         | 'Mistral'
         | 'Kimi'
         | 'Qwen'
@@ -257,8 +254,7 @@ export const setupAccountsHandlers = () => {
         | 'Gemini'
         | 'Groq'
         | 'Gemini'
-        | 'Perplexity'
-        | 'Zai',
+        | 'Perplexity',
     ) => {
       return new Promise(async (resolve) => {
         // Use a consistent, real Chrome user agent by stripping Electron/App identifiers
@@ -273,21 +269,19 @@ export const setupAccountsHandlers = () => {
         const url =
           provider === 'Claude'
             ? 'https://claude.ai/login'
-            : provider === 'ChatGPT'
-              ? 'https://chatgpt.com'
-              : provider === 'Mistral'
-                ? 'https://console.mistral.ai/home'
-                : provider === 'Kimi'
-                  ? 'https://kimi.moonshot.cn'
-                  : provider === 'Qwen'
-                    ? 'https://chat.qwen.ai/auth'
-                    : provider === 'Cohere'
-                      ? 'https://dashboard.cohere.com/welcome/login'
-                      : provider === 'Groq'
-                        ? 'https://console.groq.com'
-                        : provider === 'Gemini'
-                          ? 'https://gemini.google.com'
-                          : 'https://chat.deepseek.com/login';
+            : provider === 'Mistral'
+              ? 'https://console.mistral.ai/home'
+              : provider === 'Kimi'
+                ? 'https://kimi.moonshot.cn'
+                : provider === 'Qwen'
+                  ? 'https://chat.qwen.ai/auth'
+                  : provider === 'Cohere'
+                    ? 'https://dashboard.cohere.com/welcome/login'
+                    : provider === 'Groq'
+                      ? 'https://console.groq.com'
+                      : provider === 'Gemini'
+                        ? 'https://gemini.google.com'
+                        : 'https://chat.deepseek.com/login';
 
         // Handle providers with self-managed login (no polling needed)
         if (provider === 'Kimi') {
@@ -498,43 +492,7 @@ export const setupAccountsHandlers = () => {
           return;
         }
 
-        if (provider === 'Zai') {
-          try {
-            console.log('[Accounts] Starting Zai login flow (Real Browser)...');
-            const { cookies, email, metadata, name, avatar } = await loginZai();
-            console.log('[Accounts] Zai login successful. Captured email:', email, 'Name:', name);
-            const finalEmail = email || 'zai@user.com';
-
-            const newAccount: Account = {
-              id: crypto.randomUUID(),
-              provider: 'Zai',
-              email: finalEmail,
-              credential: cookies, // or metadata.token, but we keep structure
-              metadata: metadata,
-              status: 'Active',
-              usage: '0',
-              totalRequests: 0,
-              successfulRequests: 0,
-              totalDuration: 0,
-              tokensToday: 0,
-              statsDate: new Date().toISOString().split('T')[0],
-              lastActive: new Date().toISOString(),
-              userAgent,
-              name: name || undefined,
-              picture: avatar || undefined,
-            };
-
-            console.log('[Accounts] Saving Zai account:', JSON.stringify(newAccount, null, 2));
-            saveAccount(newAccount);
-            resolve({ success: true, account: newAccount });
-          } catch (e: any) {
-            console.error('[Accounts] Zai login failed:', e);
-            resolve({ success: false, error: e.message || 'Zai login failed' });
-          }
-          return;
-        }
-
-        // For providers requiring polling (Claude, ChatGPT, Mistral, DeepSeek)
+        // For providers requiring polling (Claude, Mistral, DeepSeek)
         const authWindow = new BrowserWindow({
           width: 1000,
           height: 800,
@@ -627,72 +585,6 @@ export const setupAccountsHandlers = () => {
                 };
 
                 saveAccount(newAccount);
-                authWindow.close();
-                resolve({ success: true, account: newAccount });
-              }
-            } else if (provider === 'ChatGPT') {
-              console.log('[Accounts] ChatGPT: Polling cookies...');
-              const cookies = await authWindow.webContents.session.cookies.get({
-                domain: '.chatgpt.com',
-              });
-              const sessionToken = cookies.find(
-                (c) => c.name === '__Secure-next-auth.session-token',
-              );
-
-              if (sessionToken) {
-                console.log('[Accounts] ChatGPT: Found session token!');
-                clearInterval(interval);
-
-                // Construct full cookie string to include Cloudflare and other necessary cookies
-                const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
-
-                // Fetch profile logic could be added here, similar to DeepSeek/Claude
-                // For now, let's try to get email from the window or default
-                let email = 'chatgpt@user.com';
-                // Try to capture from script
-                console.log('[Accounts] ChatGPT: Attempting to scrape email...');
-                const scrapedEmail = await authWindow.webContents
-                  .executeJavaScript(
-                    `
-                  (() => {
-                      // Try typical selectors
-                      const el = document.querySelector('div[data-testid="profile-button"]');
-                      return el ? el.innerText : null;
-                  })()
-               `,
-                  )
-                  .catch((err) => {
-                    console.error('[Accounts] ChatGPT: Email scrape error:', err);
-                    return null;
-                  });
-
-                if (scrapedEmail && scrapedEmail.includes('@')) {
-                  email = scrapedEmail;
-                  console.log('[Accounts] ChatGPT: Scraped email:', email);
-                } else {
-                  console.log('[Accounts] ChatGPT: Could not scrape email, using default.');
-                }
-
-                const newAccount: Account = {
-                  id: crypto.randomUUID(),
-                  provider: 'ChatGPT',
-                  email: email,
-                  credential: cookieString, // Store the full cookie string
-                  status: 'Active',
-                  usage: '0',
-                  totalRequests: 0,
-                  successfulRequests: 0,
-                  totalDuration: 0,
-                  tokensToday: 0,
-                  statsDate: new Date().toISOString().split('T')[0],
-                  lastActive: new Date().toISOString(),
-                  userAgent,
-                  name: undefined,
-                  picture: undefined,
-                };
-
-                saveAccount(newAccount);
-                console.log('[Accounts] ChatGPT: Account saved successfully.');
                 authWindow.close();
                 resolve({ success: true, account: newAccount });
               }

@@ -124,17 +124,6 @@ export const startProxy = (): Promise<void> => {
             proxyEvents.emit('perplexity-cookies', reqCookies);
           }
         }
-
-        // Zai
-        if (host.includes('chat.z.ai')) {
-          console.log(`[Proxy] Intercepting Zai request: ${url}`);
-          const authHeader = ctx.clientToProxyRequest.headers.authorization;
-          if (authHeader && authHeader.startsWith('Bearer ')) {
-            const token = authHeader.split(' ')[1];
-            console.log('[Proxy] Found Bearer token in Zai Request! Token length:', token.length);
-            proxyEvents.emit('zai-token', token);
-          }
-        }
       }
       return callback();
     });
@@ -147,7 +136,6 @@ export const startProxy = (): Promise<void> => {
         if (
           host.includes('gemini.google.com') ||
           host.includes('google.com') ||
-          host.includes('chat.z.ai') ||
           (host.includes('www.googleapis.com') &&
             ctx.clientToProxyRequest.url.includes('/userinfo'))
         ) {
@@ -206,31 +194,6 @@ export const startProxy = (): Promise<void> => {
                     console.error('[Proxy] Failed to parse User Info:', e);
                   }
                 }
-
-                // Logic for Zai User Info
-                if (
-                  host.includes('chat.z.ai') &&
-                  (ctx.clientToProxyRequest.url.includes('/api/v1/users/user/settings') ||
-                    ctx.clientToProxyRequest.url.includes('/api/v1/auths/signin'))
-                ) {
-                  try {
-                    const json = JSON.parse(body);
-                    // Check for typical structure: { "data": { ... } } or direct fields
-                    // User said responseBody has email, name, profile_image_url directly or in data?
-                    // Let's assume root or data.
-                    const data = json.data || json;
-                    if (data && (data.email || data.username || data.name)) {
-                      console.log('[Proxy] Found Zai User Info:', JSON.stringify(data));
-                      proxyEvents.emit('zai-user-info', {
-                        email: data.email,
-                        name: data.name || data.username,
-                        avatar: data.profile_image_url || data.avatar,
-                      });
-                    }
-                  } catch (e) {
-                    console.error('[Proxy] Failed to parse Zai User Info:', e);
-                  }
-                }
               });
 
               decoder.on('error', (err: any) => {
@@ -263,31 +226,6 @@ export const startProxy = (): Promise<void> => {
                     proxyEvents.emit('gemini-user-info', userInfo);
                   } catch (e) {
                     console.error('[Proxy] Failed to parse User Info (Uncompressed):', e);
-                  }
-                }
-
-                // Logic for Zai User Info (Uncompressed)
-                if (
-                  host.includes('chat.z.ai') &&
-                  (ctx.clientToProxyRequest.url.includes('/api/v1/users/user/settings') ||
-                    ctx.clientToProxyRequest.url.includes('/api/v1/auths/signin'))
-                ) {
-                  try {
-                    const json = JSON.parse(body);
-                    const data = json.data || json;
-                    if (data && (data.email || data.username || data.name)) {
-                      console.log(
-                        '[Proxy] Found Zai User Info (Uncompressed):',
-                        JSON.stringify(data),
-                      );
-                      proxyEvents.emit('zai-user-info', {
-                        email: data.email,
-                        name: data.name || data.username,
-                        avatar: data.profile_image_url || data.avatar,
-                      });
-                    }
-                  } catch (e) {
-                    console.error('[Proxy] Failed to parse Zai User Info (Uncompressed):', e);
                   }
                 }
               });

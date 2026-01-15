@@ -7,7 +7,6 @@ import { AddAccountDialog } from './components/AddAccountDialog';
 
 import claudeIcon from '../../assets/provider_icons/claude.svg';
 import deepseekIcon from '../../assets/provider_icons/deepseek.svg';
-import openaiIcon from '../../assets/provider_icons/openai.svg';
 import mistralIcon from '../../assets/provider_icons/mistral.svg';
 import kimiIcon from '../../assets/provider_icons/kimi.svg';
 import qwenIcon from '../../assets/provider_icons/qwen.svg';
@@ -20,7 +19,6 @@ import antigravityIcon from '../../assets/provider_icons/antigravity.svg';
 const providerIcons: Record<string, string> = {
   Claude: claudeIcon,
   DeepSeek: deepseekIcon,
-  ChatGPT: openaiIcon,
   Mistral: mistralIcon,
   Kimi: kimiIcon,
   Qwen: qwenIcon,
@@ -36,7 +34,6 @@ interface Account {
   provider:
     | 'Claude'
     | 'DeepSeek'
-    | 'ChatGPT'
     | 'Mistral'
     | 'Kimi'
     | 'Qwen'
@@ -360,27 +357,18 @@ export const Accounts = () => {
                           <div
                             className={cn(
                               'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
-                              account.provider === 'Claude'
-                                ? 'bg-orange-500/10 text-orange-500'
-                                : account.provider === 'ChatGPT'
-                                  ? 'bg-green-500/10 text-green-500'
-                                  : account.provider === 'Mistral'
-                                    ? 'bg-yellow-500/10 text-yellow-500'
-                                    : account.provider === 'Kimi'
-                                      ? 'bg-indigo-500/10 text-indigo-500'
-                                      : account.provider === 'Qwen'
-                                        ? 'bg-purple-500/10 text-purple-500'
-                                        : account.provider === 'Cohere'
-                                          ? 'bg-teal-500/10 text-teal-500'
-                                          : account.provider === 'Perplexity'
-                                            ? 'bg-cyan-500/10 text-cyan-500'
-                                            : account.provider === 'Groq'
-                                              ? 'bg-orange-600/10 text-orange-600'
-                                              : account.provider === 'Gemini'
-                                                ? 'bg-sky-500/10 text-sky-500'
-                                                : account.provider === 'Antigravity'
-                                                  ? 'bg-purple-500/10 text-purple-500'
-                                                  : 'bg-blue-500/10 text-blue-500',
+                              {
+                                Claude: 'bg-orange-500/10 text-orange-500',
+                                DeepSeek: 'bg-blue-500/10 text-blue-500',
+                                Mistral: 'bg-yellow-500/10 text-yellow-500',
+                                Kimi: 'bg-indigo-500/10 text-indigo-500',
+                                Qwen: 'bg-purple-500/10 text-purple-500',
+                                Cohere: 'bg-teal-500/10 text-teal-500',
+                                Perplexity: 'bg-cyan-500/10 text-cyan-500',
+                                Groq: 'bg-orange-600/10 text-orange-600',
+                                Gemini: 'bg-sky-500/10 text-sky-500',
+                                Antigravity: 'bg-purple-500/10 text-purple-500',
+                              }[account.provider] || 'bg-blue-500/10 text-blue-500',
                             )}
                           >
                             <img

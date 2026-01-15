@@ -26,15 +26,13 @@ export type Provider =
   | 'Claude'
   | 'DeepSeek'
   | 'Groq'
-  | 'ChatGPT'
   | 'Mistral'
   | 'Kimi'
   | 'Qwen'
   | 'Cohere'
   | 'Perplexity'
   | 'Gemini'
-  | 'Antigravity'
-  | 'Zai';
+  | 'Antigravity';
 
 export interface Account {
   id: string;
