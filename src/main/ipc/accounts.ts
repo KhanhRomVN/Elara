@@ -11,6 +11,11 @@ import { login as loginCohere, getProfile as getCohereProfile } from '../server/
 import { login as loginGroq } from '../server/groq';
 import { login as loginGemini } from '../server/gemini';
 import { login as loginPerplexity } from '../server/perplexity';
+import {
+  login as loginHuggingChat,
+  getProfile as getHuggingChatProfile,
+} from '../server/hugging-chat';
+import { login as lmArenaLogin } from '../server/lmarena';
 import { AntigravityAuthServer } from '../server/antigravity';
 import { proxyEvents } from '../server/proxy';
 
@@ -35,7 +40,9 @@ export interface Account {
     | 'Groq'
     | 'Gemini'
     | 'Gemini'
-    | 'Antigravity';
+    | 'Antigravity'
+    | 'HuggingChat'
+    | 'LMArena';
 
   email: string;
   credential: string; // cookie or api key
@@ -254,7 +261,9 @@ export const setupAccountsHandlers = () => {
         | 'Gemini'
         | 'Groq'
         | 'Gemini'
-        | 'Perplexity',
+        | 'Perplexity'
+        | 'HuggingChat'
+        | 'LMArena',
     ) => {
       return new Promise(async (resolve) => {
         // Use a consistent, real Chrome user agent by stripping Electron/App identifiers
@@ -281,7 +290,9 @@ export const setupAccountsHandlers = () => {
                       ? 'https://console.groq.com'
                       : provider === 'Gemini'
                         ? 'https://gemini.google.com'
-                        : 'https://chat.deepseek.com/login';
+                        : provider === 'HuggingChat'
+                          ? 'https://huggingface.co/login'
+                          : 'https://chat.deepseek.com/login';
 
         // Handle providers with self-managed login (no polling needed)
         if (provider === 'Kimi') {
@@ -488,6 +499,73 @@ export const setupAccountsHandlers = () => {
             resolve({ success: true, account: newAccount });
           } catch (e: any) {
             resolve({ success: false, error: e.message || 'Perplexity login failed' });
+          }
+          return;
+        }
+
+        if (provider === 'HuggingChat') {
+          try {
+            console.log('[Accounts] Starting HuggingChat login flow...');
+            const { cookies, email, username } = await loginHuggingChat();
+            console.log('[Accounts] HuggingChat login success, fetching profile...');
+            const profile = await getHuggingChatProfile(cookies);
+            console.log('[Accounts] HuggingChat profile fetched:', profile);
+            const finalEmail = email || profile.email || 'huggingchat@user.com';
+            const finalName = username || profile.name || undefined;
+
+            const newAccount: Account = {
+              id: crypto.randomUUID(),
+              provider: 'HuggingChat',
+              email: finalEmail,
+              credential: cookies,
+              status: 'Active',
+              usage: '0',
+              totalRequests: 0,
+              successfulRequests: 0,
+              totalDuration: 0,
+              tokensToday: 0,
+              statsDate: new Date().toISOString().split('T')[0],
+              lastActive: new Date().toISOString(),
+              userAgent,
+              name: finalName,
+              picture: profile.avatar || undefined,
+            };
+
+            saveAccount(newAccount);
+            resolve({ success: true, account: newAccount });
+          } catch (e: any) {
+            resolve({ success: false, error: e.message || 'HuggingChat login failed' });
+          }
+          return;
+        }
+
+        if (provider === 'LMArena') {
+          try {
+            console.log('[Accounts] Starting LMArena login flow...');
+            const { cookies, email, username } = await lmArenaLogin();
+            console.log('[Accounts] LMArena login success, email:', email);
+
+            const newAccount: Account = {
+              id: crypto.randomUUID(),
+              provider: 'LMArena',
+              email: email || 'lmarena@user.com',
+              credential: cookies,
+              status: 'Active',
+              usage: '0',
+              totalRequests: 0,
+              successfulRequests: 0,
+              totalDuration: 0,
+              tokensToday: 0,
+              statsDate: new Date().toISOString().split('T')[0],
+              lastActive: new Date().toISOString(),
+              userAgent,
+              name: username || 'LMArena User',
+            };
+
+            saveAccount(newAccount);
+            resolve({ success: true, account: newAccount });
+          } catch (e: any) {
+            resolve({ success: false, error: e.message || 'LMArena login failed' });
           }
           return;
         }

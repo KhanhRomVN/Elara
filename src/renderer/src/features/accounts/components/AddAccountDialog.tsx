@@ -12,6 +12,8 @@ import perplexityIcon from '../../../assets/provider_icons/perplexity.svg';
 import groqIcon from '../../../assets/provider_icons/groq.svg';
 import geminiIcon from '../../../assets/provider_icons/gemini.svg';
 import antigravityIcon from '../../../assets/provider_icons/antigravity.svg';
+import huggingChatIcon from '../../../assets/provider_icons/huggingface.svg';
+import lmArenaIcon from '../../../assets/provider_icons/lmarena.svg';
 
 interface AddAccountDialogProps {
   open: boolean;
@@ -63,6 +65,7 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
       const result = await window.api.accounts.login(provider);
 
       if (result.success) {
+        console.log('[AddAccountDialog] Login success for', provider, 'Result:', result);
         // Show email input if email is masked or missing
         const needsManualEmail =
           result.account?.email?.includes('***') ||
@@ -73,6 +76,7 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
           result.account?.email === 'groq@user.com' ||
           result.account?.email === 'gemini@user.com' ||
           result.account?.email === 'perplexity@user.com' ||
+          result.account?.email === 'huggingchat@user.com' ||
           !result.account?.email;
 
         if (needsManualEmail && result.account) {
@@ -80,10 +84,12 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
           setShowEmailInput(true);
           setLoading(false);
         } else {
+          console.log('[AddAccountDialog] Account added successfully, closing dialog');
           onOpenChange(false);
           onSuccess();
         }
       } else {
+        console.error('[AddAccountDialog] Login failed:', result.error);
         setError(result.error || 'Login failed or was cancelled');
       }
     } catch (err) {
@@ -274,6 +280,24 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
       color: 'bg-purple-500/10 text-purple-500 border-purple-200/20',
       loginMethod: 'Google OAuth',
       browserType: 'Auth Server',
+    },
+    {
+      id: 'HuggingChat',
+      name: 'HuggingChat',
+      description: 'Open AI Community',
+      icon: huggingChatIcon,
+      color: 'bg-amber-500/10 text-amber-500 border-amber-200/20',
+      loginMethod: 'Direct / Google',
+      browserType: 'Electron Window',
+    },
+    {
+      id: 'LMArena',
+      name: 'LMArena',
+      description: 'LMArena Direct Chat',
+      icon: lmArenaIcon,
+      color: 'bg-emerald-500/10 text-emerald-500 border-emerald-200/20',
+      loginMethod: 'Direct / Google',
+      browserType: 'Electron Window',
     },
   ];
 

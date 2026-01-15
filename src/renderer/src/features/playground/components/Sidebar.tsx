@@ -8,6 +8,11 @@ import kimiIcon from '../../../assets/provider_icons/kimi.svg';
 import qwenIcon from '../../../assets/provider_icons/qwen.svg';
 import cohereIcon from '../../../assets/provider_icons/cohere.svg';
 import groqIcon from '../../../assets/provider_icons/groq.svg';
+import geminiIcon from '../../../assets/provider_icons/gemini.svg';
+import antigravityIcon from '../../../assets/provider_icons/antigravity.svg';
+import huggingChatIcon from '../../../assets/provider_icons/huggingface.svg';
+import lmArenaIcon from '../../../assets/provider_icons/lmarena.svg';
+import perplexityIcon from '../../../assets/provider_icons/perplexity.svg';
 import { GroqSidebarSettings } from './GroqSidebarSettings';
 
 interface SidebarProps {
@@ -56,7 +61,17 @@ export const Sidebar = ({
                           ? cohereIcon
                           : selectedProvider === 'Groq'
                             ? groqIcon
-                            : deepseekIcon
+                            : selectedProvider === 'Gemini'
+                              ? geminiIcon
+                              : selectedProvider === 'Antigravity'
+                                ? antigravityIcon
+                                : selectedProvider === 'HuggingChat'
+                                  ? huggingChatIcon
+                                  : selectedProvider === 'LMArena'
+                                    ? lmArenaIcon
+                                    : selectedProvider === 'Perplexity'
+                                      ? perplexityIcon
+                                      : deepseekIcon
               }
               alt="Provider"
               className="w-5 h-5"

@@ -15,6 +15,8 @@ import perplexityIcon from '../../assets/provider_icons/perplexity.svg';
 import groqIcon from '../../assets/provider_icons/groq.svg';
 import geminiIcon from '../../assets/provider_icons/gemini.svg';
 import antigravityIcon from '../../assets/provider_icons/antigravity.svg';
+import huggingChatIcon from '../../assets/provider_icons/huggingface.svg';
+import lmArenaIcon from '../../assets/provider_icons/lmarena.svg';
 
 const providerIcons: Record<string, string> = {
   Claude: claudeIcon,
@@ -27,6 +29,8 @@ const providerIcons: Record<string, string> = {
   Groq: groqIcon,
   Gemini: geminiIcon,
   Antigravity: antigravityIcon,
+  HuggingChat: huggingChatIcon,
+  LMArena: lmArenaIcon,
 };
 
 interface Account {
@@ -41,7 +45,9 @@ interface Account {
     | 'Perplexity'
     | 'Groq'
     | 'Gemini'
-    | 'Antigravity';
+    | 'Antigravity'
+    | 'HuggingChat'
+    | 'LMArena';
   email: string;
   credential: string;
   status: 'Active' | 'Rate Limit' | 'Error';
@@ -368,6 +374,8 @@ export const Accounts = () => {
                                 Groq: 'bg-orange-600/10 text-orange-600',
                                 Gemini: 'bg-sky-500/10 text-sky-500',
                                 Antigravity: 'bg-purple-500/10 text-purple-500',
+                                HuggingChat: 'bg-amber-500/10 text-amber-500',
+                                LMArena: 'bg-emerald-500/10 text-emerald-500',
                               }[account.provider] || 'bg-blue-500/10 text-blue-500',
                             )}
                           >

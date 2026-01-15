@@ -40,6 +40,18 @@ import {
   chatCompletionStream as antigravityChat,
   getModels as getAntigravityModels,
 } from './antigravity';
+import {
+  chatCompletionStream as huggingChatChat,
+  getConversations as getHuggingChatConversations,
+  getConversation as getHuggingChatConversation,
+  getModels as getHuggingChatModels,
+} from './hugging-chat';
+import {
+  chatCompletionStream as lmArenaChatCompletionStream,
+  getConversations as getLMArenaConversations,
+  getConversationDetail as getLMArenaConversationDetail,
+  getModels as getLMArenaModels,
+} from './lmarena';
 import * as gemini from './gemini';
 
 import { statsManager } from '../core/stats';
@@ -242,7 +254,9 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
                       ? 'Perplexity'
                       : model.includes('gemini')
                         ? 'Gemini'
-                        : 'DeepSeek';
+                        : model.includes('huggingface') || model.includes('hf/')
+                          ? 'HuggingChat'
+                          : 'DeepSeek';
       const finalProvider = targetProvider || inferredProvider;
       account = accounts.find((a) => a.provider === finalProvider && a.status === 'Active');
     }
@@ -403,6 +417,12 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
       return;
     } else if (account.provider === 'Antigravity') {
       await antigravityChat(req, res, account);
+      return;
+    } else if (account.provider === 'HuggingChat') {
+      await huggingChatChat(req, res, account);
+      return;
+    } else if (account.provider === 'LMArena') {
+      await lmArenaChatCompletionStream(req, res, account);
       return;
     } else {
       res.write(`data: {"error": "Provider not supported"}\n\n`);
@@ -753,6 +773,122 @@ expressApp.get('/v1/gemini/models', async (req, res) => {
 
     await gemini.getModels(req, res, account);
   } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get HuggingChat models
+expressApp.get('/v1/huggingchat/models', async (req, res) => {
+  try {
+    const emailQuery = req.query.email as string;
+
+    if (!fs.existsSync(DATA_FILE)) {
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
+    }
+
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    let account = accounts.find((a) => a.email === emailQuery && a.provider === 'HuggingChat');
+
+    if (!account) {
+      account = accounts.find((a) => a.provider === 'HuggingChat' && a.status === 'Active');
+    }
+
+    if (!account) {
+      res.status(401).json({ error: 'No valid HuggingChat account found' });
+      return;
+    }
+
+    const models = await getHuggingChatModels(account.credential);
+    res.json(models);
+  } catch (error: any) {
+    console.error('[Server] Get HuggingChat Models Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get HuggingChat conversations
+expressApp.get('/v1/huggingchat/conversations', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const emailQuery = req.query.email as string;
+    const pageQuery = parseInt(req.query.page as string) || 0;
+
+    if (!fs.existsSync(DATA_FILE)) {
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
+    }
+
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    let account: Account | undefined;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      account = accounts.find((a) => a.id === token);
+    }
+
+    if (!account && emailQuery) {
+      account = accounts.find(
+        (a) => a.email.toLowerCase() === emailQuery.toLowerCase() && a.provider === 'HuggingChat',
+      );
+    }
+
+    if (!account) {
+      account = accounts.find((a) => a.provider === 'HuggingChat' && a.status === 'Active');
+    }
+
+    if (!account) {
+      res.status(401).json({ error: 'No valid HuggingChat account found' });
+      return;
+    }
+
+    const conversations = await getHuggingChatConversations(account.credential, pageQuery);
+    res.json(conversations);
+  } catch (error: any) {
+    console.error('[Server] Get HuggingChat Conversations Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get HuggingChat conversation detail
+expressApp.get('/v1/huggingchat/conversations/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const authHeader = req.headers.authorization;
+    const emailQuery = req.query.email as string;
+
+    if (!fs.existsSync(DATA_FILE)) {
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
+    }
+
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    let account: Account | undefined;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      account = accounts.find((a) => a.id === token);
+    }
+
+    if (!account && emailQuery) {
+      account = accounts.find(
+        (a) => a.email.toLowerCase() === emailQuery.toLowerCase() && a.provider === 'HuggingChat',
+      );
+    }
+
+    if (!account) {
+      account = accounts.find((a) => a.provider === 'HuggingChat' && a.status === 'Active');
+    }
+
+    if (!account) {
+      res.status(401).json({ error: 'No valid HuggingChat account found' });
+      return;
+    }
+
+    const conversation = await getHuggingChatConversation(account.credential, id);
+    res.json(conversation);
+  } catch (error: any) {
+    console.error('[Server] Get HuggingChat Conversation Error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -1160,3 +1296,67 @@ export const getServerInfo = () => {
     localhostOnly: config.localhostOnly,
   };
 };
+
+// LMArena Routes
+expressApp.get('/v1/lmarena/models', async (req, res) => {
+  try {
+    const emailQuery = req.query.email as string;
+    if (!fs.existsSync(DATA_FILE)) {
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
+    }
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    let account = accounts.find((a) => a.email === emailQuery && a.provider === 'LMArena');
+    if (!account) {
+      account = accounts.find((a) => a.provider === 'LMArena' && a.status === 'Active');
+    }
+    if (!account) return res.status(401).json({ error: 'No LMArena account' });
+
+    const models = await getLMArenaModels(account);
+    res.json({ data: models });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+expressApp.get('/v1/lmarena/conversations', async (req, res) => {
+  try {
+    const emailQuery = req.query.email as string;
+    if (!fs.existsSync(DATA_FILE)) {
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
+    }
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    let account = accounts.find((a) => a.email === emailQuery && a.provider === 'LMArena');
+    if (!account) {
+      account = accounts.find((a) => a.provider === 'LMArena' && a.status === 'Active');
+    }
+    if (!account) return res.status(401).json({ error: 'No LMArena account' });
+
+    const conversations = await getLMArenaConversations(account);
+    res.json({ conversations });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+expressApp.get('/v1/lmarena/conversations/:id', async (req, res) => {
+  try {
+    const emailQuery = req.query.email as string;
+    if (!fs.existsSync(DATA_FILE)) {
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
+    }
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    let account = accounts.find((a) => a.email === emailQuery && a.provider === 'LMArena');
+    if (!account) {
+      account = accounts.find((a) => a.provider === 'LMArena' && a.status === 'Active');
+    }
+    if (!account) return res.status(401).json({ error: 'No LMArena account' });
+
+    const messages = await getLMArenaConversationDetail(req.params.id, account);
+    res.json(messages);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});

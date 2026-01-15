@@ -41,7 +41,9 @@ export type Provider =
   | 'Cohere'
   | 'Perplexity'
   | 'Gemini'
-  | 'Antigravity';
+  | 'Antigravity'
+  | 'HuggingChat'
+  | 'LMArena';
 
 export interface Account {
   id: string;

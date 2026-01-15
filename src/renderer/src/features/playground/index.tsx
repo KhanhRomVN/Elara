@@ -12,6 +12,8 @@ import perplexityIcon from '../../assets/provider_icons/perplexity.svg';
 import groqIcon from '../../assets/provider_icons/groq.svg';
 import geminiIcon from '../../assets/provider_icons/gemini.svg';
 import antigravityIcon from '../../assets/provider_icons/antigravity.svg';
+import huggingChatIcon from '../../assets/provider_icons/huggingface.svg';
+import lmArenaIcon from '../../assets/provider_icons/lmarena.svg';
 import { FunctionParams } from './components/GroqSidebarSettings';
 import { GroqModelSelector } from './components/GroqModelSelector';
 import { AntigravityModelSelector } from './components/AntigravityModelSelector';
@@ -127,6 +129,9 @@ export const PlaygroundPage = () => {
     | 'Groq'
     | 'Antigravity'
     | 'Gemini'
+    | 'Gemini'
+    | 'HuggingChat'
+    | 'LMArena'
     | ''
   >('');
   const [selectedAccount, setSelectedAccount] = useState<string>('');
@@ -141,6 +146,9 @@ export const PlaygroundPage = () => {
   const [tokenCount, setTokenCount] = useState(0);
   const [inputTokenCount, setInputTokenCount] = useState(0);
   const [accumulatedUsage, setAccumulatedUsage] = useState(0);
+
+  // Re-use Groq Model State for generic providers like LMArena
+  const [groqModels, setGroqModels] = useState<any[]>([]);
 
   const handleFileSelect = async (files: FileList | File[] | null) => {
     if (!files) return;
@@ -237,6 +245,10 @@ export const PlaygroundPage = () => {
   // Groq State
   const [groqModel, setGroqModel] = useState('openai/gpt-oss-120b');
   const [groqModelsList, setGroqModelsList] = useState<any[]>([]);
+
+  // HuggingChat State
+  const [huggingChatModel, setHuggingChatModel] = useState('');
+  const [huggingChatModelsList, setHuggingChatModelsList] = useState<any[]>([]);
 
   // DeepSeek State
   const [deepseekModel, setDeepseekModel] = useState('deepseek-ai/DeepSeek-V3.2');
@@ -450,9 +462,68 @@ export const PlaygroundPage = () => {
           console.error('Failed to fetch Gemini models', e);
         }
       }
+
+      if (selectedProvider === 'HuggingChat' && selectedAccount) {
+        try {
+          // @ts-ignore
+          const status = await window.api.server.start();
+          const port = status.port || 11434;
+          const acc = accounts.find((a) => a.id === selectedAccount);
+          if (!acc) return;
+
+          const res = await fetch(
+            `http://localhost:${port}/v1/huggingchat/models?email=${encodeURIComponent(acc.email)}`,
+          );
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data)) {
+              setHuggingChatModelsList(data);
+              // Auto-select first model if none selected
+              if (
+                data.length > 0 &&
+                (!huggingChatModel || !data.find((m: any) => m.id === huggingChatModel))
+              ) {
+                setHuggingChatModel(data[0].id);
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Failed to fetch HuggingChat models', e);
+        }
+      }
+
+      if (selectedProvider === 'LMArena' && selectedAccount) {
+        try {
+          // @ts-ignore
+          const status = await window.api.server.start();
+          const port = status.port || 11434;
+          const acc = accounts.find((a) => a.id === selectedAccount);
+          if (!acc) return;
+
+          const res = await fetch(
+            `http://localhost:${port}/v1/lmarena/models?email=${encodeURIComponent(acc.email)}`,
+          );
+          if (res.ok) {
+            const json = await res.json();
+            // Backend returns { data: [...] }
+            if (json.data && Array.isArray(json.data)) {
+              const models = json.data.map((m: any) => ({ id: m.id, name: m.name }));
+              setGroqModels(models);
+              if (
+                models.length > 0 &&
+                (!groqModel || !models.find((m: any) => m.id === groqModel))
+              ) {
+                setGroqModel(models[0].id);
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Failed to fetch LMArena models', e);
+        }
+      }
     };
     fetchGroqModels();
-  }, [selectedProvider, selectedAccount, accounts, geminiModel]);
+  }, [selectedProvider, selectedAccount, accounts, geminiModel, huggingChatModel]);
 
   const filteredAccounts = selectedProvider
     ? accounts.filter((acc) => acc.provider === selectedProvider)
@@ -566,7 +637,9 @@ export const PlaygroundPage = () => {
                           ? antigravityModel
                           : account.provider === 'Gemini'
                             ? geminiModel
-                            : deepseekModel,
+                            : account.provider === 'HuggingChat'
+                              ? huggingChatModel
+                              : deepseekModel,
           messages: [
             ...messages.map((msg) => ({
               role: msg.role,
@@ -721,7 +794,7 @@ export const PlaygroundPage = () => {
       }
 
       // Find the selected account object
-      const account = accounts.find((a) => a.id === selectedAccount);
+      const account = accounts.find((a: { id: any }) => a.id === selectedAccount);
       if (!account) {
         setHistory([]);
         return;
@@ -750,44 +823,56 @@ export const PlaygroundPage = () => {
                         ? `http://localhost:${port}/v1/groq/conversations`
                         : selectedProvider === 'Antigravity'
                           ? `http://localhost:${port}/v1/antigravity/conversations`
-                          : `http://localhost:${port}/v1/deepseek/sessions`;
+                          : selectedProvider === 'HuggingChat'
+                            ? `http://localhost:${port}/v1/huggingchat/conversations`
+                            : selectedProvider === 'LMArena'
+                              ? `http://localhost:${port}/v1/lmarena/conversations`
+                              : `http://localhost:${port}/v1/deepseek/sessions`;
 
         const response = await fetch(`${endpoint}?email=${encodeURIComponent(account.email)}`);
 
         if (response.ok) {
           const data = await response.json();
 
-          // Format data for display
-          const formattedHistory =
-            selectedProvider === 'Claude'
-              ? data.map((conv: any) => ({
-                  id: conv.uuid,
-                  title: conv.name || conv.summary || 'Untitled',
-                  date: new Date(conv.updated_at).toLocaleDateString(),
-                }))
-              : selectedProvider === 'Mistral'
+          if (selectedProvider === 'LMArena') {
+            const formatted = (data.conversations || []).map((c: any) => ({
+              id: c.conversationId || c.id,
+              title: c.title || 'Conversation',
+            }));
+            setHistory(formatted);
+          } else {
+            // Format data for display
+            const formattedHistory =
+              selectedProvider === 'Claude'
                 ? data.map((conv: any) => ({
-                    id: conv.id,
-                    title: conv.title || 'Untitled',
-                    date: new Date(conv.created_at || Date.now()).toLocaleDateString(),
+                    id: conv.uuid,
+                    title: conv.name || conv.summary || 'Untitled',
+                    date: new Date(conv.updated_at).toLocaleDateString(),
                   }))
-                : selectedProvider === 'Qwen'
+                : selectedProvider === 'Mistral'
                   ? data.map((conv: any) => ({
                       id: conv.id,
                       title: conv.title || 'Untitled',
-                      date: new Date(
-                        conv.updated_at ? conv.updated_at * 1000 : Date.now(),
-                      ).toLocaleDateString(),
+                      date: new Date(conv.created_at || Date.now()).toLocaleDateString(),
                     }))
-                  : selectedProvider === 'Kimi' || selectedProvider === 'Cohere'
-                    ? []
-                    : data.map((session: any) => ({
-                        id: session.id,
-                        title: session.title || 'Untitled',
-                        date: new Date(session.updated_at * 1000).toLocaleDateString(),
-                      }));
+                  : selectedProvider === 'Qwen'
+                    ? data.map((conv: any) => ({
+                        id: conv.id,
+                        title: conv.title || 'Untitled',
+                        date: new Date(
+                          conv.updated_at ? conv.updated_at * 1000 : Date.now(),
+                        ).toLocaleDateString(),
+                      }))
+                    : selectedProvider === 'Kimi' || selectedProvider === 'Cohere'
+                      ? []
+                      : data.map((session: any) => ({
+                          id: session.id,
+                          title: session.title || 'Untitled',
+                          date: new Date(session.updated_at * 1000).toLocaleDateString(),
+                        }));
 
-          setHistory(formattedHistory);
+            setHistory(formattedHistory);
+          }
         } else {
           const errorText = await response.text();
           console.error('[History] Failed to fetch:', response.status, errorText);
@@ -1020,6 +1105,7 @@ export const PlaygroundPage = () => {
                       { value: 'Groq', label: 'Groq', icon: groqIcon },
                       { value: 'Antigravity', label: 'Antigravity', icon: antigravityIcon },
                       { value: 'Gemini', label: 'Gemini', icon: geminiIcon },
+                      { value: 'HuggingChat', label: 'HuggingChat', icon: huggingChatIcon },
                     ]}
                     placeholder="Select Provider"
                   />
@@ -1079,6 +1165,36 @@ export const PlaygroundPage = () => {
                           onChange={setGeminiModel}
                           models={geminiModelsList}
                         />
+                      )}
+
+                      {selectedProvider === 'HuggingChat' && selectedAccount && (
+                        <div className="w-[300px]">
+                          <CustomSelect
+                            value={huggingChatModel}
+                            onChange={setHuggingChatModel}
+                            options={huggingChatModelsList.map((model) => ({
+                              value: model.id,
+                              label: model.displayName || model.name || model.id,
+                            }))}
+                            placeholder="Select Model"
+                            disabled={huggingChatModelsList.length === 0}
+                          />
+                        </div>
+                      )}
+
+                      {selectedProvider === 'LMArena' && selectedAccount && (
+                        <div className="w-[300px]">
+                          <CustomSelect
+                            value={groqModel}
+                            onChange={setGroqModel}
+                            options={groqModels.map((model) => ({
+                              value: model.id,
+                              label: model.name || model.id,
+                            }))}
+                            placeholder="Select Model"
+                            disabled={groqModels.length === 0}
+                          />
+                        </div>
                       )}
 
                       {selectedProvider === 'DeepSeek' && (
