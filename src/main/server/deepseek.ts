@@ -194,6 +194,7 @@ export async function chatCompletionStream(
   callbacks: {
     onContent: (content: string) => void;
     onThinking?: (content: string) => void;
+    onRaw?: (data: string) => void;
     onDone: () => void;
     onError: (error: Error) => void;
   },
@@ -337,7 +338,6 @@ export async function chatCompletionStream(
 
       let buffer = '';
       const textDecoder = new TextDecoder();
-
       response.on('data', (chunk) => {
         const chunkStr =
           typeof chunk === 'string' ? chunk : textDecoder.decode(chunk, { stream: true });
@@ -347,6 +347,7 @@ export async function chatCompletionStream(
         buffer = lines.pop() || '';
 
         for (const line of lines) {
+          console.log('[DeepSeek Server] Received line:', line.substring(0, 100));
           processLine(line);
         }
       });
@@ -367,6 +368,12 @@ export async function chatCompletionStream(
 
       const dataStr = trimmed.slice(6);
       if (dataStr === '[DONE]') return;
+
+      // If onRaw is provided, pass the raw data string (content of the data: part)
+      if (callbacks.onRaw) {
+        callbacks.onRaw(dataStr);
+        return;
+      }
 
       try {
         const data = JSON.parse(dataStr);
@@ -436,7 +443,6 @@ export async function getChatSessions(
           if (response.statusCode === 200) {
             try {
               const parsed = JSON.parse(data);
-              logDeepSeekResponse(data);
               if (parsed.code === 0 && parsed.data?.biz_data?.chat_sessions) {
                 resolve(parsed.data.biz_data.chat_sessions);
               } else {
@@ -455,23 +461,7 @@ export async function getChatSessions(
       request.end();
     });
   } catch (error: any) {
-    console.error('[DeepSeek] Get Chat Sessions Error:', error);
     throw error;
-  }
-}
-
-// Add detailed logging to getChatSessions inner promise
-function logDeepSeekResponse(data: string) {
-  try {
-    const parsed = JSON.parse(data);
-    console.log('[DeepSeek] Response Code:', parsed.code);
-    console.log('[DeepSeek] Response Msg:', parsed.msg);
-    console.log('[DeepSeek] Data keys:', Object.keys(parsed.data || {}));
-    if (parsed.data?.biz_data?.chat_sessions) {
-      console.log('[DeepSeek] Session Count:', parsed.data.biz_data.chat_sessions.length);
-    }
-  } catch (e) {
-    console.log('[DeepSeek] Raw Response (first 100 chars):', data.substring(0, 100));
   }
 }
 
@@ -539,7 +529,6 @@ export async function getChatHistory(
       request.end();
     });
   } catch (error: any) {
-    console.error('[DeepSeek] Get Chat History Error:', error);
     throw error;
   }
 }
@@ -611,7 +600,6 @@ export async function stopStream(
       request.end();
     });
   } catch (error: any) {
-    console.error('[DeepSeek] Stop Stream Error:', error);
     throw error;
   }
 }

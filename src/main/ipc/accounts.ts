@@ -114,13 +114,11 @@ const fetchDeepSeekProfile = (
             resolve({ email: null, name: null, picture: null });
           }
         } catch (e) {
-          console.error('[DeepSeek] JSON Parse Error:', e);
           resolve({ email: null, name: null, picture: null });
         }
       });
     });
     request.on('error', (e) => {
-      console.error('[DeepSeek] API Request Error:', e);
       resolve({ email: null, name: null, picture: null });
     });
     request.end();
@@ -570,9 +568,7 @@ export const setupAccountsHandlers = () => {
                       capturedEmail = parsed.email;
                     }
                   }
-                } catch (e) {
-                  console.error('[DeepSeek] Error parsing request body:', e);
-                }
+                } catch (e) {}
               }
               callback({});
             },

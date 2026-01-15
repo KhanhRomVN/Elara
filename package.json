@@ -68,7 +68,8 @@
     "reactflow": "^11.11.4",
     "tailwind-merge": "^2.0.0",
     "tailwindcss-animate": "^1.0.7",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "vscode-icons-js": "^11.6.1"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "^1.0.1",

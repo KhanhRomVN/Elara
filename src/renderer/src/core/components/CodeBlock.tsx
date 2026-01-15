@@ -34,6 +34,7 @@ interface CodeBlockProps {
   readOnly?: boolean;
   onChange?: (value: string) => void;
   maxLines?: number; // Maximum number of lines to display
+  editorOptions?: any; // Additional Monaco editor options
 }
 
 const SYSTEMA_THEME = {
@@ -68,6 +69,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
   readOnly = true,
   onChange,
   maxLines = 50,
+  editorOptions = {},
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const editorInstance = useRef<any>(null);
@@ -131,6 +133,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
           padding: { top: 16, bottom: 16 },
           wordWrap: wordWrap,
           lineNumbers: showLineNumbers ? 'on' : 'off',
+          ...editorOptions, // Allow custom options to override defaults
         });
 
         // Expose editor instance

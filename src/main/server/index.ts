@@ -90,9 +90,7 @@ const updateAccountStats = (
 
     accounts[index] = account;
     fs.writeFileSync(DATA_FILE, JSON.stringify(accounts, null, 2));
-  } catch (e) {
-    console.error('[Server] Failed to update account stats:', e);
-  }
+  } catch (e) {}
 };
 
 const getAccount = async (req: express.Request): Promise<Account | undefined> => {
@@ -297,7 +295,6 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
           updateAccountStats(account.id, { tokens: requestTokens, duration, success: true });
       },
       onError: (err: Error) => {
-        console.error(`[Server] ${account?.provider} Error:`, err);
         const errorResponse = { error: err.message };
         res.write(`data: ${JSON.stringify(errorResponse)}\n\n`);
         res.end();
@@ -312,7 +309,13 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
         account.credential,
         { model, messages, stream: true, thinking, search, conversation_id, parent_message_id },
         account.userAgent,
-        callbacks,
+        {
+          ...callbacks,
+          onRaw: (data: string) => {
+            // Forward raw data chunks directly
+            res.write(`data: ${data}\n\n`);
+          },
+        },
       );
     } else if (account.provider === 'Claude') {
       await claudeChat(
@@ -407,7 +410,6 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
       res.end();
     }
   } catch (error: any) {
-    console.error('[Server] Error:', error);
     if (!res.headersSent) {
       res.status(500).json({ error: error.message });
     }
@@ -452,7 +454,6 @@ expressApp.get('/v1/claude/conversations', async (req, res) => {
     const conversations = await getConversations(account.credential, account.userAgent, limitQuery);
     res.json(conversations);
   } catch (error: any) {
-    console.error('[Server] Get Conversations Error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -495,7 +496,6 @@ expressApp.get('/v1/claude/conversations/:id', async (req, res) => {
     const conversation = await getConversationDetail(account.credential, id, account.userAgent);
     res.json(conversation);
   } catch (error: any) {
-    console.error('[Server] Get Conversation Detail Error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -538,7 +538,6 @@ expressApp.delete('/v1/claude/conversations/:id', async (req, res) => {
     await deleteConversation(account.credential, id, account.userAgent);
     res.json({ success: true });
   } catch (error: any) {
-    console.error('[Server] Delete Conversation Error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -803,7 +802,6 @@ expressApp.get('/v1/gemini/models', async (req, res) => {
 
     await gemini.getModels(req, res, account);
   } catch (error: any) {
-    console.error('[Server] Get Gemini Models Error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -1112,12 +1110,6 @@ export const startServer = async () => {
     const port = config.port;
     const host = config.host;
 
-    console.log(
-      `[Server] Starting server on ${config.tls.enable ? 'https' : 'http'}://${host}:${port}`,
-    );
-    console.log(`[Server] Routing strategy: ${config.routing.strategy}`);
-    console.log(`[Server] Localhost only: ${config.localhostOnly}`);
-
     return new Promise(async (resolve) => {
       try {
         if (config.tls.enable) {
@@ -1132,26 +1124,13 @@ export const startServer = async () => {
 
           server = https.createServer(httpsOptions, expressApp);
           isHttpsMode = true;
-
-          console.log(`[Server] HTTPS enabled with certificates:`);
-          console.log(`[Server]   Certificate: ${certs.cert}`);
-          console.log(`[Server]   Key: ${certs.key}`);
         } else {
           // HTTP mode
           server = http.createServer(expressApp);
           isHttpsMode = false;
-          console.log(`[Server] Running in HTTP mode`);
         }
 
         server.listen(port, host, () => {
-          console.log(
-            `[Server] Successfully started on ${config.tls.enable ? 'https' : 'http'}://${host}:${port}`,
-          );
-          console.log(`[Server] API Endpoints:`);
-          console.log(`[Server]   POST /v1/chat/completions`);
-          console.log(`[Server]   GET  /v1/models`);
-          console.log(`[Server]   GET  /v1beta/models (Gemini)`);
-          console.log(`[Server]   POST /v1/messages (Claude)`);
           resolve({ success: true, port, https: config.tls.enable });
         });
 
@@ -1184,7 +1163,6 @@ export const stopServer = () => {
 
   return new Promise((resolve) => {
     server?.close(() => {
-      console.log('[Server] Server stopped');
       server = null;
       isHttpsMode = false;
       resolve({ success: true });
