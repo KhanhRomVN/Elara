@@ -9,6 +9,17 @@ export interface Message {
   thinking_elapsed?: number;
   _deepseek_mode?: 'THINK' | 'RESPONSE';
   deepseek_message_id?: number; // Response message ID from DeepSeek API for conversation threading
+  attachments?: Attachment[];
+}
+
+export interface Attachment {
+  id: string;
+  name: string;
+  type: 'image' | 'file';
+  url?: string; // For preview/display
+  path?: string; // For backend processing (Electron)
+  size?: number;
+  mimeType?: string;
 }
 
 export type Provider =

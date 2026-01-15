@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Plus, Upload, User, MoreHorizontal, ChevronDown, StopCircle } from 'lucide-react';
+import { User, ChevronDown } from 'lucide-react';
 import { cn } from '../../shared/lib/utils';
 import claudeIcon from '../../assets/provider_icons/claude.svg';
 import deepseekIcon from '../../assets/provider_icons/deepseek.svg';
@@ -12,8 +12,7 @@ import perplexityIcon from '../../assets/provider_icons/perplexity.svg';
 import groqIcon from '../../assets/provider_icons/groq.svg';
 import geminiIcon from '../../assets/provider_icons/gemini.svg';
 import antigravityIcon from '../../assets/provider_icons/antigravity.svg';
-import { Switch } from '../../core/components/Switch';
-import { GroqSidebarSettings, FunctionParams } from './components/GroqSidebarSettings';
+import { FunctionParams } from './components/GroqSidebarSettings';
 import { GroqModelSelector } from './components/GroqModelSelector';
 import { AntigravityModelSelector } from './components/AntigravityModelSelector';
 import { GeminiModelSelector } from './components/GeminiModelSelector';
@@ -22,7 +21,7 @@ import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
 import { InputArea } from './components/InputArea';
 import { WelcomeScreen } from './components/WelcomeScreen';
-import { Message, Account, Provider, HistoryItem } from './types';
+import { Message, Account } from './types';
 import { getStreamHandler } from './stream-handlers';
 
 // Interfaces moved to types.ts
@@ -62,7 +61,7 @@ const CustomSelect = ({
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
         className={cn(
-          'h-10 w-full min-w-[140px] flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all hover:bg-accent/50',
+          'h-10 w-fit min-w-[140px] flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all hover:bg-accent/50',
           !value && 'text-muted-foreground',
         )}
       >
@@ -79,7 +78,7 @@ const CustomSelect = ({
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 mt-1 max-h-60 w-full min-w-[180px] overflow-auto rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2">
+        <div className="absolute z-50 mt-1 max-h-60 w-max min-w-full overflow-auto rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2">
           <div className="p-1">
             {options.map((option) => (
               <div
@@ -137,9 +136,25 @@ export const PlaygroundPage = () => {
   const [isStreaming, setIsStreaming] = useState(false);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [_currentMessageId, setCurrentMessageId] = useState<number | null>(null);
-  const [sloganIndex, setSloganIndex] = useState(0);
+
   const [thinkingEnabled, setThinkingEnabled] = useState(true);
   const [searchEnabled, setSearchEnabled] = useState(false);
+  const [attachments, setAttachments] = useState<File[]>([]);
+
+  const handleFileSelect = (files: FileList | File[] | null) => {
+    if (!files) return;
+    const newFiles = itemsToFileArray(files);
+    setAttachments((prev) => [...prev, ...newFiles]);
+    console.log('Selected files:', newFiles);
+  };
+
+  // Helper to normalize file input
+  const itemsToFileArray = (items: FileList | File[]): File[] => {
+    if (Array.isArray(items)) {
+      return items;
+    }
+    return Array.from(items);
+  };
   const [claudeModel, setClaudeModel] = useState('claude-sonnet-4-5-20250929');
   const [chatgptModel, setChatgptModel] = useState('gpt-4o');
   // Antigravity State
@@ -205,19 +220,7 @@ export const PlaygroundPage = () => {
     };
   }, [isResizing]);
 
-  const slogans = [
-    'Feel Free Chat Free!!',
-    'Experience the Power of AI',
-    'Your Personal Assistant',
-    'Unlock Infinite Possibilities',
-  ];
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setSloganIndex((prev) => (prev + 1) % slogans.length);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, []);
+  /* Unused variables/functions removed */
 
   useEffect(() => {
     const fetchAccounts = async () => {
@@ -245,7 +248,7 @@ export const PlaygroundPage = () => {
     };
 
     fetchAccounts();
-    fetchAccounts();
+    // fetchAccounts(); // duplicate removed
   }, []);
 
   useEffect(() => {
@@ -258,43 +261,6 @@ export const PlaygroundPage = () => {
 
           const acc = accounts.find((a) => a.id === selectedAccount);
           if (!acc) return;
-
-          // Fetch from internal API to get detailed info
-          // We can try fetching directly from renderer if allowed, or we might need a proxy.
-          // Assuming direct fetch to https://api.groq.com/internal/v1/models works or using a proxy if we have one.
-          // The user specifically requested this URL.
-          // Since we might run into CORS, let's try to fetch it. If it fails, we might need a server-side proxy.
-
-          // However, the user mentioned getting response from "GET https://api.groq.com/internal/v1/models"
-          // I will try to fetch it directly. If it fails due to CORS, I'll need to use the Electron main process proxy or similar.
-          // For now, let's assume valid access if we have a token (acc.email might not be enough, usually need an API Key).
-          // But wait, the previous code used `http://localhost:${port}/v1/groq/models?email=...`
-          // which likely uses the backend to fetch. I should probably modify the backend to fetch from the internal API
-          // OR I can try to fetch from renderer if I have the token.
-          // Since I don't see the token here (it's in the main process store possibly), I should stick to the local proxy but
-          // maybe I need to update the local proxy (server/groq.ts) to hit the internal API or return more data.
-
-          // But the user request implies I should do it here or result in that data.
-          // Let's stick to the existing pattern: fetch from local proxy, but maybe I need to update the local proxy?
-          // The local proxy matches `v1/groq/models`.
-
-          // Let's update `src/main/server/groq.ts` effectively?
-          // User said "hover ... derived from response of GET ...".
-          // If I change the frontend to use `GroqModelSelector` which expects `GroqModel` shape,
-          // I need `groqModelsList` to contain that shape.
-
-          // Let's assume I can change the endpoint or just fetch it.
-          // If I change `index.tsx` to fetch from `https://api.groq.com/internal/v1/models`, I need the API Key.
-          // I don't have the API key in renderer (it's in `accounts` but maybe hidden or I need to request it).
-          // Actually `accounts` in `index.tsx` has `email` but not `apiKey`.
-
-          // So I probably need to update the backend `src/main/server/groq.ts` to fetch from the internal API instead of the public one
-          // OR returns the full object.
-
-          // Let's checking `src/main/server/groq.ts` first?
-          // I'll update the frontend to EXPECT the data, and if it's missing, I'll update the backend.
-
-          // For this step I'll just update the component usage and state type.
 
           const res = await fetch(
             `http://localhost:${port}/v1/groq/models?email=${encodeURIComponent(acc.email)}`,
@@ -849,19 +815,6 @@ export const PlaygroundPage = () => {
     setCurrentMessageId(null);
   };
 
-  const handleSendUninitialized = async () => {
-    if (!input.trim() || !selectedAccount) return;
-    setActiveChatId('new-session'); // simplistic state transition
-    await handleSend();
-  };
-
-  const handleKeyDownUninitialized = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendUninitialized();
-    }
-  };
-
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const target = e.target;
     target.style.height = 'auto'; // Reset height
@@ -873,204 +826,183 @@ export const PlaygroundPage = () => {
 
   const account = accounts.find((a) => a.id === selectedAccount);
 
-  const providerOptions = [
-    { value: 'Claude', label: 'Claude', icon: claudeIcon },
-    { value: 'DeepSeek', label: 'DeepSeek', icon: deepseekIcon },
-    { value: 'ChatGPT', label: 'ChatGPT', icon: chatgptIcon },
-    { value: 'Mistral', label: 'Mistral', icon: mistralIcon },
-    { value: 'Kimi', label: 'Kimi', icon: kimiIcon },
-    { value: 'Qwen', label: 'Qwen', icon: qwenIcon },
-    { value: 'Cohere', label: 'Cohere', icon: cohereIcon },
-    { value: 'Perplexity', label: 'Perplexity', icon: perplexityIcon },
-    { value: 'Groq', label: 'Groq', icon: groqIcon },
-    { value: 'Gemini', label: 'Gemini', icon: geminiIcon },
-    { value: 'Antigravity', label: 'Antigravity', icon: antigravityIcon },
-    { value: 'Zai', label: 'Zai', icon: geminiIcon },
-  ];
-
-  const accountOptions = filteredAccounts.map((acc) => ({
-    value: acc.id,
-    label: acc.name || acc.email,
-    icon: acc.picture ? (
-      <img src={acc.picture} className="w-4 h-4 rounded-full" alt="" />
-    ) : (
-      <User className="w-4 h-4" />
-    ),
-  }));
-
-  const renderDropdowns = () => (
-    <div className="flex gap-3 justify-start items-center">
-      <div className="w-[180px]">
-        <CustomSelect
-          value={selectedProvider}
-          onChange={(val) => {
-            const newProvider = val as 'Claude' | 'DeepSeek' | 'ChatGPT' | '';
-            setSelectedProvider(newProvider);
-            if (newProvider) {
-              const matches = accounts.filter((acc) => acc.provider === newProvider);
-              const active = matches.find((acc) => acc.status === 'Active');
-              setSelectedAccount(active?.id || matches[0]?.id || '');
-            } else {
-              setSelectedAccount('');
-            }
-          }}
-          options={providerOptions}
-          placeholder="Select Provider"
-        />
-      </div>
-      <div className="w-[240px]">
-        <CustomSelect
-          value={selectedAccount}
-          onChange={setSelectedAccount}
-          options={accountOptions}
-          placeholder="Select Account"
-          disabled={!selectedProvider}
-        />
-      </div>
-      {selectedProvider === 'Claude' && (
-        <div className="w-[200px]">
-          <CustomSelect
-            value={claudeModel}
-            onChange={setClaudeModel}
-            options={[
-              { value: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5' },
-              { value: 'claude-opus-4-5-20251101', label: 'Claude Opus 4.5' },
-            ]}
-            placeholder="Select Model"
-          />
-        </div>
-      )}
-      {selectedProvider === 'ChatGPT' && (
-        <div className="w-[200px]">
-          <CustomSelect
-            value={chatgptModel}
-            onChange={setChatgptModel}
-            options={[
-              { value: 'auto', label: 'Auto' },
-              { value: 'gpt-4o', label: 'GPT-4o' },
-              { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-              { value: 'o1-preview', label: 'o1 Preview' },
-              { value: 'o1-mini', label: 'o1 Mini' },
-            ]}
-            placeholder="Select Model"
-          />
-        </div>
-      )}
-      {selectedProvider === 'DeepSeek' && (
-        <>
-          <div className="flex items-center gap-2 ml-2 p-2 rounded-md bg-accent/30 border border-border">
-            <span className="text-sm font-medium">Thinking</span>
-            <Switch checked={thinkingEnabled} onCheckedChange={setThinkingEnabled} />
-          </div>
-          <div className="flex items-center gap-2 ml-2 p-2 rounded-md bg-accent/30 border border-border">
-            <span className="text-sm font-medium">Search</span>
-            <Switch checked={searchEnabled} onCheckedChange={setSearchEnabled} />
-          </div>
-        </>
-      )}
-
-      {selectedProvider === 'Groq' && (
-        <div className="flex items-center gap-2 ml-2">
-          <div className="w-[300px]">
-            <GroqModelSelector
-              value={groqModel}
-              onChange={setGroqModel}
-              models={groqModelsList}
-              placeholder="Select Model"
-            />
-          </div>
-        </div>
-      )}
-      {selectedProvider === 'Gemini' && (
-        <div className="w-[300px]">
-          <GeminiModelSelector
-            value={geminiModel}
-            onChange={setGeminiModel}
-            models={geminiModelsList}
-            disabled={loading || isStreaming}
-          />
-        </div>
-      )}
-      {selectedProvider === 'Zai' && (
-        <div className="w-[300px]">
-          <ZaiModelSelector
-            value={zaiModel}
-            onChange={setZaiModel}
-            models={zaiModelsList}
-            disabled={loading || isStreaming}
-          />
-        </div>
-      )}
-      {selectedProvider === 'Antigravity' && (
-        <div className="w-[300px]">
-          <AntigravityModelSelector
-            value={antigravityModel}
-            onChange={setAntigravityModel}
-            models={
-              antigravityModelsList.length > 0
-                ? antigravityModelsList
-                : [
-                    { name: 'models/gemini-3-pro-preview' },
-                    { name: 'models/gemini-3-flash-preview' },
-                  ]
-            }
-          />
-        </div>
-      )}
-    </div>
-  );
+  const handleRemoveAttachment = (index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  };
 
   return (
-    <div className="flex flex-col h-full animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-4">
-      <div className="mt-4">
-        <h2 className="text-2xl font-bold tracking-tight">Playground</h2>
-        {/* Animated Slogan */}
-        <div className="h-8 relative overflow-hidden mt-1">
-          {slogans.map((slogan, index) => (
-            <p
-              key={index}
-              className={cn(
-                'absolute top-0 left-0 w-full transition-all duration-500 text-lg text-muted-foreground',
-                index === sloganIndex ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4',
-              )}
-            >
-              {slogan}
-            </p>
-          ))}
-        </div>
-      </div>
-      <div className="flex-1 overflow-hidden rounded-xl border bg-card flex" ref={sidebarRef}>
-        <Sidebar
-          sidebarWidth={sidebarWidth}
-          selectedProvider={selectedProvider}
-          startNewChat={startNewChat}
-          history={history}
-          activeChatId={activeChatId}
-          loadConversation={loadConversation}
-          account={account || null}
-          groqSettings={groqSettings}
-          setGroqSettings={setGroqSettings}
-        />
+    <div className="h-full flex flex-col bg-background">
+      <div className="flex-1 flex overflow-hidden">
+        {/* Sidebar */}
+        <div ref={sidebarRef} className="relative flex-shrink-0" style={{ width: sidebarWidth }}>
+          <div className="h-full overflow-y-auto border-r bg-muted/10 w-full">
+            <Sidebar
+              sidebarWidth={sidebarWidth}
+              selectedProvider={selectedProvider}
+              history={history}
+              activeChatId={activeChatId}
+              startNewChat={startNewChat}
+              loadConversation={loadConversation}
+              account={account || null}
+              groqSettings={groqSettings}
+              setGroqSettings={setGroqSettings}
+            />
+          </div>
 
-        {/* Resizer Handle */}
-        <div
-          className="w-1 bg-border hover:bg-primary/50 cursor-col-resize transition-colors flex items-center justify-center group"
-          onMouseDown={startResizing}
-        >
-          <div className="h-8 w-[2px] bg-muted-foreground/20 group-hover:bg-primary rounded-full" />
+          {/* Resizer Handle */}
+          <div
+            className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50 transition-colors z-10"
+            onMouseDown={startResizing}
+          />
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 flex flex-col relative h-full min-w-0">
-          {messages.length > 0 || activeChatId ? (
-            /* Active Chat View */
-            <div className="flex flex-col h-full bg-background">
-              <ChatArea
-                messages={messages}
-                loading={loading}
-                isStreaming={isStreaming}
-                conversationTitle={conversationTitle}
-              />
+        <div className="flex-1 flex flex-col min-w-0 bg-background relative">
+          {messages.length === 0 ? (
+            <WelcomeScreen
+              dropdowns={
+                <div className="flex flex-wrap gap-4">
+                  <CustomSelect
+                    value={selectedProvider}
+                    onChange={(val) => {
+                      setSelectedProvider(val as any);
+                      setSelectedAccount('');
+                    }}
+                    options={[
+                      { value: 'DeepSeek', label: 'DeepSeek', icon: deepseekIcon },
+                      { value: 'Claude', label: 'Claude', icon: claudeIcon },
+                      { value: 'ChatGPT', label: 'ChatGPT', icon: chatgptIcon },
+                      { value: 'Mistral', label: 'Mistral', icon: mistralIcon },
+                      { value: 'Kimi', label: 'Kimi', icon: kimiIcon },
+                      { value: 'Qwen', label: 'Qwen', icon: qwenIcon },
+                      { value: 'Cohere', label: 'Cohere', icon: cohereIcon },
+                      { value: 'Perplexity', label: 'Perplexity', icon: perplexityIcon },
+                      { value: 'Groq', label: 'Groq', icon: groqIcon },
+                      { value: 'Antigravity', label: 'Antigravity', icon: antigravityIcon },
+                      { value: 'Gemini', label: 'Gemini', icon: geminiIcon },
+                      {
+                        value: 'Zai',
+                        label: 'Z.AI',
+                        icon: <img src="https://chat.z.ai/favicon.ico" className="w-5 h-5" />,
+                      },
+                    ]}
+                    placeholder="Select Provider"
+                  />
+                  {selectedProvider && (
+                    <div className="space-y-4">
+                      <CustomSelect
+                        value={selectedAccount}
+                        onChange={setSelectedAccount}
+                        options={filteredAccounts.map((acc) => ({
+                          value: acc.id,
+                          label: acc.name || acc.email,
+                          icon: <User className="h-4 w-4" />,
+                        }))}
+                        placeholder="Select Account"
+                        disabled={!selectedProvider}
+                      />
+
+                      {selectedProvider === 'Claude' && (
+                        <div className="w-[300px]">
+                          <CustomSelect
+                            value={claudeModel}
+                            onChange={setClaudeModel}
+                            options={[
+                              { value: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5' },
+                              { value: 'claude-opus-4-5-20251101', label: 'Claude Opus 4.5' },
+                            ]}
+                            placeholder="Select Model"
+                          />
+                        </div>
+                      )}
+
+                      {selectedProvider === 'ChatGPT' && (
+                        <div className="w-[300px]">
+                          <CustomSelect
+                            value={chatgptModel}
+                            onChange={setChatgptModel}
+                            options={[
+                              { value: 'auto', label: 'Auto' },
+                              { value: 'gpt-4o', label: 'GPT-4o' },
+                              { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+                              { value: 'o1-preview', label: 'o1 Preview' },
+                              { value: 'o1-mini', label: 'o1 Mini' },
+                            ]}
+                            placeholder="Select Model"
+                          />
+                        </div>
+                      )}
+
+                      {/* Model Selectors */}
+                      {selectedProvider === 'Groq' && selectedAccount && (
+                        <div className="space-y-4">
+                          <GroqModelSelector
+                            value={groqModel}
+                            onChange={setGroqModel}
+                            models={groqModelsList}
+                          />
+                          {/* <GroqSidebarSettings
+                            settings={groqSettings}
+                            onSettingsChange={setGroqSettings}
+                          /> */}
+                        </div>
+                      )}
+
+                      {selectedProvider === 'Antigravity' && selectedAccount && (
+                        <AntigravityModelSelector
+                          value={antigravityModel}
+                          onChange={setAntigravityModel}
+                          models={antigravityModelsList}
+                        />
+                      )}
+                      {selectedProvider === 'Gemini' && selectedAccount && (
+                        <GeminiModelSelector
+                          value={geminiModel}
+                          onChange={setGeminiModel}
+                          models={geminiModelsList}
+                        />
+                      )}
+
+                      {selectedProvider === 'Zai' && selectedAccount && (
+                        <ZaiModelSelector
+                          value={zaiModel}
+                          onChange={setZaiModel}
+                          models={zaiModelsList}
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+              }
+              input={input}
+              handleInput={handleInput}
+              handleKeyDown={handleKeyDown}
+              handleSend={handleSend}
+              loading={loading}
+              isStreaming={isStreaming}
+              selectedAccount={selectedAccount}
+              selectedProvider={selectedProvider}
+              thinkingEnabled={thinkingEnabled}
+              setThinkingEnabled={setThinkingEnabled}
+              searchEnabled={searchEnabled}
+              setSearchEnabled={setSearchEnabled}
+              onFileSelect={handleFileSelect}
+              attachments={attachments}
+              onRemoveAttachment={handleRemoveAttachment}
+            />
+          ) : (
+            <>
+              {/* Header */}
+              <div className="h-14 border-b flex items-center justify-between px-4 bg-background/50 backdrop-blur-sm sticky top-0 z-10">
+                <div className="font-medium truncate flex-1 text-center">
+                  {conversationTitle || 'New Chat'}
+                </div>
+                {/* Right side actions if any */}
+                <div className="w-10" />
+              </div>
+
+              <ChatArea messages={messages} loading={loading} isStreaming={isStreaming} />
+
               <InputArea
                 input={input}
                 handleInput={handleInput}
@@ -1080,20 +1012,16 @@ export const PlaygroundPage = () => {
                 loading={loading}
                 isStreaming={isStreaming}
                 selectedAccount={selectedAccount}
+                selectedProvider={selectedProvider}
+                thinkingEnabled={thinkingEnabled}
+                setThinkingEnabled={setThinkingEnabled}
+                searchEnabled={searchEnabled}
+                setSearchEnabled={setSearchEnabled}
+                onFileSelect={handleFileSelect}
+                attachments={attachments}
+                onRemoveAttachment={handleRemoveAttachment}
               />
-            </div>
-          ) : (
-            /* Welcome Screen */
-            <WelcomeScreen
-              dropdowns={renderDropdowns()}
-              input={input}
-              handleInput={handleInput}
-              handleKeyDown={handleKeyDownUninitialized}
-              handleSend={handleSendUninitialized}
-              loading={loading}
-              isStreaming={isStreaming}
-              selectedAccount={selectedAccount}
-            />
+            </>
           )}
         </div>
       </div>

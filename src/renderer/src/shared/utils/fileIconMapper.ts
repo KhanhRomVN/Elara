@@ -8,7 +8,7 @@ import {
   DEFAULT_FILE,
   DEFAULT_FOLDER,
   DEFAULT_FOLDER_OPENED,
-} from "vscode-icons-js";
+} from 'vscode-icons-js';
 
 /**
  * Get icon filename for a given file
@@ -17,15 +17,9 @@ import {
  */
 export function getFileIcon(filename: string): string {
   // Extract just the filename without path
-  const name = filename.split("/").pop() || filename;
+  const name = filename.split('/').pop() || filename;
   const icon = getIconForFile(name);
   return icon || DEFAULT_FILE;
-}
-
-declare global {
-  interface Window {
-    __zenImagesUri?: string;
-  }
 }
 
 /**
@@ -35,10 +29,7 @@ declare global {
  */
 export function getFileIconPath(filename: string): string {
   const iconName = getFileIcon(filename);
-  const baseUri = window.__zenImagesUri || "/images/icons";
-  const path = `${baseUri}/icons/${iconName}`;
-  const finalPath = path.replace(/([^:]\/)\/+/g, "$1");
-  return finalPath;
+  return new URL(`../../assets/icons/${iconName}`, import.meta.url).href;
 }
 
 /**
@@ -57,9 +48,7 @@ export function getFolderIcon(isOpen: boolean = false): string {
  */
 export function getFolderIconPath(isOpen: boolean = false): string {
   const iconName = getFolderIcon(isOpen);
-  const baseUri = window.__zenImagesUri || "/images/icons";
-  const path = `${baseUri}/icons/${iconName}`;
-  return path.replace(/([^:]\/)\/+/g, "$1");
+  return new URL(`../../assets/icons/${iconName}`, import.meta.url).href;
 }
 
 /**
@@ -70,21 +59,24 @@ export function getFolderIconPath(isOpen: boolean = false): string {
 export function getProviderIconPath(provider: string): string {
   const normalized = provider.toLowerCase();
 
-  let iconName = "openai.svg"; // Default fallback
+  let iconName = 'openai.svg'; // Default fallback
 
-  if (normalized.includes("claude") || normalized.includes("anthropic")) {
-    iconName = "claude.svg";
-  } else if (normalized.includes("gemini") || normalized.includes("google")) {
-    iconName = "gemini.svg";
-  } else if (normalized.includes("deepseek")) {
-    iconName = "deepseek.svg";
-  } else if (normalized.includes("grok") || normalized.includes("xai")) {
-    iconName = "grok.svg";
-  } else if (normalized.includes("openai") || normalized.includes("gpt")) {
-    iconName = "openai.svg";
+  if (normalized.includes('claude') || normalized.includes('anthropic')) {
+    iconName = 'claude.svg';
+  } else if (normalized.includes('gemini') || normalized.includes('google')) {
+    iconName = 'gemini.svg';
+  } else if (normalized.includes('deepseek')) {
+    iconName = 'deepseek.svg';
+  } else if (normalized.includes('grok') || normalized.includes('xai')) {
+    iconName = 'grok.svg';
+  } else if (normalized.includes('openai') || normalized.includes('gpt')) {
+    iconName = 'openai.svg';
   }
 
-  const baseUri = window.__zenImagesUri || "/images/icons";
-  const path = `${baseUri}/provider_icons/${iconName}`;
-  return path.replace(/([^:]\/)\/+/g, "$1");
+  // Provider icons seem to be in a subfolder 'provider_icons' based on original code,
+  // but let's assume they are structured similarly or I need to check `provider_icons` folder?
+  // The Sidebar imported them from `../../../assets/provider_icons/`.
+  // So they are in `src/renderer/src/assets/provider_icons`.
+  // My relative path from `utils` (shared/utils) to assets is `../../assets`.
+  return new URL(`../../assets/provider_icons/${iconName}`, import.meta.url).href;
 }
