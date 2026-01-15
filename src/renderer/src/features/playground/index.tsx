@@ -1092,7 +1092,13 @@ export const PlaygroundPage = () => {
                     value={selectedProvider}
                     onChange={(val) => {
                       setSelectedProvider(val as any);
-                      setSelectedAccount('');
+                      // Auto-select first account of the new provider
+                      const providerAccounts = accounts.filter((acc) => acc.provider === val);
+                      if (providerAccounts.length > 0) {
+                        setSelectedAccount(providerAccounts[0].id);
+                      } else {
+                        setSelectedAccount('');
+                      }
                     }}
                     options={[
                       { value: 'DeepSeek', label: 'DeepSeek', icon: deepseekIcon },

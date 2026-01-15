@@ -2,6 +2,14 @@ import { app } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { EventEmitter } from 'events';
+import { setDefaultResultOrder } from 'dns';
+
+// Force IPv4 first to avoid EHOSTUNREACH on IPv6 networks that are not fully configured
+try {
+  setDefaultResultOrder('ipv4first');
+} catch (e) {
+  // Ignore if not supported in older Node versions
+}
 
 import zlib from 'zlib';
 
@@ -114,6 +122,16 @@ export const startProxy = (): Promise<void> => {
           }
         }
 
+        // HuggingChat
+        if (host.includes('huggingface.co')) {
+          const reqCookies = ctx.clientToProxyRequest.headers.cookie;
+          if (reqCookies && reqCookies.includes('token=') && reqCookies.includes('hf-chat=')) {
+            console.log(`[Proxy] Intercepting HuggingChat request: ${url}`);
+            console.log('[Proxy] Found tokens in HuggingChat Request Cookie!');
+            proxyEvents.emit('hugging-chat-cookies', reqCookies);
+          }
+        }
+
         // Perplexity
         if (host.includes('www.perplexity.ai')) {
           console.log(`[Proxy] Intercepting Perplexity request: ${url}`);
@@ -128,16 +146,41 @@ export const startProxy = (): Promise<void> => {
       return callback();
     });
 
+    proxy.onRequestData((ctx: any, chunk: Buffer, callback: any) => {
+      const host = ctx.clientToProxyRequest.headers.host;
+      const url = ctx.clientToProxyRequest.url;
+
+      if (host && host.includes('huggingface.co') && url.includes('/login')) {
+        const body = chunk.toString();
+        // Body format: username=encoded_email&password=...
+        if (body.includes('username=')) {
+          try {
+            const match = body.match(/username=([^&]+)/);
+            if (match && match[1]) {
+              const email = decodeURIComponent(match[1]);
+              console.log('[Proxy] Captured email from login form:', email);
+              proxyEvents.emit('hugging-chat-login-data', email);
+            }
+          } catch (e) {
+            console.error('[Proxy] Error parsing login body:', e);
+          }
+        }
+      }
+      return callback(null, chunk);
+    });
+
     proxy.onResponse((ctx: any, callback: any) => {
       const host = ctx.clientToProxyRequest.headers.host;
-      console.log(`[Proxy] Debug - onResponse triggered for: ${host}`); // Global Debug Log
+      // console.log(`[Proxy] Debug - onResponse triggered for: ${host}`); // Silent debug
 
       if (host) {
         if (
           host.includes('gemini.google.com') ||
           host.includes('google.com') ||
           (host.includes('www.googleapis.com') &&
-            ctx.clientToProxyRequest.url.includes('/userinfo'))
+            ctx.clientToProxyRequest.url.includes('/userinfo')) ||
+          (host.includes('huggingface.co') &&
+            ctx.clientToProxyRequest.url.includes('/api/whoami-v2'))
         ) {
           const encoding = ctx.serverToProxyResponse.headers['content-encoding'];
           const contentType = ctx.serverToProxyResponse.headers['content-type'];
@@ -194,6 +237,20 @@ export const startProxy = (): Promise<void> => {
                     console.error('[Proxy] Failed to parse User Info:', e);
                   }
                 }
+
+                // Logic for HuggingChat User Info
+                if (
+                  host.includes('huggingface.co') &&
+                  ctx.clientToProxyRequest.url.includes('/api/whoami-v2')
+                ) {
+                  try {
+                    const userInfo = JSON.parse(body);
+                    console.log('[Proxy] Found User Info in HuggingChat Response!');
+                    proxyEvents.emit('hugging-chat-user-info', userInfo);
+                  } catch (e) {
+                    console.error('[Proxy] Failed to parse HuggingChat User Info:', e);
+                  }
+                }
               });
 
               decoder.on('error', (err: any) => {
@@ -226,6 +283,23 @@ export const startProxy = (): Promise<void> => {
                     proxyEvents.emit('gemini-user-info', userInfo);
                   } catch (e) {
                     console.error('[Proxy] Failed to parse User Info (Uncompressed):', e);
+                  }
+                }
+
+                // Logic for HuggingChat User Info (Uncompressed)
+                if (
+                  host.includes('huggingface.co') &&
+                  ctx.clientToProxyRequest.url.includes('/api/whoami-v2')
+                ) {
+                  try {
+                    const userInfo = JSON.parse(body);
+                    console.log('[Proxy] Found User Info in HuggingChat Response! (Uncompressed)');
+                    proxyEvents.emit('hugging-chat-user-info', userInfo);
+                  } catch (e) {
+                    console.error(
+                      '[Proxy] Failed to parse HuggingChat User Info (Uncompressed):',
+                      e,
+                    );
                   }
                 }
               });

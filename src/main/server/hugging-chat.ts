@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { Account } from '../ipc/accounts';
-import { net, app, BrowserWindow } from 'electron';
+import { net, app } from 'electron';
 import { join } from 'path';
 
 // Helper to get cookies from account
@@ -22,121 +22,284 @@ const buildCookieHeader = (cookies: any): string => {
   return '';
 };
 
-// Fetch user profile
-export const getProfile = (
-  cookies: string,
-): Promise<{ email: string | null; name: string | null; avatar: string | null }> => {
-  return new Promise((resolve) => {
+// Helper to fetch JSON
+const fetchJson = (url: string, cookies: string) => {
+  return new Promise<any>((resolve) => {
     const request = net.request({
       method: 'GET',
-      url: 'https://huggingface.co/chat/api/v2/user',
+      url,
     });
-
     request.setHeader('Cookie', cookies);
     request.setHeader(
       'User-Agent',
       'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
     );
-
     let data = '';
     request.on('response', (response) => {
       response.on('data', (chunk) => (data += chunk.toString()));
       response.on('end', () => {
         try {
-          const json = JSON.parse(data);
-          const email = json.json?.email || json.email || null;
-          const name = json.json?.username || json.username || null;
-          const avatar = json.json?.avatarUrl || json.avatarUrl || null;
-          resolve({ email, name, avatar });
+          // Handle potential prefix if any (though unlikely for API)
+          resolve(JSON.parse(data));
         } catch (e) {
-          console.error('[HuggingChat] Error parsing profile:', e);
-          resolve({ email: null, name: null, avatar: null });
+          console.error(`[HuggingChat] Error parsing JSON from ${url}:`, e);
+          resolve({});
         }
       });
     });
-
     request.on('error', (e) => {
-      console.error('[HuggingChat] Profile request error:', e);
-      resolve({ email: null, name: null, avatar: null });
+      console.error(`[HuggingChat] Request error for ${url}:`, e);
+      resolve({});
     });
-
     request.end();
   });
 };
 
-// Login function - opens browser and captures cookies
+// Fetch user profile
+export const getProfile = async (
+  cookies: string,
+): Promise<{ email: string | null; name: string | null; avatar: string | null }> => {
+  try {
+    // 1. Try Chat Profile API first
+    const chatProfile = await fetchJson('https://huggingface.co/chat/api/v2/user', cookies);
+    const chatData = chatProfile.json || chatProfile; // Handle potential wrapper
+
+    let email = chatData.email || null;
+    let name = chatData.username || null;
+    let avatar = chatData.avatarUrl || null;
+
+    // 2. If email is missing, try generic HF API
+    if (!email) {
+      console.log('[HuggingChat] Email missing from chat profile, trying /api/whoami-v2...');
+      const hfProfile = await fetchJson('https://huggingface.co/api/whoami-v2', cookies);
+      if (hfProfile.email) {
+        email = hfProfile.email;
+        console.log('[HuggingChat] Found email in whoami-v2:', email);
+      }
+      if (!name && hfProfile.name) name = hfProfile.name;
+      if (!avatar && hfProfile.avatarUrl) avatar = hfProfile.avatarUrl;
+    }
+
+    console.log('[HuggingChat] Final Profile - username:', name, 'email:', email);
+    return { email, name, avatar };
+  } catch (e) {
+    console.error('[HuggingChat] getProfile failed:', e);
+    return { email: null, name: null, avatar: null };
+  }
+};
+
+import { spawn, execSync } from 'child_process';
+import fs from 'fs';
+import { startProxy, stopProxy, proxyEvents } from './proxy';
+
+// Find system Chrome/Chromium
+const findChrome = (): string | null => {
+  const commonPaths = [
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/snap/bin/chromium',
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+  ];
+
+  for (const p of commonPaths) {
+    if (fs.existsSync(p)) return p;
+  }
+
+  try {
+    const output = execSync('which google-chrome || which chromium', { encoding: 'utf-8' });
+    if (output.trim()) return output.trim();
+  } catch (e) {
+    // ignore
+  }
+
+  return null;
+};
+
+// Login function - spawns Real Chrome via Proxy and captures cookies
 export const login = (): Promise<{ cookies: string; email?: string; username?: string }> => {
-  console.log('[HuggingChat] Starting login flow...');
+  console.log('[HuggingChat] Starting Real Browser login flow...');
+
+  const chromePath = findChrome();
+  if (!chromePath) {
+    return Promise.reject(
+      new Error('Chrome or Chromium not found. Please install it to use HuggingChat.'),
+    );
+  }
+
   return new Promise(async (resolve, reject) => {
-    const authWindow = new BrowserWindow({
-      width: 1000,
-      height: 800,
-      title: 'Login to Hugging Chat',
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        partition: 'persist:huggingchat',
-        preload: join(__dirname, '../preload/auth-preload.js'),
-      },
+    // 1. Start Proxy
+    try {
+      await startProxy();
+    } catch (e) {
+      reject(new Error('Failed to start proxy: ' + e));
+      return;
+    }
+
+    // 2. Prepare Profile Dir
+    const profilePath = join(app.getPath('userData'), 'profiles', 'huggingchat');
+    if (fs.existsSync(profilePath)) {
+      console.log('[HuggingChat] Clearing old profile...');
+      fs.rmSync(profilePath, { recursive: true, force: true });
+    }
+    fs.mkdirSync(profilePath, { recursive: true });
+
+    // 3. Spawn Chrome
+    console.log('[HuggingChat] Spawning Chrome at:', chromePath);
+    const args = [
+      '--proxy-server=http=127.0.0.1:22122;https=127.0.0.1:22122',
+      '--proxy-bypass-list=<-loopback>',
+      '--ignore-certificate-errors',
+      `--user-data-dir=${profilePath}`,
+      '--disable-http2',
+      '--disable-quic',
+      '--disable-ipv6', // Force IPv4 to avoid proxy errors
+      '--dns-result-order=ipv4first',
+      '--no-first-run',
+      '--no-default-browser-check',
+      '--class=huggingchat-browser',
+      'https://huggingface.co/chat/login',
+    ];
+
+    const chromeProcess = spawn(chromePath, args, {
+      detached: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
 
-    authWindow.webContents.setUserAgent(
-      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
-    );
+    if (chromeProcess.stdout) {
+      chromeProcess.stdout.on('data', (data) => console.log(`[HuggingChat Chrome Out]: ${data}`));
+    }
+    if (chromeProcess.stderr) {
+      chromeProcess.stderr.on('data', (data) => console.error(`[HuggingChat Chrome Err]: ${data}`));
+    }
 
-    // Clear previous session
-    await authWindow.webContents.session.clearStorageData();
+    // 4. Listen for Proxy Events
+    let capturedCookies = '';
+    let capturedUserInfo: any = null;
+    let capturedLoginEmail: string | null = null;
+    let resolved = false;
+    let finishTimer: NodeJS.Timeout | null = null;
 
-    console.log('[HuggingChat] Opening login window...');
-    authWindow.loadURL('https://huggingface.co/login');
+    const cleanup = () => {
+      if (!resolved) {
+        resolved = true;
+        if (finishTimer) clearTimeout(finishTimer);
+        try {
+          chromeProcess.kill();
+        } catch (e) {}
+        stopProxy();
+        proxyEvents.off('hugging-chat-cookies', onCookies);
+        proxyEvents.off('hugging-chat-user-info', onUserInfo);
+        proxyEvents.off('hugging-chat-login-data', onLoginData);
+      }
+    };
 
-    // Poll for the token cookie
-    const interval = setInterval(async () => {
-      if (authWindow.isDestroyed()) {
-        clearInterval(interval);
-        reject(new Error('Window closed'));
-        return;
+    const finalize = () => {
+      if (resolved) return;
+
+      let email = capturedLoginEmail || 'huggingchat@user.com';
+      let username = 'User';
+
+      if (capturedUserInfo) {
+        email = capturedUserInfo.email || email;
+        username = capturedUserInfo.username || username;
       }
 
+      cleanup();
+
+      resolve({
+        cookies: capturedCookies,
+        email,
+        username,
+      });
+    };
+
+    const checkForCompletion = () => {
+      if (capturedCookies && capturedUserInfo) {
+        console.log('[HuggingChat] All critical data captured! Finalizing...');
+        if (finishTimer) clearTimeout(finishTimer);
+        finishTimer = setTimeout(finalize, 2000);
+      }
+    };
+
+    const attemptVerifyCookies = async (cookies: string) => {
+      console.log('[HuggingChat] verifying captured cookies...');
       try {
-        const cookies = await authWindow.webContents.session.cookies.get({
-          domain: '.huggingface.co',
-        });
-
-        const tokenCookie = cookies.find((c) => c.name === 'token');
-
-        if (tokenCookie) {
-          console.log('[HuggingChat] Token cookie found, capturing credentials...');
-          clearInterval(interval);
-
-          // Build cookie string
-          const cookieStr = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
-
-          // Try to fetch profile to get email/username
-          console.log('[HuggingChat] Fetching user profile...');
-          const profile = await getProfile(cookieStr);
-
-          authWindow.close();
+        const profile = await getProfile(cookies);
+        if (profile.name && profile.name !== 'unknown') {
+          console.log('[HuggingChat] Active profile fetch success:', profile.email);
+          capturedUserInfo = {
+            email: profile.email,
+            username: profile.name,
+            avatarUrl: profile.avatar,
+          };
+          checkForCompletion();
+        } else {
           console.log(
-            '[HuggingChat] Login successful, email:',
-            profile.email,
-            'username:',
-            profile.name,
+            '[HuggingChat] Active profile fetch returned empty/guest profile. Waiting...',
           );
-          resolve({
-            cookies: cookieStr,
-            email: profile.email || undefined,
-            username: profile.name || undefined,
-          });
         }
       } catch (e) {
-        console.error('[HuggingChat] Error during login polling:', e);
+        console.error('[HuggingChat] Active profile fetch failed:', e);
       }
-    }, 1000);
+    };
 
-    authWindow.on('closed', () => {
-      clearInterval(interval);
-      reject(new Error('Window closed'));
+    const onCookies = (cookies: string) => {
+      // Avoid spamming verification
+      const isNew = !capturedCookies;
+      capturedCookies = cookies;
+
+      if (isNew || !capturedUserInfo) {
+        // Debounce slightly to avoid verifying every single request's cookie update
+        // But for now direct call is fine as getProfile is lightweight enough (1 req)
+        attemptVerifyCookies(cookies);
+      }
+
+      checkForCompletion();
+    };
+
+    const onUserInfo = (userInfo: any) => {
+      console.log('[HuggingChat] User Info captured:', userInfo.email);
+      capturedUserInfo = userInfo;
+      checkForCompletion();
+    };
+
+    const onLoginData = (email: string) => {
+      console.log('[HuggingChat] Login email captured:', email);
+      capturedLoginEmail = email;
+      // Note: we don't trigger completion here, we still need cookies/user info validation
+    };
+
+    proxyEvents.on('hugging-chat-cookies', onCookies);
+    proxyEvents.on('hugging-chat-user-info', onUserInfo);
+    proxyEvents.on('hugging-chat-login-data', onLoginData);
+
+    // Hard limit 3 minutes
+    setTimeout(() => {
+      if (!resolved) {
+        if (capturedCookies) {
+          console.log('[HuggingChat] Timeout, but cookies found. Resolving...');
+          finalize();
+        } else {
+          cleanup();
+          reject(new Error('Login timed out'));
+        }
+      }
+    }, 180000);
+
+    chromeProcess.on('close', (code) => {
+      if (!resolved) {
+        if (capturedCookies) {
+          finalize();
+        } else {
+          console.log('[HuggingChat] Chrome closed with code:', code);
+          cleanup();
+          reject(new Error('User closed login window'));
+        }
+      }
     });
   });
 };
@@ -300,6 +463,8 @@ export const chatCompletionStream = (req: Request, res: Response, account: Accou
     '[HuggingChat] Sending request to:',
     `https://huggingface.co/chat/conversation/${targetConversationId}`,
   );
+  console.log('[HuggingChat] Cookies length:', cookieHeader.length, 'chars');
+  console.log('[HuggingChat] Cookies preview:', cookieHeader.substring(0, 100) + '...');
 
   request.setHeader('Cookie', cookieHeader);
   request.setHeader('Content-Type', `multipart/form-data; boundary=${boundary}`);
@@ -313,8 +478,14 @@ export const chatCompletionStream = (req: Request, res: Response, account: Accou
   res.setHeader('Connection', 'keep-alive');
 
   request.on('response', (response) => {
+    console.log('[HuggingChat] Response status:', response.statusCode);
+    console.log('[HuggingChat] Response headers:', response.headers);
+
     response.on('data', (chunk) => {
-      const lines = chunk.toString().split('\n');
+      const rawData = chunk.toString();
+      // Remove null bytes that HuggingFace adds for padding
+      const cleanedData = rawData.replace(/\\u0000/g, '');
+      const lines = cleanedData.split('\\n');
 
       for (const line of lines) {
         if (!line.trim()) continue;
@@ -324,24 +495,25 @@ export const chatCompletionStream = (req: Request, res: Response, account: Accou
           const parsed = JSON.parse(line);
           console.log('[HuggingChat] Stream data received, type:', parsed.type);
 
-          // Forward the raw line to client for processing
-          res.write(`data: ${line}\n\n`);
+          // Forward the cleaned line to client for processing
+          res.write(`data: ${line}\\n\\n`);
         } catch (e) {
-          // If not JSON, might be plain text or error
-          console.error('[HuggingChat] Error parsing line:', e, line);
+          // If not JSON, might be HTML (auth error) or malformed
+          console.error('[HuggingChat] Error parsing line:', e);
+          console.error('[HuggingChat] Raw line (first 200 chars):', line.substring(0, 200));
         }
       }
     });
 
     response.on('end', () => {
-      res.write('data: [DONE]\n\n');
+      res.write('data: [DONE]\\n\\n');
       res.end();
     });
   });
 
   request.on('error', (e) => {
     console.error('[HuggingChat] Stream error:', e);
-    res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
+    res.write(`data: ${JSON.stringify({ error: e.message })}\\n\\n`);
     res.end();
   });
 
