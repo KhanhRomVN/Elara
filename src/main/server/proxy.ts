@@ -38,6 +38,10 @@ export const startProxy = (): Promise<void> => {
     }
 
     proxy.onError((ctx: any, err: any) => {
+      if (err) {
+        const msg = err.message || '';
+        if (err.code === 'ECONNRESET' || msg.includes('socket hang up')) return;
+      }
       console.error('[Proxy] Error:', err);
     });
 
@@ -142,6 +146,17 @@ export const startProxy = (): Promise<void> => {
             proxyEvents.emit('perplexity-cookies', reqCookies);
           }
         }
+
+        // LMArena
+        if (host.includes('lmarena.ai')) {
+          console.log(`[Proxy] Intercepting LMArena request: ${url}`);
+          const reqCookies = ctx.clientToProxyRequest.headers.cookie;
+          // Look for arena-auth-prod token
+          if (reqCookies && reqCookies.includes('arena-auth-prod')) {
+            console.log('[Proxy] Found arena-auth-prod token in LMArena Request Cookie!');
+            proxyEvents.emit('lmarena-cookies', reqCookies);
+          }
+        }
       }
       return callback();
     });
@@ -180,7 +195,9 @@ export const startProxy = (): Promise<void> => {
           (host.includes('www.googleapis.com') &&
             ctx.clientToProxyRequest.url.includes('/userinfo')) ||
           (host.includes('huggingface.co') &&
-            ctx.clientToProxyRequest.url.includes('/api/whoami-v2'))
+            ctx.clientToProxyRequest.url.includes('/api/whoami-v2')) ||
+          (host.includes('lmarena.ai') &&
+            ctx.clientToProxyRequest.url.includes('/nextjs-api/sign-in/email'))
         ) {
           const encoding = ctx.serverToProxyResponse.headers['content-encoding'];
           const contentType = ctx.serverToProxyResponse.headers['content-type'];
@@ -249,6 +266,22 @@ export const startProxy = (): Promise<void> => {
                     proxyEvents.emit('hugging-chat-user-info', userInfo);
                   } catch (e) {
                     console.error('[Proxy] Failed to parse HuggingChat User Info:', e);
+                  }
+                }
+
+                // Logic for LMArena Login
+                if (
+                  host.includes('lmarena.ai') &&
+                  ctx.clientToProxyRequest.url.includes('/nextjs-api/sign-in/email')
+                ) {
+                  try {
+                    const data = JSON.parse(body);
+                    if (data.success && data.user) {
+                      console.log('[Proxy] Captured LMArena Login Success:', data.user.email);
+                      proxyEvents.emit('lmarena-login-success', data.user);
+                    }
+                  } catch (e) {
+                    console.error('[Proxy] Failed to parse LMArena Login Response:', e);
                   }
                 }
               });

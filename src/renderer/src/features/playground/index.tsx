@@ -12,11 +12,13 @@ import groqIcon from '../../assets/provider_icons/groq.svg';
 import geminiIcon from '../../assets/provider_icons/gemini.svg';
 import antigravityIcon from '../../assets/provider_icons/antigravity.svg';
 import huggingChatIcon from '../../assets/provider_icons/huggingface.svg';
+import lmarenaIcon from '../../assets/provider_icons/lmarena.svg';
 
 import { GroqModelSelector } from './components/GroqModelSelector';
 import { AntigravityModelSelector } from './components/AntigravityModelSelector';
 import { GeminiModelSelector } from './components/GeminiModelSelector';
 import { HuggingChatModelSelector } from './components/HuggingChatModelSelector';
+import { LMArenaModelSelector } from './components/LMArenaModelSelector';
 import { CustomSelect } from './components/CustomSelect';
 
 import { Sidebar } from './components/Sidebar';
@@ -194,6 +196,7 @@ export const PlaygroundPage = ({
                     { value: 'Antigravity', label: 'Antigravity', icon: antigravityIcon },
                     { value: 'Gemini', label: 'Gemini', icon: geminiIcon },
                     { value: 'HuggingChat', label: 'HuggingChat', icon: huggingChatIcon },
+                    { value: 'LMArena', label: 'LMArena', icon: lmarenaIcon },
                   ]}
                   placeholder="Select Provider"
                 />
@@ -272,13 +275,10 @@ export const PlaygroundPage = ({
 
                     {selectedProvider === 'LMArena' && selectedAccount && (
                       <div className="w-[300px]">
-                        <CustomSelect
+                        <LMArenaModelSelector
                           value={groqModel}
                           onChange={setGroqModel}
-                          options={groqModels.map((model) => ({
-                            value: model.id,
-                            label: model.name || model.id,
-                          }))}
+                          models={groqModels}
                           placeholder="Select Model"
                           disabled={groqModels.length === 0}
                         />

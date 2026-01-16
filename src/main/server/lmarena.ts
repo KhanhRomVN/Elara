@@ -1,186 +1,397 @@
-import { BrowserWindow } from 'electron';
 import { Request, Response } from 'express';
-import net from 'net';
+import { net } from 'electron';
 import { Account } from '../ipc/accounts';
+import { app } from 'electron';
+import { join } from 'path';
+import { spawn, execSync } from 'child_process';
+import fs from 'fs';
+import { startProxy, stopProxy, proxyEvents } from './proxy';
 
 const USER_AGENT =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36';
 
 // Helper to get cookies from account
 const getCookies = (account: Account) => {
   return account.credential;
 };
 
-// Login function - opens browser and captures cookies
-export const login = (): Promise<{ cookies: string; email?: string; username?: string }> => {
-  console.log('[LMArena] Starting login flow...');
+// Find system Chrome/Chromium
+const findChrome = (): string | null => {
+  const commonPaths = [
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/snap/bin/chromium',
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+  ];
+
+  for (const p of commonPaths) {
+    if (fs.existsSync(p)) return p;
+  }
+
+  try {
+    const output = execSync('which google-chrome || which chromium', { encoding: 'utf-8' });
+    if (output.trim()) return output.trim();
+  } catch (e) {
+    // ignore
+  }
+
+  return null;
+};
+
+// Login function - spawns Real Chrome via Proxy and captures cookies
+export const login = (): Promise<{
+  cookies: string;
+  email?: string;
+  username?: string;
+  avatar?: string;
+}> => {
+  console.log('[LMArena] Starting Real Browser login flow...');
+
+  const chromePath = findChrome();
+  if (!chromePath) {
+    return Promise.reject(
+      new Error('Chrome or Chromium not found. Please install it to use LMArena.'),
+    );
+  }
+
   return new Promise(async (resolve, reject) => {
-    const authWindow = new BrowserWindow({
-      width: 1000,
-      height: 800,
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-      },
-      alwaysOnTop: true,
+    // 1. Start Proxy
+    try {
+      await startProxy();
+    } catch (e) {
+      reject(new Error('Failed to start proxy: ' + e));
+      return;
+    }
+
+    // 2. Prepare Profile Dir
+    const profilePath = join(app.getPath('userData'), 'profiles', 'lmarena');
+    if (fs.existsSync(profilePath)) {
+      console.log('[LMArena] Clearing old profile...');
+      fs.rmSync(profilePath, { recursive: true, force: true });
+    }
+    fs.mkdirSync(profilePath, { recursive: true });
+
+    // 3. Spawn Chrome
+    console.log('[LMArena] Spawning Chrome at:', chromePath);
+    const args = [
+      '--proxy-server=http=127.0.0.1:22122;https=127.0.0.1:22122',
+      '--proxy-bypass-list=<-loopback>',
+      '--ignore-certificate-errors',
+      `--user-data-dir=${profilePath}`,
+      '--disable-http2',
+      '--disable-quic',
+      '--disable-ipv6',
+      '--dns-result-order=ipv4first',
+      '--no-first-run',
+      '--no-default-browser-check',
+      '--class=lmarena-browser',
+      'https://lmarena.ai/',
+    ];
+
+    const chromeProcess = spawn(chromePath, args, {
+      detached: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
 
-    // Clear previous session
-    await authWindow.webContents.session.clearStorageData();
+    if (chromeProcess.stdout) {
+      chromeProcess.stdout.on('data', (data) => console.log(`[LMArena Chrome Out]: ${data}`));
+    }
+    if (chromeProcess.stderr) {
+      chromeProcess.stderr.on('data', (data) => console.error(`[LMArena Chrome Err]: ${data}`));
+    }
 
-    console.log('[LMArena] Opening login window...');
-    authWindow.loadURL('https://lmarena.ai/login');
+    // 4. Listen for Proxy Events
+    let capturedCookies = '';
+    let email = '';
+    let username = '';
+    let avatar = '';
+    let resolved = false;
+    let finishTimer: NodeJS.Timeout | null = null;
 
-    // Poll for the token cookie
-    const interval = setInterval(async () => {
-      try {
-        if (authWindow.isDestroyed()) {
-          clearInterval(interval);
-          reject(new Error('Login window closed'));
-          return;
-        }
-
-        const cookies = await authWindow.webContents.session.cookies.get({
-          url: 'https://lmarena.ai',
-        });
-        // LMArena uses 'arena-auth-prod-v1.0' or similar
-        const authCookie = cookies.find((c) => c.name.startsWith('arena-auth-prod'));
-
-        if (authCookie) {
-          console.log('[LMArena] Auth cookie found, capturing credentials...');
-          clearInterval(interval);
-
-          // Build cookie string
-          const cookieStr = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
-
-          // Try to fetch profile to get email/username
-          console.log('[LMArena] Fetching user profile...');
-          try {
-            const profile = await getProfile(cookieStr);
-            console.log(
-              '[LMArena] Login successful, email:',
-              profile.email,
-              'username:',
-              profile.name,
-            );
-            authWindow.close();
-            resolve({
-              cookies: cookieStr,
-              email: profile.email || 'user@lmarena.ai',
-              username: profile.name || 'LMArena User',
-            });
-          } catch (e) {
-            console.error('[LMArena] Failed to fetch profile:', e);
-            // Fallback if profile fetch fails but we have cookies
-            authWindow.close();
-            resolve({
-              cookies: cookieStr,
-              email: 'user@lmarena.ai',
-              username: 'LMArena User',
-            });
-          }
-        }
-      } catch (error) {
-        console.error('[LMArena] Error polling cookies:', error);
+    const cleanup = () => {
+      if (!resolved) {
+        resolved = true;
+        if (finishTimer) clearTimeout(finishTimer);
+        try {
+          chromeProcess.kill();
+        } catch (e) {}
+        stopProxy();
+        proxyEvents.off('lmarena-cookies', onCookies);
+        proxyEvents.off('lmarena-login-success', onLoginSuccess);
       }
-    }, 1000);
+    };
 
-    authWindow.on('closed', () => {
-      clearInterval(interval);
-      reject(new Error('User closed login window'));
+    const finalize = () => {
+      if (resolved) return;
+
+      // Final check for user info if not already set
+      if (!email && capturedCookies) {
+        const profile = getProfile(capturedCookies);
+        if (profile.email) {
+          email = profile.email;
+          username = profile.name;
+          avatar = profile.avatar;
+        }
+      }
+
+      // Fallback defaults
+      if (!email) email = 'user@lmarena.ai';
+      if (!username) username = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '');
+      if (!avatar) avatar = `https://ui-avatars.com/api/?name=${username}&background=random`;
+
+      cleanup();
+
+      resolve({
+        cookies: capturedCookies,
+        email,
+        username,
+        avatar, // Add avatar to return type if interface allows, else rely on username
+      });
+    };
+
+    const attemptResolve = () => {
+      if (email && capturedCookies) {
+        console.log('[LMArena] Email and cookies secured. Finalizing...');
+        if (finishTimer) clearTimeout(finishTimer);
+        finishTimer = setTimeout(finalize, 1500);
+      }
+    };
+
+    const onCookies = (cookies: string) => {
+      const profile = getProfile(cookies);
+      capturedCookies = cookies;
+
+      if (profile.email) {
+        console.log('[LMArena] Valid login cookies captured! Email:', profile.email);
+        email = profile.email;
+        username = profile.name;
+        avatar = profile.avatar;
+        attemptResolve();
+      } else {
+        // Maybe we got cookies but not the email yet (guest cookie?), allow update
+        if (email) attemptResolve();
+      }
+    };
+
+    const onLoginSuccess = (user: any) => {
+      console.log('[LMArena] API Login Success Event:', user.email);
+      if (user.email) {
+        email = user.email;
+        username = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '');
+        avatar = `https://ui-avatars.com/api/?name=${username}&background=random`;
+        attemptResolve();
+      }
+    };
+
+    proxyEvents.on('lmarena-cookies', onCookies);
+    proxyEvents.on('lmarena-login-success', onLoginSuccess);
+
+    // Hard limit 3 minutes
+    setTimeout(() => {
+      if (!resolved) {
+        if (capturedCookies) {
+          console.log('[LMArena] Timeout, but cookies found. Resolving...');
+          finalize();
+        } else {
+          cleanup();
+          reject(new Error('Login timed out'));
+        }
+      }
+    }, 180000);
+
+    chromeProcess.on('close', (code) => {
+      if (!resolved) {
+        if (capturedCookies && email) {
+          finalize();
+        } else {
+          console.log('[LMArena] Chrome closed with code:', code);
+          cleanup();
+          reject(new Error('User closed login window'));
+        }
+      }
     });
   });
 };
 
-// Fetch user profile
-const getProfile = async (cookies: string): Promise<{ email: string; name: string }> => {
-  // There isn't a direct "me" endpoint documented easily, but usually auth cookie contains JWT
-  // Or we can try to hit an endpoint that returns user info.
-  // Based on logs, /nextjs-api/sign-in/email returns user info.
-  // But we are already logged in.
-  // Let's try to decode the JWT if it *is* a JWT.
-
-  // Actually, looking at the cookies, `arena-auth-prod-v1.0` value starts with `base64-eyJ...`.
-  // It's a base64 encoded JSON which contains `access_token` which IS a JWT.
-  // The JWT payload inside `access_token` likely has the email.
-
+// Fetch user profile from cookie
+const getProfile = (cookies: string): { email: string; name: string; avatar: string } => {
   try {
-    const match = cookies.match(/arena-auth-prod-v1\.0=base64-([a-zA-Z0-9+/=]+)/);
+    // Support both v1.0 and v1.1
+    // v1.0: arena-auth-prod-v1.0=base64(...)
+    // v1.1: arena-auth-prod-v1.1=base64(...)
+    const match = cookies.match(/arena-auth-prod-v1\.[0-9]+=([a-zA-Z0-9+/=]+)/);
     if (match && match[1]) {
-      const jsonStr = Buffer.from(match[1], 'base64').toString('utf-8');
-      const data = JSON.parse(jsonStr);
-      if (data.user) {
-        return {
-          email: data.user.email,
-          name: data.user.email.split('@')[0], // Fallback name
-        };
+      let jsonStr = Buffer.from(match[1], 'base64').toString('utf-8');
+
+      // Attempt to clean up JSON if it contains extra characters or is URI encoded
+      try {
+        // v1.1 might need decoding? Usually base64 is enough.
+        // Some cookies might be URI encoded first.
+        if (jsonStr.includes('%')) jsonStr = decodeURIComponent(jsonStr);
+
+        let data = JSON.parse(jsonStr);
+
+        // If array, take first element (common in some auth providers)
+        if (Array.isArray(data)) {
+          data = data[0];
+        }
+
+        if (data.email || (data.user && data.user.email)) {
+          const email = data.email || data.user.email;
+          const name = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '');
+          return {
+            email,
+            name,
+            avatar: `https://ui-avatars.com/api/?name=${name}&background=random`,
+          };
+        }
+      } catch (innerE) {
+        // ignore
       }
     }
   } catch (e) {
-    console.error('Error parsing auth cookie', e);
+    console.error('[LMArena] Error parsing auth cookie:', e);
   }
-  return { email: '', name: '' };
+  return { email: '', name: '', avatar: '' };
 };
 
-// Get Models
+// Get Models via Next.js Server Action
 export const getModels = async (account: Account) => {
-  // LMArena models are usually hardcoded or fetched from a metadata endpoint.
-  // In the logs, there's a request to `/vi/c/new?mode=direct`. The HTML might contain the list.
-  // Alternatively, we can assume a known list or try to fetch from a known API if discovered.
-  // For now, let's try to fetch the page and extract, or just return an empty list and let user type?
-  // User probably wants a dropdown.
-  // Let's try to fetch `https://lmarena.ai/api/models` or similar?
-  // Wait, the logs didn't show a clear model list API.
-  // However, widely known LMArena models: gpt-4, claude-3, etc.
-  // Let's try to fetch the create chat page and see if there is `sk-` or `NEXT_DATA`.
+  const cookies = getCookies(account);
+  // Default to the email in account if available, or fetch it?
+  // The log shows sending the email as an argument: ["email"]
+  // We'll use account.email (it's in the account object if we saved it login).
+  // If not, we might need to rely on what we have.
+  // The account object usually has user info in `account.name` or `metadata`.
+  // Let's assume account.email is available or we pass a placeholder.
+  // Actually the log showed `["thienbaovn2468@gmail.com"]`.
+  // If we don't have the email, we might fail.
+  // But wait, the login flow 'finalize' sets 'email'.
 
-  // IMPORTANT: LMArena updates models frequently.
-  // Let's return a hardcoded list of popular ones for now to unblock,
-  // OR fetch the homepage and regex match.
-  // The logs showed: `modelAId: "019a98f7..."` which are UUIDs.
-  // This implies we NEED the mapping.
-  // We must find where the frontend gets them.
-  // Often Next.js apps have `_next/static/chunks/...` or embedded JSON in HTML.
+  // Note: This action ID might change with LMArena updates.
+  const NEXT_ACTION_ID = '60dd5def2cd15cb0c3eb89a128f43e18bcf6d48eb0';
 
-  // Let's implement a basic scrape for now.
-  // Note: The providing `lmarena-other.md` didn't show a clean model API.
-  // It showed `GET /vi/c/new?mode=direct`.
+  try {
+    const request = net.request({
+      method: 'POST',
+      url: 'https://lmarena.ai/vi?mode=direct',
+    });
 
-  // Strategy: We will try to fetch the /api/tags or similar if exists.
-  // If not, we might need manual updating or a smarter scrape.
-  // Checking online resources for "LMArena API"... it's not public public.
-  // But `https://chat.lmsys.org/` (which lmarena is) usually has `/api/v1/models`?
-  // No, this is the new UI `lmarena.ai`.
+    request.setHeader('Cookie', cookies);
+    request.setHeader('Content-Type', 'text/plain;charset=UTF-8');
+    request.setHeader('User-Agent', USER_AGENT);
+    request.setHeader('Next-Action', NEXT_ACTION_ID);
 
-  // Let's try to hit `https://lmarena.ai/api/models/list` or just `https://lmarena.ai/api/models`.
-  // If that fails, we can add a placeholder list and advise the user to check manually or let them type ID?
-  // No, IDs are UUIDs.
+    // Body is a JSON array containing the arguments for the action.
+    // Here it seems to be just the email?
+    const body = JSON.stringify([account.email || '']);
+    request.write(body);
 
-  // Let's assume we can fetch `https://lmarena.ai/api/models` based on common patterns.
-  // If that returns 404, we will log it.
+    const responseBody = await new Promise<string>((resolve, reject) => {
+      let data = '';
+      request.on('response', (response) => {
+        response.on('data', (chunk) => {
+          data += chunk.toString();
+        });
+        response.on('end', () => resolve(data));
+        response.on('error', (err: any) => reject(err));
+      });
+      request.on('error', (err) => reject(err));
+      request.end();
+    });
 
+    // Extract initialModels using Regex
+    // Looking for: "initialModels":[{...}]
+    // The response is RSC, so it might be messy.
+    // We'll look for the JSON array after "initialModels":
+    // Regex: /"initialModels":(\[.*?\])(?:,"|})/
+    // Since it's a huge JSON, we might need a robust way.
+    // The array ends when brackets verify?
+    // Let's try a simple regex first.
+
+    const match = responseBody.match(/"initialModels":(\[.*?\])(?:,"|})/);
+    if (match && match[1]) {
+      // The captured group is the array string.
+      // However, it might contain escaped quotes inside strings.
+      // RSC format is usually valid JSON parts.
+      // But verify if it's truncated or nested.
+      // The log sample shows it as a clean JSON array inside the RSC line.
+      // 6:["$","$L15",null,{"initialState":"$undefined","children":["$","$L16",null,{"initialModels":[...]
+      // So simple JSON.parse on the array string should work if regex captures correctly.
+      // Be careful of greedy matching if there are multiple arrays.
+      // We will assume "initialModels":[ ... ] is uniquely identifiable.
+
+      // Better regex to handle potential closing bracket issues?
+      // Actually, we can just find the start, count brackets to find end.
+
+      // Let's stick to regex for now, if it fails we can refine.
+      // Using non-greedy match for content? JSON array can contain objects.
+
+      // Manual extraction might be safer:
+      const startStr = '"initialModels":';
+      const startIndex = responseBody.indexOf(startStr);
+      if (startIndex !== -1) {
+        let arrayStart = startIndex + startStr.length;
+        let arrayEnd = arrayStart;
+        let stack = 0;
+        let inString = false;
+
+        // Walk forward to find the matching closing bracket
+        for (let i = arrayStart; i < responseBody.length; i++) {
+          const char = responseBody[i];
+          if (char === '"' && responseBody[i - 1] !== '\\') {
+            inString = !inString;
+          }
+          if (!inString) {
+            if (char === '[') stack++;
+            else if (char === ']') {
+              stack--;
+              if (stack === 0) {
+                arrayEnd = i + 1;
+                break;
+              }
+            }
+          }
+        }
+
+        if (arrayEnd > arrayStart) {
+          const arrayStr = responseBody.substring(arrayStart, arrayEnd);
+          const models = JSON.parse(arrayStr);
+          return models.map((m: any) => ({
+            id: m.id,
+            name: m.name || m.publicName || m.displayName,
+            organization: m.organization,
+            provider: m.provider,
+            publicName: m.publicName,
+            displayName: m.displayName,
+            capabilities: m.capabilities,
+            rank: m.rank,
+            rankByModality: m.rankByModality,
+          }));
+        }
+      }
+    }
+
+    console.warn('[LMArena] Could not parse models from response, falling back to static list.');
+  } catch (e) {
+    console.error('[LMArena] Failed to fetch models:', e);
+  }
+
+  // Fallback
   return [
     { id: 'gpt-4o-2024-05-13', name: 'GPT-4o' },
     { id: 'claude-3-5-sonnet-20240620', name: 'Claude 3.5 Sonnet' },
     { id: 'gemini-1.5-pro-api-0514', name: 'Gemini 1.5 Pro' },
-    // These are guess IDs, they might use UUIDs internally now.
-    // The logs showed UUIDs: `modelAId: "019a98f7-afcd-779f-8dcb-856cc3b3f078"`.
-    // This IS CRITICAL. We need the real IDs.
-
-    // Re-reading logs:
-    // Request to create evaluation didn't show a model list request immediately before.
-    // It implies the Next.js app has them preloaded.
-    // We can try to fetch `https://lmarena.ai/_next/data/<build-id>/en/c/new.json`?
-    // The build ID `9eZuFeUEcauvnxzaLSj7tczACJFs` is in the URL in logs.
-    // BUT that changes.
-
-    // Alternative: `https://lmarena.ai/api/config`?
   ];
 };
 
 // Start a new conversation or continue
 export const chatCompletionStream = (req: Request, res: Response, account: Account) => {
-  const { messages, model, conversation_id, parent_message_id } = req.body;
+  const { messages, model, conversation_id } = req.body;
 
   // Note: LMArena uses UUIDs for everything.
   // If we don't have a conversation_id, we create one.
@@ -193,20 +404,9 @@ export const chatCompletionStream = (req: Request, res: Response, account: Accou
   const lastMessage = messages[messages.length - 1];
   const userContent = lastMessage.content;
 
-  // Need to generate UUIDs for message IDs if not provided?
-  // The API sends `userMessageId` and `id` (session id).
   const crypto = require('crypto');
   const newMsgId = crypto.randomUUID();
   const sessionId = conversation_id || crypto.randomUUID();
-
-  // Construct payload
-  // For new chat:
-  // endpoint: https://lmarena.ai/nextjs-api/stream/create-evaluation
-  // body: { id: sessionId, mode: "direct", modelAId: model, userMessageId: newMsgId, userMessage: { content: ... }, ... }
-
-  // For existing chat:
-  // endpoint: https://lmarena.ai/nextjs-api/stream/post-to-evaluation/sessionId
-  // body: { id: sessionId, modelAId: model, userMessageId: newMsgId, ... }
 
   const isNewChat = !conversation_id;
   const url = isNewChat
@@ -218,18 +418,8 @@ export const chatCompletionStream = (req: Request, res: Response, account: Accou
     mode: 'direct', // We only support direct chat for now?
     modelAId: model, // This MUST be the UUID of the model
     userMessageId: newMsgId,
-    // For new chat
-    ...(isNewChat
-      ? {
-          modelAMessageId: crypto.randomUUID(), // Placeholder expectation?
-          modality: 'chat',
-        }
-      : {
-          // For existing chat
-          modelAMessageId: parent_message_id, // This might need to be the PARENT? No, usually expect next msg id or similar?
-          // Log says: "modelAMessageId": "..." in request.
-          // It seems the client proposes the ID for the assistant's response?
-        }),
+    modelAMessageId: crypto.randomUUID(), // Always new UUID for the upcoming response
+    ...(isNewChat ? { modality: 'chat' } : {}),
     userMessage: {
       content: userContent,
       experimental_attachments: [],
@@ -257,7 +447,7 @@ export const chatCompletionStream = (req: Request, res: Response, account: Accou
   request.setHeader('Referer', `https://lmarena.ai/c/${sessionId}`);
 
   request.write(JSON.stringify(payload));
-  request.on('response', (response) => {
+  request.on('response', (response: Electron.IncomingMessage) => {
     // Check status
     if (response.statusCode !== 200) {
       console.error('[LMArena] API Error:', response.statusCode, response.statusMessage);
@@ -271,7 +461,7 @@ export const chatCompletionStream = (req: Request, res: Response, account: Accou
       Connection: 'keep-alive',
     });
 
-    response.on('data', (chunk) => {
+    response.on('data', (chunk: Buffer) => {
       const text = chunk.toString();
       // Format is:
       // a2:[{"type":"heartbeat"}]
@@ -331,12 +521,12 @@ export const getConversations = async (account: Account) => {
   });
 
   // ... handling
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     request.setHeader('Cookie', cookies);
     request.setHeader('User-Agent', USER_AGENT);
     let data = '';
-    request.on('response', (response) => {
-      response.on('data', (chunk) => (data += chunk.toString()));
+    request.on('response', (response: Electron.IncomingMessage) => {
+      response.on('data', (chunk: Buffer) => (data += chunk.toString()));
       response.on('end', () => {
         try {
           const parsed = JSON.parse(data);
@@ -352,7 +542,7 @@ export const getConversations = async (account: Account) => {
   });
 };
 
-export const getConversationDetail = async (id: string, account: Account) => {
+export const getConversationDetail = async (_id: string, _account: Account) => {
   // GET https://lmarena.ai/api/evaluation/<id>
   // ... similar implementation
   // Return messages in standard format

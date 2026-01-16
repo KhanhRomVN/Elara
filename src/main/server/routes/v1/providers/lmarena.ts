@@ -4,9 +4,24 @@ import {
   getModels as getLMArenaModels,
   getConversations as getLMArenaConversations,
   getConversationDetail as getLMArenaConversationDetail,
+  chatCompletionStream,
 } from '../../../lmarena';
 
 const router = express.Router();
+
+router.post('/chat/completions', async (req, res) => {
+  try {
+    const account = findAccount(req, 'LMArena');
+    if (!account) {
+      res.status(401).json({ error: 'No valid LMArena account found' });
+      return;
+    }
+    chatCompletionStream(req, res, account);
+  } catch (error: any) {
+    console.error('[Server] LMArena Chat Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 router.get('/models', async (req, res) => {
   try {

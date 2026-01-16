@@ -1,64 +1,121 @@
 import express from 'express';
+import https from 'https';
+import http from 'http';
 
 const router = express.Router();
 
-// List static models (Legacy/Fallback)
-router.get('/', (_req, res) => {
-  res.json({
-    object: 'list',
-    data: [
-      { id: 'deepseek-chat', object: 'model', created: 1677610602, owned_by: 'deepseek' },
-      { id: 'deepseek-reasoner', object: 'model', created: 1677610602, owned_by: 'deepseek' },
-      {
-        id: 'claude-3-opus-20240229',
-        object: 'model',
-        created: 1677610602,
-        owned_by: 'anthropic',
-      },
-      {
-        id: 'claude-3-sonnet-20240229',
-        object: 'model',
-        created: 1677610602,
-        owned_by: 'anthropic',
-      },
-      {
-        id: 'claude-3-haiku-20240307',
-        object: 'model',
-        created: 1677610602,
-        owned_by: 'anthropic',
-      },
-      // Mistral
-      { id: 'mistral-large-latest', object: 'model', created: 1677610602, owned_by: 'mistral' },
-      { id: 'mistral-medium-latest', object: 'model', created: 1677610602, owned_by: 'mistral' },
-      // Kimi
-      { id: 'moonshot-v1-8k', object: 'model', created: 1677610602, owned_by: 'moonshot' },
-      { id: 'moonshot-v1-32k', object: 'model', created: 1677610602, owned_by: 'moonshot' },
-      { id: 'moonshot-v1-128k', object: 'model', created: 1677610602, owned_by: 'moonshot' },
-      // Qwen
-      { id: 'qwen-max', object: 'model', created: 1677610602, owned_by: 'qwen' },
-      { id: 'qwen-plus', object: 'model', created: 1677610602, owned_by: 'qwen' },
-      { id: 'qwen-turbo', object: 'model', created: 1677610602, owned_by: 'qwen' },
-      { id: 'qwen-long', object: 'model', created: 1677610602, owned_by: 'qwen' },
-      { id: 'qwen2.5-72b-instruct', object: 'model', created: 1677610602, owned_by: 'qwen' },
-      { id: 'qwen2.5-32b-instruct', object: 'model', created: 1677610602, owned_by: 'qwen' },
-      { id: 'qwen2.5-14b-instruct', object: 'model', created: 1677610602, owned_by: 'qwen' },
-      { id: 'qwen2.5-7b-instruct', object: 'model', created: 1677610602, owned_by: 'qwen' },
-      { id: 'qwen2.5-math-72b-instruct', object: 'model', created: 1677610602, owned_by: 'qwen' },
-      { id: 'qwen2-72b-instruct', object: 'model', created: 1677610602, owned_by: 'qwen' },
-      { id: 'qwen2-57b-a14b-instruct', object: 'model', created: 1677610602, owned_by: 'qwen' },
-      { id: 'qwen3-max-2025-09-23', object: 'model', created: 1677610602, owned_by: 'qwen' },
-      // Cohere
-      { id: 'command-r7b-12-2024', object: 'model', created: 1677610602, owned_by: 'cohere' },
-      // Groq
-      { id: 'llama3-70b-8192', object: 'model', created: 1677610602, owned_by: 'groq' },
-      { id: 'llama3-8b-8192', object: 'model', created: 1677610602, owned_by: 'groq' },
-      { id: 'mixtral-8x7b-32768', object: 'model', created: 1677610602, owned_by: 'groq' },
-      { id: 'gemma-7b-it', object: 'model', created: 1677610602, owned_by: 'groq' },
-      // Gemini
-      { id: 'gemini-pro', object: 'model', created: 1677610602, owned_by: 'google' },
-      { id: 'gemini-ultra', object: 'model', created: 1677610602, owned_by: 'google' },
-    ],
+// Cache for models
+let cachedModels: any[] | null = null;
+let lastFetchTime = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Default models URL (can be changed via environment variable)
+const MODELS_URL =
+  process.env.MODELS_URL || 'https://raw.githubusercontent.com/KhanhRomVN/Elara/main/models.json';
+
+/**
+ * Fetch models from URL
+ */
+async function fetchModelsFromUrl(url: string): Promise<any[]> {
+  return new Promise((resolve, reject) => {
+    const urlObj = new URL(url);
+    const protocol = urlObj.protocol === 'https:' ? https : http;
+
+    protocol
+      .get(url, (res) => {
+        let data = '';
+
+        res.on('data', (chunk) => {
+          data += chunk;
+        });
+
+        res.on('end', () => {
+          try {
+            if (res.statusCode === 200) {
+              const parsed = JSON.parse(data);
+              // If response is array, use it directly
+              // If response has 'data' field, use that
+              const models = Array.isArray(parsed) ? parsed : parsed.data || parsed.models || [];
+              resolve(models);
+            } else {
+              reject(new Error(`HTTP ${res.statusCode}`));
+            }
+          } catch (e) {
+            reject(e);
+          }
+        });
+      })
+      .on('error', reject);
   });
+}
+
+/**
+ * Get models with caching
+ */
+async function getModels(): Promise<any[]> {
+  const now = Date.now();
+
+  // Return cached if still valid
+  if (cachedModels && now - lastFetchTime < CACHE_TTL) {
+    return cachedModels;
+  }
+
+  try {
+    // Fetch from URL
+    const models = await fetchModelsFromUrl(MODELS_URL);
+    cachedModels = models;
+    lastFetchTime = now;
+    console.log(`[Models] Loaded ${models.length} models from ${MODELS_URL}`);
+    return models;
+  } catch (error) {
+    console.error('[Models] Failed to fetch from URL:', error);
+    // Return empty array if no cache and fetch fails
+    if (!cachedModels) {
+      return [];
+    }
+    // Return stale cache if available
+    return cachedModels;
+  }
+}
+
+// GET /v1/models - List all models
+router.get('/', async (_req, res) => {
+  try {
+    const models = await getModels();
+    res.json({
+      object: 'list',
+      data: models,
+    });
+  } catch (error: any) {
+    console.error('[Models] Error:', error);
+    res.status(500).json({
+      error: {
+        message: error.message || 'Failed to load models',
+        type: 'internal_error',
+      },
+    });
+  }
+});
+
+// POST /v1/models/refresh - Force refresh cache
+router.post('/refresh', async (_req, res) => {
+  try {
+    cachedModels = null;
+    lastFetchTime = 0;
+    const models = await getModels();
+    res.json({
+      success: true,
+      count: models.length,
+      message: 'Models cache refreshed',
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      error: {
+        message: error.message || 'Failed to refresh models',
+        type: 'internal_error',
+      },
+    });
+  }
 });
 
 export default router;

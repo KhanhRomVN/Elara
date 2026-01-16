@@ -69,7 +69,10 @@ const Dashboard = () => {
           console.error('Failed to load cached usage data', e);
         }
 
+        // DISABLED: Token usage HTTPS fetching
         // Fetch only new data incrementally
+        setLoadingUsage(false);
+        /* DISABLED - HTTPS token fetch
         setLoadingUsage(true);
         // @ts-ignore
         const newHistory = await fetchAllHistory(accounts, maxTimestamp);
@@ -90,6 +93,7 @@ const Dashboard = () => {
         }
 
         setLoadingUsage(false);
+        */
       } catch (error) {
         console.error('Failed to fetch dashboard data:', error);
         setLoadingUsage(false);

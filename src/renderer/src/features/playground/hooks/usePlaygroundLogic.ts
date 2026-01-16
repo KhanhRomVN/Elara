@@ -521,7 +521,9 @@ export const usePlaygroundLogic = ({
                             ? geminiModel
                             : account.provider === 'HuggingChat'
                               ? huggingChatModel
-                              : deepseekModel,
+                              : account.provider === 'LMArena'
+                                ? groqModel
+                                : deepseekModel,
           messages: [
             ...messages.map((m) => ({ role: m.role, content: m.content })),
             { role: 'user', content: currentInput },
