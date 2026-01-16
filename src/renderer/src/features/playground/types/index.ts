@@ -59,3 +59,48 @@ export interface HistoryItem {
   title: string;
   // Add other fields if necessary
 }
+
+export interface ConversationTab {
+  id: string; // Unique tab ID
+  title: string; // Tab display name
+
+  // Conversation state
+  messages: Message[];
+  activeChatId: string | null;
+  conversationTitle: string;
+
+  // Provider & account
+  selectedProvider: string;
+  selectedAccount: string;
+
+  // Model selections
+  claudeModel: string;
+  groqModel: string;
+  antigravityModel: string;
+  geminiModel: string;
+  huggingChatModel: string;
+  deepseekModel: string;
+
+  // UI state
+  input: string;
+  attachments: PendingAttachment[];
+  tokenCount: number;
+  accumulatedUsage: number;
+  inputTokenCount: number;
+
+  // Settings
+  thinkingEnabled: boolean;
+  searchEnabled: boolean;
+  groqSettings: {
+    temperature: number;
+    maxTokens: number;
+    reasoning: 'none' | 'low' | 'medium' | 'high';
+    stream: boolean;
+    jsonMode: boolean;
+    tools: {
+      browserSearch: boolean;
+      codeInterpreter: boolean;
+    };
+    customFunctions: any[];
+  };
+}

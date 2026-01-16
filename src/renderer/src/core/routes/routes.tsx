@@ -3,7 +3,7 @@ import MainLayout from '../layouts/MainLayout';
 import DashboardPage from '../../features/dashboard';
 import AccountsPage from '../../features/accounts';
 
-import PlaygroundPage from '../../features/playground';
+import { PlaygroundWithTabs } from '../../features/playground/components/PlaygroundWithTabs';
 import CommandsPage from '../../features/commands';
 import TutorialPage from '../../features/tutorial';
 
@@ -23,7 +23,7 @@ export const routes: RouteObject[] = [
 
       {
         path: 'playground',
-        element: <PlaygroundPage />,
+        element: <PlaygroundWithTabs />,
       },
       {
         path: 'commands',

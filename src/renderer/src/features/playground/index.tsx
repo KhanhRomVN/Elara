@@ -13,7 +13,6 @@ import groqIcon from '../../assets/provider_icons/groq.svg';
 import geminiIcon from '../../assets/provider_icons/gemini.svg';
 import antigravityIcon from '../../assets/provider_icons/antigravity.svg';
 import huggingChatIcon from '../../assets/provider_icons/huggingface.svg';
-import lmArenaIcon from '../../assets/provider_icons/lmarena.svg';
 import { FunctionParams } from './components/GroqSidebarSettings';
 import { GroqModelSelector } from './components/GroqModelSelector';
 import { AntigravityModelSelector } from './components/AntigravityModelSelector';
@@ -24,6 +23,7 @@ import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
 import { InputArea } from './components/InputArea';
 import { WelcomeScreen } from './components/WelcomeScreen';
+import { TabBar } from './components/TabBar';
 import { Message, Account, PendingAttachment } from './types';
 import { getStreamHandler } from './stream-handlers';
 
@@ -183,7 +183,19 @@ const CustomSelect = ({
   );
 };
 
-export const PlaygroundPage = () => {
+export const PlaygroundPage = ({
+  tabs,
+  activeTabId,
+  onTabClick,
+  onTabClose,
+  onNewTab,
+}: {
+  tabs?: any[];
+  activeTabId?: string;
+  onTabClick?: (id: string) => void;
+  onTabClose?: (id: string) => void;
+  onNewTab?: () => void;
+} = {}) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -1168,185 +1180,225 @@ export const PlaygroundPage = () => {
     setAttachments((prev) => prev.filter((_, i) => i !== index));
   };
 
-  return (
-    <div className="h-full flex flex-col bg-background p-4 gap-4">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">Playground</h2>
-        <p className="text-muted-foreground">Experiment with different AI models.</p>
-      </div>
-      <div className="flex-1 flex overflow-hidden border border-dashed border-zinc-500/25 rounded-lg relative">
-        {/* Sidebar */}
-        <div ref={sidebarRef} className="relative flex-shrink-0" style={{ width: sidebarWidth }}>
-          <div className="h-full overflow-y-auto border-r bg-muted/10 w-full">
-            <Sidebar
-              sidebarWidth={sidebarWidth}
-              selectedProvider={selectedProvider}
-              history={history}
-              activeChatId={activeChatId}
-              startNewChat={startNewChat}
-              loadConversation={loadConversation}
-              account={account || null}
-              groqSettings={groqSettings}
-              setGroqSettings={setGroqSettings}
-            />
-          </div>
-
-          {/* Resizer Handle */}
-          <div
-            className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50 transition-colors z-10"
-            onMouseDown={startResizing}
+  const innerContent = (
+    <div className="flex-1 flex overflow-hidden border border-dashed border-zinc-500/25 rounded-lg relative">
+      {/* Sidebar */}
+      <div ref={sidebarRef} className="relative flex-shrink-0" style={{ width: sidebarWidth }}>
+        <div className="h-full overflow-y-auto border-r bg-muted/10 w-full">
+          <Sidebar
+            sidebarWidth={sidebarWidth}
+            selectedProvider={selectedProvider}
+            history={history}
+            activeChatId={activeChatId}
+            startNewChat={startNewChat}
+            loadConversation={loadConversation}
+            account={account || null}
+            groqSettings={groqSettings}
+            setGroqSettings={setGroqSettings}
           />
         </div>
 
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col min-w-0 bg-background relative">
-          {messages.length === 0 ? (
-            <WelcomeScreen
-              dropdowns={
-                <div className="flex flex-wrap gap-4">
-                  <CustomSelect
-                    value={selectedProvider}
-                    onChange={(val) => {
-                      setSelectedProvider(val as any);
-                      // Auto-select first account of the new provider
-                      const providerAccounts = accounts.filter((acc) => acc.provider === val);
-                      if (providerAccounts.length > 0) {
-                        setSelectedAccount(providerAccounts[0].id);
-                      } else {
-                        setSelectedAccount('');
-                      }
-                    }}
-                    options={[
-                      { value: 'DeepSeek', label: 'DeepSeek', icon: deepseekIcon },
-                      { value: 'Claude', label: 'Claude', icon: claudeIcon },
-                      { value: 'Mistral', label: 'Mistral', icon: mistralIcon },
-                      { value: 'Kimi', label: 'Kimi', icon: kimiIcon },
-                      { value: 'Qwen', label: 'Qwen', icon: qwenIcon },
-                      { value: 'Cohere', label: 'Cohere', icon: cohereIcon },
-                      { value: 'Perplexity', label: 'Perplexity', icon: perplexityIcon },
-                      { value: 'Groq', label: 'Groq', icon: groqIcon },
-                      { value: 'Antigravity', label: 'Antigravity', icon: antigravityIcon },
-                      { value: 'Gemini', label: 'Gemini', icon: geminiIcon },
-                      { value: 'HuggingChat', label: 'HuggingChat', icon: huggingChatIcon },
-                    ]}
-                    placeholder="Select Provider"
-                  />
-                  {selectedProvider && (
-                    <div className="flex flex-row items-center gap-4">
-                      <CustomSelect
-                        value={selectedAccount}
-                        onChange={setSelectedAccount}
-                        options={filteredAccounts.map((acc) => ({
-                          value: acc.id,
-                          label: acc.name || acc.email,
-                          icon: acc.picture ? (
-                            <img
-                              src={acc.picture}
-                              alt=""
-                              className="w-4 h-4 rounded-full object-cover shrink-0"
-                            />
-                          ) : (
-                            <User className="h-4 w-4" />
-                          ),
-                        }))}
-                        placeholder="Select Account"
-                        disabled={!selectedProvider}
-                      />
+        {/* Resizer Handle */}
+        <div
+          className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50 transition-colors z-10"
+          onMouseDown={startResizing}
+        />
+      </div>
 
-                      {selectedProvider === 'Claude' && (
-                        <div className="w-[300px]">
-                          <CustomSelect
-                            value={claudeModel}
-                            onChange={setClaudeModel}
-                            options={[
-                              { value: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5' },
-                              { value: 'claude-opus-4-5-20251101', label: 'Claude Opus 4.5' },
-                            ]}
-                            placeholder="Select Model"
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0 bg-background relative">
+        {tabs && onTabClick && onTabClose && onNewTab && (
+          <TabBar
+            tabs={tabs}
+            activeTabId={activeTabId || ''}
+            onTabClick={onTabClick}
+            onTabClose={onTabClose}
+            onNewTab={onNewTab}
+          />
+        )}
+        {messages.length === 0 ? (
+          <WelcomeScreen
+            dropdowns={
+              <div className="flex flex-wrap gap-4">
+                <CustomSelect
+                  value={selectedProvider}
+                  onChange={(val) => {
+                    setSelectedProvider(val as any);
+                    // Auto-select first account of the new provider
+                    const providerAccounts = accounts.filter((acc) => acc.provider === val);
+                    if (providerAccounts.length > 0) {
+                      setSelectedAccount(providerAccounts[0].id);
+                    } else {
+                      setSelectedAccount('');
+                    }
+                  }}
+                  options={[
+                    { value: 'DeepSeek', label: 'DeepSeek', icon: deepseekIcon },
+                    { value: 'Claude', label: 'Claude', icon: claudeIcon },
+                    { value: 'Mistral', label: 'Mistral', icon: mistralIcon },
+                    { value: 'Kimi', label: 'Kimi', icon: kimiIcon },
+                    { value: 'Qwen', label: 'Qwen', icon: qwenIcon },
+                    { value: 'Cohere', label: 'Cohere', icon: cohereIcon },
+                    { value: 'Perplexity', label: 'Perplexity', icon: perplexityIcon },
+                    { value: 'Groq', label: 'Groq', icon: groqIcon },
+                    { value: 'Antigravity', label: 'Antigravity', icon: antigravityIcon },
+                    { value: 'Gemini', label: 'Gemini', icon: geminiIcon },
+                    { value: 'HuggingChat', label: 'HuggingChat', icon: huggingChatIcon },
+                  ]}
+                  placeholder="Select Provider"
+                />
+                {selectedProvider && (
+                  <div className="flex flex-row items-center gap-4">
+                    <CustomSelect
+                      value={selectedAccount}
+                      onChange={setSelectedAccount}
+                      options={filteredAccounts.map((acc) => ({
+                        value: acc.id,
+                        label: acc.name || acc.email,
+                        icon: acc.picture ? (
+                          <img
+                            src={acc.picture}
+                            alt=""
+                            className="w-4 h-4 rounded-full object-cover shrink-0"
                           />
-                        </div>
-                      )}
+                        ) : (
+                          <User className="h-4 w-4" />
+                        ),
+                      }))}
+                      placeholder="Select Account"
+                      disabled={!selectedProvider}
+                    />
 
-                      {/* Model Selectors */}
-                      {selectedProvider === 'Groq' && selectedAccount && (
-                        <div className="space-y-4">
-                          <GroqModelSelector
-                            value={groqModel}
-                            onChange={setGroqModel}
-                            models={groqModelsList}
-                          />
-                          {/* <GroqSidebarSettings
+                    {selectedProvider === 'Claude' && (
+                      <div className="w-[300px]">
+                        <CustomSelect
+                          value={claudeModel}
+                          onChange={setClaudeModel}
+                          options={[
+                            { value: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5' },
+                            { value: 'claude-opus-4-5-20251101', label: 'Claude Opus 4.5' },
+                          ]}
+                          placeholder="Select Model"
+                        />
+                      </div>
+                    )}
+
+                    {/* Model Selectors */}
+                    {selectedProvider === 'Groq' && selectedAccount && (
+                      <div className="space-y-4">
+                        <GroqModelSelector
+                          value={groqModel}
+                          onChange={setGroqModel}
+                          models={groqModelsList}
+                        />
+                        {/* <GroqSidebarSettings
                             settings={groqSettings}
                             onSettingsChange={setGroqSettings}
                           /> */}
-                        </div>
-                      )}
+                      </div>
+                    )}
 
-                      {selectedProvider === 'Antigravity' && selectedAccount && (
-                        <AntigravityModelSelector
-                          value={antigravityModel}
-                          onChange={setAntigravityModel}
-                          models={antigravityModelsList}
+                    {selectedProvider === 'Antigravity' && selectedAccount && (
+                      <AntigravityModelSelector
+                        value={antigravityModel}
+                        onChange={setAntigravityModel}
+                        models={antigravityModelsList}
+                      />
+                    )}
+                    {selectedProvider === 'Gemini' && selectedAccount && (
+                      <GeminiModelSelector
+                        value={geminiModel}
+                        onChange={setGeminiModel}
+                        models={geminiModelsList}
+                      />
+                    )}
+
+                    {selectedProvider === 'HuggingChat' && selectedAccount && (
+                      <div className="w-[300px]">
+                        <HuggingChatModelSelector
+                          value={huggingChatModel}
+                          onChange={setHuggingChatModel}
+                          models={huggingChatModelsList}
+                          placeholder="Select Model"
+                          disabled={huggingChatModelsList.length === 0}
                         />
-                      )}
-                      {selectedProvider === 'Gemini' && selectedAccount && (
-                        <GeminiModelSelector
-                          value={geminiModel}
-                          onChange={setGeminiModel}
-                          models={geminiModelsList}
+                      </div>
+                    )}
+
+                    {selectedProvider === 'LMArena' && selectedAccount && (
+                      <div className="w-[300px]">
+                        <CustomSelect
+                          value={groqModel}
+                          onChange={setGroqModel}
+                          options={groqModels.map((model) => ({
+                            value: model.id,
+                            label: model.name || model.id,
+                          }))}
+                          placeholder="Select Model"
+                          disabled={groqModels.length === 0}
                         />
-                      )}
+                      </div>
+                    )}
 
-                      {selectedProvider === 'HuggingChat' && selectedAccount && (
-                        <div className="w-[300px]">
-                          <HuggingChatModelSelector
-                            value={huggingChatModel}
-                            onChange={setHuggingChatModel}
-                            models={huggingChatModelsList}
-                            placeholder="Select Model"
-                            disabled={huggingChatModelsList.length === 0}
-                          />
-                        </div>
-                      )}
+                    {selectedProvider === 'DeepSeek' && (
+                      <div className="w-[300px]">
+                        <CustomSelect
+                          value={deepseekModel}
+                          onChange={setDeepseekModel}
+                          options={[
+                            {
+                              value: 'deepseek-ai/DeepSeek-V3.2',
+                              label: 'deepseek-ai/DeepSeek-V3.2',
+                            },
+                          ]}
+                          placeholder="Select Model"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            }
+            input={input}
+            handleInput={handleInput}
+            handleKeyDown={handleKeyDown}
+            handleSend={handleSend}
+            loading={loading}
+            isStreaming={isStreaming}
+            selectedAccount={selectedAccount}
+            selectedProvider={selectedProvider}
+            thinkingEnabled={thinkingEnabled}
+            setThinkingEnabled={setThinkingEnabled}
+            searchEnabled={searchEnabled}
+            setSearchEnabled={setSearchEnabled}
+            onFileSelect={handleFileSelect}
+            attachments={attachments}
+            onRemoveAttachment={handleRemoveAttachment}
+          />
+        ) : (
+          <>
+            {/* Header */}
+            <div className="h-14 border-b flex items-center justify-between px-4 bg-background/50 backdrop-blur-sm sticky top-0 z-10">
+              <div className="max-w-[200px] text-xs font-medium text-muted-foreground mr-2 flex items-center gap-1 truncate">
+                {selectedProvider === 'HuggingChat' && huggingChatModel}
+              </div>
+              <div className="font-medium truncate flex-1 text-center">
+                {conversationTitle || 'New Chat'}
+              </div>
+              {/* Right side actions if any */}
+              <div className="w-24 text-right text-xs text-muted-foreground mr-2">
+                {(tokenCount + accumulatedUsage + inputTokenCount).toLocaleString()} tokens
+              </div>
+            </div>
 
-                      {selectedProvider === 'LMArena' && selectedAccount && (
-                        <div className="w-[300px]">
-                          <CustomSelect
-                            value={groqModel}
-                            onChange={setGroqModel}
-                            options={groqModels.map((model) => ({
-                              value: model.id,
-                              label: model.name || model.id,
-                            }))}
-                            placeholder="Select Model"
-                            disabled={groqModels.length === 0}
-                          />
-                        </div>
-                      )}
+            <ChatArea messages={messages} loading={loading} isStreaming={isStreaming} />
 
-                      {selectedProvider === 'DeepSeek' && (
-                        <div className="w-[300px]">
-                          <CustomSelect
-                            value={deepseekModel}
-                            onChange={setDeepseekModel}
-                            options={[
-                              {
-                                value: 'deepseek-ai/DeepSeek-V3.2',
-                                label: 'deepseek-ai/DeepSeek-V3.2',
-                              },
-                            ]}
-                            placeholder="Select Model"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              }
+            <InputArea
               input={input}
               handleInput={handleInput}
               handleKeyDown={handleKeyDown}
               handleSend={handleSend}
+              handleStop={handleStop}
               loading={loading}
               isStreaming={isStreaming}
               selectedAccount={selectedAccount}
@@ -1359,46 +1411,26 @@ export const PlaygroundPage = () => {
               attachments={attachments}
               onRemoveAttachment={handleRemoveAttachment}
             />
-          ) : (
-            <>
-              {/* Header */}
-              <div className="h-14 border-b flex items-center justify-between px-4 bg-background/50 backdrop-blur-sm sticky top-0 z-10">
-                <div className="max-w-[200px] text-xs font-medium text-muted-foreground mr-2 flex items-center gap-1 truncate">
-                  {selectedProvider === 'HuggingChat' && huggingChatModel}
-                </div>
-                <div className="font-medium truncate flex-1 text-center">
-                  {conversationTitle || 'New Chat'}
-                </div>
-                {/* Right side actions if any */}
-                <div className="w-24 text-right text-xs text-muted-foreground mr-2">
-                  {(tokenCount + accumulatedUsage + inputTokenCount).toLocaleString()} tokens
-                </div>
-              </div>
-
-              <ChatArea messages={messages} loading={loading} isStreaming={isStreaming} />
-
-              <InputArea
-                input={input}
-                handleInput={handleInput}
-                handleKeyDown={handleKeyDown}
-                handleSend={handleSend}
-                handleStop={handleStop}
-                loading={loading}
-                isStreaming={isStreaming}
-                selectedAccount={selectedAccount}
-                selectedProvider={selectedProvider}
-                thinkingEnabled={thinkingEnabled}
-                setThinkingEnabled={setThinkingEnabled}
-                searchEnabled={searchEnabled}
-                setSearchEnabled={setSearchEnabled}
-                onFileSelect={handleFileSelect}
-                attachments={attachments}
-                onRemoveAttachment={handleRemoveAttachment}
-              />
-            </>
-          )}
-        </div>
+          </>
+        )}
       </div>
+    </div>
+  );
+
+  // If tabs are provided, we're inside PlaygroundWithTabs wrapper
+  // Don't render outer layout (header + padding) to avoid duplication
+  if (tabs) {
+    return innerContent;
+  }
+
+  // Standalone mode: render with outer layout
+  return (
+    <div className="h-full flex flex-col bg-background p-4 gap-4">
+      <div>
+        <h2 className="text-2xl font-bold tracking-tight">Playground</h2>
+        <p className="text-muted-foreground">Experiment with different AI models.</p>
+      </div>
+      {innerContent}
     </div>
   );
 };
