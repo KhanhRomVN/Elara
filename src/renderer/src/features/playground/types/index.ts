@@ -60,6 +60,12 @@ export interface HistoryItem {
   // Add other fields if necessary
 }
 
+export interface FunctionParams {
+  name: string;
+  description: string;
+  parameters: string;
+}
+
 export interface ConversationTab {
   id: string; // Unique tab ID
   title: string; // Tab display name
@@ -101,6 +107,6 @@ export interface ConversationTab {
       browserSearch: boolean;
       codeInterpreter: boolean;
     };
-    customFunctions: any[];
+    customFunctions: FunctionParams[];
   };
 }
