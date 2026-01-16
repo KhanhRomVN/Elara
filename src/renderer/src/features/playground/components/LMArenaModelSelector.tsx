@@ -67,7 +67,7 @@ export const LMArenaModelSelector = ({
           onClick={() => !disabled && setIsOpen(!isOpen)}
           disabled={disabled}
           className={cn(
-            'h-10 w-full flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all hover:bg-accent/50',
+            'h-10 w-full flex items-center justify-between gap-4 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-0 focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 transition-all hover:bg-accent/50',
             !value && 'text-muted-foreground',
           )}
         >
@@ -81,7 +81,7 @@ export const LMArenaModelSelector = ({
 
         {isOpen && (
           <div className="absolute z-50 mt-1 max-h-80 w-full min-w-[400px] overflow-auto rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2">
-            <div className="p-1">
+            <div className="p-1 space-y-1">
               {models.length === 0 ? (
                 <div className="p-2 text-sm text-muted-foreground text-center">No models found</div>
               ) : (

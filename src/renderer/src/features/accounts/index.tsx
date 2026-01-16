@@ -4,50 +4,11 @@ import { useRef } from 'react';
 import { cn } from '../../shared/lib/utils';
 import { Copy, Plus, Download, Trash2, Search, AlignEndVertical, Upload } from 'lucide-react';
 import { AddAccountDialog } from './components/AddAccountDialog';
-
-import claudeIcon from '../../assets/provider_icons/claude.svg';
-import deepseekIcon from '../../assets/provider_icons/deepseek.svg';
-import mistralIcon from '../../assets/provider_icons/mistral.svg';
-import kimiIcon from '../../assets/provider_icons/kimi.svg';
-import qwenIcon from '../../assets/provider_icons/qwen.svg';
-import cohereIcon from '../../assets/provider_icons/cohere.svg';
-import perplexityIcon from '../../assets/provider_icons/perplexity.svg';
-import groqIcon from '../../assets/provider_icons/groq.svg';
-import geminiIcon from '../../assets/provider_icons/gemini.svg';
-import antigravityIcon from '../../assets/provider_icons/antigravity.svg';
-import huggingChatIcon from '../../assets/provider_icons/huggingface.svg';
-import lmArenaIcon from '../../assets/provider_icons/lmarena.svg';
-
-const providerIcons: Record<string, string> = {
-  Claude: claudeIcon,
-  DeepSeek: deepseekIcon,
-  Mistral: mistralIcon,
-  Kimi: kimiIcon,
-  Qwen: qwenIcon,
-  Cohere: cohereIcon,
-  Perplexity: perplexityIcon,
-  Groq: groqIcon,
-  Gemini: geminiIcon,
-  Antigravity: antigravityIcon,
-  HuggingChat: huggingChatIcon,
-  LMArena: lmArenaIcon,
-};
+import { providers } from '../../config/providers';
 
 interface Account {
   id: string;
-  provider:
-    | 'Claude'
-    | 'DeepSeek'
-    | 'Mistral'
-    | 'Kimi'
-    | 'Qwen'
-    | 'Cohere'
-    | 'Perplexity'
-    | 'Groq'
-    | 'Gemini'
-    | 'Antigravity'
-    | 'HuggingChat'
-    | 'LMArena';
+  provider: string;
   email: string;
   credential: string;
   status: 'Active' | 'Rate Limit' | 'Error';
@@ -330,113 +291,105 @@ export const Accounts = () => {
                   </td>
                 </tr>
               )}
-              {paginatedAccounts.map((account) => (
-                <tr
-                  key={account.id}
-                  className={cn(
-                    'border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted',
-                    selectedAccounts.has(account.id) && 'bg-muted',
-                  )}
-                >
-                  <td className="p-4 align-middle">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-zinc-500 bg-zinc-900/50 text-blue-500 focus:ring-blue-500 focus:ring-offset-zinc-900 cursor-pointer"
-                      checked={selectedAccounts.has(account.id)}
-                      onChange={() => toggleSelection(account.id)}
-                    />
-                  </td>
-                  <td className="p-4 align-middle">
-                    <div className="flex items-center gap-3">
-                      {account.picture && (
-                        <img
-                          src={account.picture}
-                          alt={account.name || account.email}
-                          className="w-8 h-8 rounded-full object-cover"
-                        />
-                      )}
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2">
-                          {account.name && (
-                            <span className="font-medium text-sm">{account.name}</span>
-                          )}
-                          <div
-                            className={cn(
-                              'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
-                              {
-                                Claude: 'bg-orange-500/10 text-orange-500',
-                                DeepSeek: 'bg-blue-500/10 text-blue-500',
-                                Mistral: 'bg-yellow-500/10 text-yellow-500',
-                                Kimi: 'bg-indigo-500/10 text-indigo-500',
-                                Qwen: 'bg-purple-500/10 text-purple-500',
-                                Cohere: 'bg-teal-500/10 text-teal-500',
-                                Perplexity: 'bg-cyan-500/10 text-cyan-500',
-                                Groq: 'bg-orange-600/10 text-orange-600',
-                                Gemini: 'bg-sky-500/10 text-sky-500',
-                                Antigravity: 'bg-purple-500/10 text-purple-500',
-                                HuggingChat: 'bg-amber-500/10 text-amber-500',
-                                LMArena: 'bg-emerald-500/10 text-emerald-500',
-                              }[account.provider] || 'bg-blue-500/10 text-blue-500',
+              {paginatedAccounts.map((account) => {
+                const providerConfig = providers.find((p) => p.id === account.provider);
+                return (
+                  <tr
+                    key={account.id}
+                    className={cn(
+                      'border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted',
+                      selectedAccounts.has(account.id) && 'bg-muted',
+                    )}
+                  >
+                    <td className="p-4 align-middle">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-zinc-500 bg-zinc-900/50 text-blue-500 focus:ring-blue-500 focus:ring-offset-zinc-900 cursor-pointer"
+                        checked={selectedAccounts.has(account.id)}
+                        onChange={() => toggleSelection(account.id)}
+                      />
+                    </td>
+                    <td className="p-4 align-middle">
+                      <div className="flex items-center gap-3">
+                        {account.picture && (
+                          <img
+                            src={account.picture}
+                            alt={account.name || account.email}
+                            className="w-8 h-8 rounded-full object-cover"
+                          />
+                        )}
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            {account.name && (
+                              <span className="font-medium text-sm">{account.name}</span>
                             )}
-                          >
-                            <img
-                              src={providerIcons[account.provider]}
-                              alt={account.provider}
-                              className="w-3.5 h-3.5 mr-1"
-                            />
-                            {account.provider}
+                            <div
+                              className={cn(
+                                'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
+                                providerConfig?.color || 'bg-blue-500/10 text-blue-500',
+                              )}
+                            >
+                              {providerConfig?.icon && (
+                                <img
+                                  src={providerConfig.icon}
+                                  alt={account.provider}
+                                  className="w-3.5 h-3.5 mr-1"
+                                />
+                              )}
+                              {account.provider}
+                            </div>
                           </div>
+                          <span className="text-xs text-muted-foreground">{account.email}</span>
                         </div>
-                        <span className="text-xs text-muted-foreground">{account.email}</span>
                       </div>
-                    </div>
-                  </td>
-                  <td className="p-4 align-middle text-nowrap">
-                    {account.lastActive ? new Date(account.lastActive).toLocaleString() : 'Never'}
-                  </td>
-                  <td className="p-4 align-middle text-nowrap">
-                    {account.totalRequests && account.totalRequests > 0
-                      ? `${(((account.successfulRequests || 0) / account.totalRequests) * 100).toFixed(1)}%`
-                      : 'N/A'}
-                  </td>
-                  <td className="p-4 align-middle text-nowrap">
-                    {account.totalRequests && account.totalRequests > 0
-                      ? `${((account.totalDuration || 0) / account.totalRequests).toFixed(0)}ms`
-                      : 'N/A'}
-                  </td>
-                  <td className="p-4 align-middle font-mono text-nowrap">
-                    {(account.tokensToday || 0).toLocaleString()}
-                  </td>
-                  <td className="p-4 align-middle group relative">
-                    <code
-                      className={cn(
-                        'relative rounded  font-mono text-xs break-all block cursor-pointer hover:text-primary transition-colors',
-                      )}
-                      onClick={() => copyApiUrl(account)}
-                      title={'Click to copy full URL'}
-                    >
-                      {`?email=${encodeURIComponent(account.email)}&provider=${account.provider.toLowerCase()}`}
-                    </code>
-                  </td>
-                  <td className="p-4 align-middle text-right">
-                    <div className="flex justify-end gap-2">
-                      <button
+                    </td>
+                    <td className="p-4 align-middle text-nowrap">
+                      {account.lastActive ? new Date(account.lastActive).toLocaleString() : 'Never'}
+                    </td>
+                    <td className="p-4 align-middle text-nowrap">
+                      {account.totalRequests && account.totalRequests > 0
+                        ? `${(((account.successfulRequests || 0) / account.totalRequests) * 100).toFixed(1)}%`
+                        : 'N/A'}
+                    </td>
+                    <td className="p-4 align-middle text-nowrap">
+                      {account.totalRequests && account.totalRequests > 0
+                        ? `${((account.totalDuration || 0) / account.totalRequests).toFixed(0)}ms`
+                        : 'N/A'}
+                    </td>
+                    <td className="p-4 align-middle font-mono text-nowrap">
+                      {(account.tokensToday || 0).toLocaleString()}
+                    </td>
+                    <td className="p-4 align-middle group relative">
+                      <code
+                        className={cn(
+                          'relative rounded  font-mono text-xs break-all block cursor-pointer hover:text-primary transition-colors',
+                        )}
                         onClick={() => copyApiUrl(account)}
-                        className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-8 w-8"
-                        title="Copy API URL"
+                        title={'Click to copy full URL'}
                       >
-                        <Copy className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(account.id)}
-                        className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-destructive/10 text-destructive hover:text-destructive h-8 w-8"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                        {`?email=${encodeURIComponent(account.email)}&provider=${account.provider.toLowerCase()}`}
+                      </code>
+                    </td>
+                    <td className="p-4 align-middle text-right">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => copyApiUrl(account)}
+                          className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-8 w-8"
+                          title="Copy API URL"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(account.id)}
+                          className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-destructive/10 text-destructive hover:text-destructive h-8 w-8"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

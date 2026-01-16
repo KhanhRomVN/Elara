@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Message, Account, PendingAttachment, ConversationTab, FunctionParams } from '../types';
 import { getStreamHandler } from '../stream-handlers';
 import { getHistoryEndpoint, parseConversationList } from '../utils/conversation-utils';
+import { getCachedModels, fetchAndCacheModels } from '../../../utils/model-cache';
 
 export const usePlaygroundLogic = ({
   activeTab,
@@ -55,21 +56,13 @@ export const usePlaygroundLogic = ({
     () => activeTab?.conversationTitle || '',
   );
 
-  // Model States
-  const [claudeModel, setClaudeModel] = useState(
-    () => activeTab?.claudeModel || 'claude-sonnet-4-5-20250929',
-  );
-  const [antigravityModel, setAntigravityModel] = useState(
-    () => activeTab?.antigravityModel || 'models/gemini-3-pro-preview',
-  );
-  const [geminiModel, setGeminiModel] = useState(
-    () => activeTab?.geminiModel || 'fbb127bbb056c959',
-  );
-  const [groqModel, setGroqModel] = useState(() => activeTab?.groqModel || 'openai/gpt-oss-120b');
+  // Model States - Initialize with empty defaults, will be populated from cache/API
+  const [claudeModel, setClaudeModel] = useState(() => activeTab?.claudeModel || '');
+  const [antigravityModel, setAntigravityModel] = useState(() => activeTab?.antigravityModel || '');
+  const [geminiModel, setGeminiModel] = useState(() => activeTab?.geminiModel || '');
+  const [groqModel, setGroqModel] = useState(() => activeTab?.groqModel || '');
   const [huggingChatModel, setHuggingChatModel] = useState(() => activeTab?.huggingChatModel || '');
-  const [deepseekModel, setDeepseekModel] = useState(
-    () => activeTab?.deepseekModel || 'deepseek-ai/DeepSeek-V3.2',
-  );
+  const [deepseekModel, setDeepseekModel] = useState(() => activeTab?.deepseekModel || '');
 
   const [groqModels, setGroqModels] = useState<any[]>([]); // For LMArena
 
@@ -309,7 +302,7 @@ export const usePlaygroundLogic = ({
     fetchAccounts();
   }, []); // Run once on mount
 
-  // Fetch Models
+  // Fetch Models using cache
   useEffect(() => {
     const fetchModels = async () => {
       if (!selectedAccount) return;
@@ -323,96 +316,79 @@ export const usePlaygroundLogic = ({
         const port = status.port || 11434;
 
         if (selectedProvider === 'Groq') {
-          const res = await fetch(
-            `http://localhost:${port}/v1/groq/models?email=${encodeURIComponent(acc.email)}`,
-          );
-          if (res.ok) {
-            const data = await res.json();
-            if (data.data && Array.isArray(data.data)) {
-              setGroqModelsList(data.data.sort((a: any, b: any) => a.id.localeCompare(b.id)));
-            }
+          // Try cache first
+          const cached = getCachedModels('Groq');
+          if (cached && cached.length > 0) {
+            setGroqModelsList(cached.sort((a: any, b: any) => a.id.localeCompare(b.id)));
+            if (!groqModel) setGroqModel(cached[0].id);
+          }
+          // Fetch and update
+          const models = await fetchAndCacheModels('Groq', acc.email, port);
+          if (models.length > 0) {
+            setGroqModelsList(models.sort((a: any, b: any) => a.id.localeCompare(b.id)));
+            if (!groqModel) setGroqModel(models[0].id);
           }
         } else if (selectedProvider === 'Antigravity') {
-          const res = await fetch(
-            `http://localhost:${port}/v1/antigravity/models?email=${encodeURIComponent(acc.email)}`,
-          );
-          if (res.ok) {
-            const data = await res.json();
-            if (data.models) {
-              if (Array.isArray(data.models)) {
-                setAntigravityModelsList(data.models);
-              } else {
-                const modelsArray = Object.entries(data.models).map(
-                  ([key, val]: [string, any]) => ({
-                    ...val,
-                    name: val.name || key,
-                  }),
-                );
-                setAntigravityModelsList(modelsArray);
-              }
-            }
+          const cached = getCachedModels('Antigravity');
+          if (cached && cached.length > 0) {
+            setAntigravityModelsList(cached);
+            if (!antigravityModel) setAntigravityModel(cached[0].id || cached[0].name || '');
+          }
+          const models = await fetchAndCacheModels('Antigravity', acc.email, port);
+          if (models.length > 0) {
+            setAntigravityModelsList(models);
+            if (!antigravityModel) setAntigravityModel(models[0].id || models[0].name || '');
           }
         } else if (selectedProvider === 'Gemini') {
-          // Cache logic handled inside the original simplified for hook
-          const cacheKey = `gemini-models-${acc.email}`;
-          const cached = localStorage.getItem(cacheKey);
-          if (cached) {
-            const parsed = JSON.parse(cached);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setGeminiModelsList(parsed);
-              if (!geminiModel || !parsed.find((m: any) => m.id === geminiModel)) {
-                setGeminiModel(parsed[0].id);
-              }
-            }
+          const cached = getCachedModels('Gemini');
+          if (cached && cached.length > 0) {
+            setGeminiModelsList(cached);
+            if (!geminiModel) setGeminiModel(cached[0].id);
           }
-          const res = await fetch(
-            `http://localhost:${port}/v1/gemini/models?email=${encodeURIComponent(acc.email)}`,
-          );
-          if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data)) {
-              setGeminiModelsList(data);
-              localStorage.setItem(cacheKey, JSON.stringify(data));
-              if (
-                data.length > 0 &&
-                (!geminiModel || !data.find((m: any) => m.id === geminiModel))
-              ) {
-                setGeminiModel(data[0].id);
-              }
-            }
+          const models = await fetchAndCacheModels('Gemini', acc.email, port);
+          if (models.length > 0) {
+            setGeminiModelsList(models);
+            if (!geminiModel) setGeminiModel(models[0].id);
           }
         } else if (selectedProvider === 'HuggingChat') {
-          const res = await fetch(
-            `http://localhost:${port}/v1/huggingchat/models?email=${encodeURIComponent(acc.email)}`,
-          );
-          if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data)) {
-              setHuggingChatModelsList(data);
-              if (
-                data.length > 0 &&
-                (!huggingChatModel || !data.find((m: any) => m.id === huggingChatModel))
-              ) {
-                setHuggingChatModel(data[0].id);
-              }
-            }
+          const cached = getCachedModels('HuggingChat');
+          if (cached && cached.length > 0) {
+            setHuggingChatModelsList(cached);
+            if (!huggingChatModel) setHuggingChatModel(cached[0].id);
+          }
+          const models = await fetchAndCacheModels('HuggingChat', acc.email, port);
+          if (models.length > 0) {
+            setHuggingChatModelsList(models);
+            if (!huggingChatModel) setHuggingChatModel(models[0].id);
           }
         } else if (selectedProvider === 'LMArena') {
-          const res = await fetch(
-            `http://localhost:${port}/v1/lmarena/models?email=${encodeURIComponent(acc.email)}`,
-          );
-          if (res.ok) {
-            const json = await res.json();
-            if (json.data && Array.isArray(json.data)) {
-              const models = json.data.map((m: any) => ({ id: m.id, name: m.name }));
-              setGroqModels(models); // Using groqModels state for LMArena as in original
-              if (
-                models.length > 0 &&
-                (!groqModel || !models.find((m: any) => m.id === groqModel))
-              ) {
-                setGroqModel(models[0].id);
-              }
-            }
+          const cached = getCachedModels('LMArena');
+          if (cached && cached.length > 0) {
+            setGroqModels(cached);
+            if (!groqModel) setGroqModel(cached[0].id);
+          }
+          const models = await fetchAndCacheModels('LMArena', acc.email, port);
+          if (models.length > 0) {
+            setGroqModels(models);
+            if (!groqModel) setGroqModel(models[0].id);
+          }
+        } else if (selectedProvider === 'DeepSeek') {
+          const cached = getCachedModels('DeepSeek');
+          if (cached && cached.length > 0 && !deepseekModel) {
+            setDeepseekModel(cached[0].id);
+          }
+          const models = await fetchAndCacheModels('DeepSeek', acc.email, port);
+          if (models.length > 0 && !deepseekModel) {
+            setDeepseekModel(models[0].id);
+          }
+        } else if (selectedProvider === 'Claude') {
+          const cached = getCachedModels('Claude');
+          if (cached && cached.length > 0 && !claudeModel) {
+            setClaudeModel(cached[0].id);
+          }
+          const models = await fetchAndCacheModels('Claude', acc.email, port);
+          if (models.length > 0 && !claudeModel) {
+            setClaudeModel(models[0].id);
           }
         }
       } catch (error) {
@@ -420,7 +396,7 @@ export const usePlaygroundLogic = ({
       }
     };
     fetchModels();
-  }, [selectedProvider, selectedAccount, accounts]); // geminiModel etc deps removed to avoid infinite loops, simplistic approach
+  }, [selectedProvider, selectedAccount, accounts]);
 
   // Fetch History
   useEffect(() => {
@@ -497,6 +473,12 @@ export const usePlaygroundLogic = ({
         if (att.fileId) uploadedFileIds.push(att.fileId);
       });
 
+      // Helper to get model ID for providers without explicit state
+      const getProviderModel = (providerId: string): string => {
+        const cached = getCachedModels(providerId);
+        return cached && cached.length > 0 ? cached[0].id : '';
+      };
+
       const response = await fetch(url, {
         signal: controller.signal,
         method: 'POST',
@@ -506,13 +488,13 @@ export const usePlaygroundLogic = ({
             account.provider === 'Claude'
               ? claudeModel
               : account.provider === 'Mistral'
-                ? 'mistral-large-latest'
+                ? getProviderModel('Mistral')
                 : account.provider === 'Kimi'
-                  ? 'moonshot-v1-8k'
+                  ? getProviderModel('Kimi')
                   : account.provider === 'Qwen'
-                    ? 'qwen-max'
+                    ? getProviderModel('Qwen')
                     : account.provider === 'Cohere'
-                      ? 'command-r7b-12-2024'
+                      ? getProviderModel('Cohere')
                       : account.provider === 'Groq'
                         ? groqModel
                         : account.provider === 'Antigravity'
@@ -529,7 +511,10 @@ export const usePlaygroundLogic = ({
             { role: 'user', content: currentInput },
           ],
           stream: true,
-          thinking: account.provider === 'DeepSeek' ? thinkingEnabled : undefined,
+          thinking:
+            account.provider === 'DeepSeek'
+              ? deepseekModel === 'deepseek-reasoner' || thinkingEnabled
+              : undefined,
           search: account.provider === 'DeepSeek' ? searchEnabled : undefined,
           ref_file_ids: uploadedFileIds.length > 0 ? uploadedFileIds : undefined,
           conversation_id: activeChatId !== 'new-session' ? activeChatId : undefined,

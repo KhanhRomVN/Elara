@@ -3,6 +3,7 @@ import { IpcRendererEvent } from 'electron';
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface API {
+  shell: any;
   accounts: {
     getAll: () => Promise<any[]>;
     getById: (id: string) => Promise<any>;

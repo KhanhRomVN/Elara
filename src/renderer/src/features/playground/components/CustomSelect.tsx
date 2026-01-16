@@ -49,7 +49,7 @@ export const CustomSelect = ({
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
         className={cn(
-          'h-10 w-fit min-w-[140px] flex items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all hover:bg-accent/50',
+          'h-10 w-fit min-w-[140px] flex items-center justify-between gap-4 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-0 focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 transition-all hover:bg-accent/50',
           !value && 'text-muted-foreground',
           disabled && 'opacity-50 cursor-not-allowed',
         )}
@@ -69,7 +69,7 @@ export const CustomSelect = ({
       {isOpen && (
         <div className="absolute z-50 mt-1 flex flex-row items-start">
           <div className="max-h-60 w-max min-w-full overflow-auto rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2">
-            <div className="p-1">
+            <div className="p-1 space-y-1">
               {options.map((option) => (
                 <div
                   key={option.value}

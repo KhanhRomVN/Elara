@@ -242,70 +242,38 @@ export const InputArea = ({
             onPaste={handlePaste}
             disabled={disabled || loading || isStreaming}
             placeholder={placeholder}
-            className="w-full min-h-[50px] border-none bg-transparent px-4 py-3 text-base focus:outline-none focus:ring-0 resize-none custom-scrollbar disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full min-h-[80px] border-none bg-transparent px-4 py-3 text-base focus:outline-none focus:ring-0 resize-none custom-scrollbar disabled:opacity-50 disabled:cursor-not-allowed"
             rows={1}
           />
 
           {/* Bottom Actions Bar */}
-          <div className="flex justify-between items-center px-2 pb-2 pl-3">
+          <div className="flex justify-between items-center px-4 pb-3">
             <div className="flex gap-2 items-center">
-              {selectedProvider === 'DeepSeek' ? (
-                <>
-                  <button
-                    onClick={() => setThinkingEnabled?.(!thinkingEnabled)}
-                    className={cn(
-                      'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border',
-                      thinkingEnabled
-                        ? 'bg-blue-500/10 text-blue-500 border-blue-500/20 hover:bg-blue-500/20'
-                        : 'bg-muted/30 text-muted-foreground border-transparent hover:bg-muted/50 hover:text-foreground',
-                    )}
-                  >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    DeepThink
-                  </button>
-                  <button
-                    onClick={() => setSearchEnabled?.(!searchEnabled)}
-                    className={cn(
-                      'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border',
-                      searchEnabled
-                        ? 'bg-blue-500/10 text-blue-500 border-blue-500/20 hover:bg-blue-500/20'
-                        : 'bg-muted/30 text-muted-foreground border-transparent hover:bg-muted/50 hover:text-foreground',
-                    )}
-                  >
-                    <Globe className="h-3.5 w-3.5" />
-                    Search
-                  </button>
-                </>
-              ) : (
-                <div className="flex gap-1">
-                  <button
-                    className="p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted/50 transition-colors"
-                    title="Add"
-                  >
-                    <Plus className="h-5 w-5" />
-                  </button>
-                  <button
-                    onClick={handleUploadClick}
-                    className="p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted/50 transition-colors"
-                    title="Upload"
-                  >
-                    <Upload className="h-5 w-5" />
-                  </button>
-                </div>
+              <button
+                onClick={handleUploadClick}
+                className="p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted/50 transition-colors"
+                title="Upload"
+              >
+                <Upload className="h-5 w-5" />
+              </button>
+
+              {selectedProvider === 'DeepSeek' && (
+                <button
+                  onClick={() => setSearchEnabled?.(!searchEnabled)}
+                  className={cn(
+                    'p-2 rounded-full transition-colors',
+                    searchEnabled
+                      ? 'bg-blue-500/10 text-blue-500 hover:bg-blue-500/20'
+                      : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+                  )}
+                  title="Search"
+                >
+                  <Globe className="h-5 w-5" />
+                </button>
               )}
             </div>
 
             <div className="flex items-center gap-2">
-              {selectedProvider === 'DeepSeek' && (
-                <button
-                  onClick={handleUploadClick}
-                  className="p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted/50 transition-colors"
-                  title="Upload"
-                >
-                  <Upload className="h-5 w-5" />
-                </button>
-              )}
-
               {(loading || isStreaming) && handleStop ? (
                 <button
                   onClick={handleStop}

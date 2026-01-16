@@ -1,18 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { User } from 'lucide-react';
 
-import claudeIcon from '../../assets/provider_icons/claude.svg';
-import deepseekIcon from '../../assets/provider_icons/deepseek.svg';
-import mistralIcon from '../../assets/provider_icons/mistral.svg';
-import kimiIcon from '../../assets/provider_icons/kimi.svg';
-import qwenIcon from '../../assets/provider_icons/qwen.svg';
-import cohereIcon from '../../assets/provider_icons/cohere.svg';
-import perplexityIcon from '../../assets/provider_icons/perplexity.svg';
-import groqIcon from '../../assets/provider_icons/groq.svg';
-import geminiIcon from '../../assets/provider_icons/gemini.svg';
-import antigravityIcon from '../../assets/provider_icons/antigravity.svg';
-import huggingChatIcon from '../../assets/provider_icons/huggingface.svg';
-import lmarenaIcon from '../../assets/provider_icons/lmarena.svg';
+import { providers } from '../../config/providers';
 
 import { GroqModelSelector } from './components/GroqModelSelector';
 import { AntigravityModelSelector } from './components/AntigravityModelSelector';
@@ -20,6 +9,7 @@ import { GeminiModelSelector } from './components/GeminiModelSelector';
 import { HuggingChatModelSelector } from './components/HuggingChatModelSelector';
 import { LMArenaModelSelector } from './components/LMArenaModelSelector';
 import { CustomSelect } from './components/CustomSelect';
+import { getStaticModels } from '../../config/static-models';
 
 import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
@@ -184,20 +174,9 @@ export const PlaygroundPage = ({
                       setSelectedAccount('');
                     }
                   }}
-                  options={[
-                    { value: 'DeepSeek', label: 'DeepSeek', icon: deepseekIcon },
-                    { value: 'Claude', label: 'Claude', icon: claudeIcon },
-                    { value: 'Mistral', label: 'Mistral', icon: mistralIcon },
-                    { value: 'Kimi', label: 'Kimi', icon: kimiIcon },
-                    { value: 'Qwen', label: 'Qwen', icon: qwenIcon },
-                    { value: 'Cohere', label: 'Cohere', icon: cohereIcon },
-                    { value: 'Perplexity', label: 'Perplexity', icon: perplexityIcon },
-                    { value: 'Groq', label: 'Groq', icon: groqIcon },
-                    { value: 'Antigravity', label: 'Antigravity', icon: antigravityIcon },
-                    { value: 'Gemini', label: 'Gemini', icon: geminiIcon },
-                    { value: 'HuggingChat', label: 'HuggingChat', icon: huggingChatIcon },
-                    { value: 'LMArena', label: 'LMArena', icon: lmarenaIcon },
-                  ]}
+                  options={providers
+                    .filter((p) => p.active)
+                    .map((p) => ({ value: p.id, label: p.name, icon: p.icon }))}
                   placeholder="Select Provider"
                 />
                 {selectedProvider && (
@@ -221,20 +200,6 @@ export const PlaygroundPage = ({
                       placeholder="Select Account"
                       disabled={!selectedProvider}
                     />
-
-                    {selectedProvider === 'Claude' && (
-                      <div className="w-[300px]">
-                        <CustomSelect
-                          value={claudeModel}
-                          onChange={setClaudeModel}
-                          options={[
-                            { value: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5' },
-                            { value: 'claude-opus-4-5-20251101', label: 'Claude Opus 4.5' },
-                          ]}
-                          placeholder="Select Model"
-                        />
-                      </div>
-                    )}
 
                     {selectedProvider === 'Groq' && selectedAccount && (
                       <div className="space-y-4">
@@ -285,18 +250,28 @@ export const PlaygroundPage = ({
                       </div>
                     )}
 
+                    {selectedProvider === 'Claude' && (
+                      <CustomSelect
+                        value={claudeModel}
+                        onChange={setClaudeModel}
+                        options={getStaticModels('Claude').map((m) => ({
+                          value: m.id,
+                          label: m.name,
+                        }))}
+                        placeholder="Select Claude Model"
+                      />
+                    )}
+
                     {selectedProvider === 'DeepSeek' && (
                       <div className="w-[300px]">
                         <CustomSelect
                           value={deepseekModel}
                           onChange={setDeepseekModel}
-                          options={[
-                            {
-                              value: 'deepseek-ai/DeepSeek-V3.2',
-                              label: 'deepseek-ai/DeepSeek-V3.2',
-                            },
-                          ]}
-                          placeholder="Select Model"
+                          options={getStaticModels('DeepSeek').map((m) => ({
+                            value: m.id,
+                            label: m.name,
+                          }))}
+                          placeholder="Select DeepSeek Model"
                         />
                       </div>
                     )}

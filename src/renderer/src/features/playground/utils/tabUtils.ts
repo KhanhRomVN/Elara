@@ -14,13 +14,13 @@ export const createDefaultTab = (id?: string): ConversationTab => {
     selectedProvider: '',
     selectedAccount: '',
 
-    // Model selections
-    claudeModel: 'claude-sonnet-4-5-20250929',
-    groqModel: 'openai/gpt-oss-120b',
-    antigravityModel: 'models/gemini-3-pro-preview',
-    geminiModel: 'fbb127bbb056c959',
+    // Model selections - will be populated dynamically from cache
+    claudeModel: '',
+    groqModel: '',
+    antigravityModel: '',
+    geminiModel: '',
     huggingChatModel: '',
-    deepseekModel: 'deepseek-ai/DeepSeek-V3.2',
+    deepseekModel: '',
 
     // UI state
     input: '',

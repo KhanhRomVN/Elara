@@ -1,84 +1,130 @@
 import { useState, useEffect } from 'react';
-import { ChevronDown, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
+import { Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
+import { providers } from '../../config/providers';
+import {
+  getCachedModels,
+  fetchAndCacheModels,
+  startBackgroundSync,
+  stopBackgroundSync,
+  Model,
+} from '../../utils/model-cache';
 
-interface Model {
+interface Account {
   id: string;
-  object: string;
-  created: number;
-  owned_by: string;
-  description?: string;
+  provider: string;
+  email: string;
+  status: 'Active' | 'Rate Limit' | 'Error';
 }
 
-interface GroupedModels {
-  [provider: string]: Model[];
+interface ProviderModels {
+  providerId: string;
+  providerName: string;
+  models: string[];
+  error?: string;
+  loading?: boolean;
 }
 
 export const ModelsPage = () => {
-  const [models, setModels] = useState<Model[]>([]);
+  const [providerModels, setProviderModels] = useState<ProviderModels[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [expandedProviders, setExpandedProviders] = useState<Set<string>>(new Set());
+  const [globalError, setGlobalError] = useState<string | null>(null);
 
-  const fetchModels = async () => {
+  const fetchAllData = async (useCache = true) => {
     setLoading(true);
-    setError(null);
+    setGlobalError(null);
     try {
       // @ts-ignore
-      const status = await window.api.server.start();
-      const port = status.port || 11434;
+      const accounts: Account[] = await window.api.accounts.getAll();
 
-      const response = await fetch(`http://localhost:${port}/v1/models`);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+      // @ts-ignore
+      const serverStatus = await window.api.server.start();
+      const port = serverStatus.port || 11434;
+
+      const activeProviders = providers.filter((p) => p.active);
+      const results: ProviderModels[] = [];
+
+      for (const provider of activeProviders) {
+        const pModels: ProviderModels = {
+          providerId: provider.id,
+          providerName: provider.name,
+          models: [],
+        };
+
+        try {
+          // Find account for this provider
+          const account =
+            accounts.find((a) => a.provider === provider.id && a.status === 'Active') ||
+            accounts.find((a) => a.provider === provider.id);
+
+          if (!account) {
+            // Some providers need accounts to fetch models
+            if (
+              ['Groq', 'Antigravity', 'Gemini', 'HuggingChat', 'LMArena', 'DeepSeek'].includes(
+                provider.id,
+              )
+            ) {
+              pModels.error = 'No connected account';
+            }
+          } else {
+            // Try cache first if useCache is true
+            if (useCache) {
+              const cached = getCachedModels(provider.id);
+              if (cached && cached.length > 0) {
+                pModels.models = cached.map((m) => m.id);
+                results.push(pModels);
+                continue; // Skip to next provider, background sync will update
+              }
+            }
+
+            // Fetch from API
+            const fetchedModels = await fetchAndCacheModels(provider.id, account.email, port);
+            if (fetchedModels.length > 0) {
+              pModels.models = fetchedModels.map((m) => m.id);
+            } else {
+              // If fetch failed but we have cache, use it
+              const cached = getCachedModels(provider.id);
+              if (cached && cached.length > 0) {
+                pModels.models = cached.map((m) => m.id);
+              }
+            }
+          }
+        } catch (err: any) {
+          console.error(`Failed to fetch models for ${provider.id}:`, err);
+          pModels.error = err.message || 'Failed to fetch';
+
+          // Try cache as fallback
+          const cached = getCachedModels(provider.id);
+          if (cached && cached.length > 0) {
+            pModels.models = cached.map((m) => m.id);
+            delete pModels.error; // Clear error if we have cached data
+          }
+        }
+
+        results.push(pModels);
       }
 
-      const data = await response.json();
-      setModels(data.data || []);
+      setProviderModels(results);
+
+      // Start background sync
+      startBackgroundSync(accounts, port);
     } catch (err: any) {
-      setError(err.message || 'Failed to load models');
-      setModels([]);
+      setGlobalError(err.message || 'Failed to initialize');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchModels();
+    fetchAllData();
+
+    // Cleanup background sync on unmount
+    return () => {
+      stopBackgroundSync();
+    };
   }, []);
 
-  const groupedModels: GroupedModels = models.reduce((acc, model) => {
-    const provider = model.owned_by || 'unknown';
-    if (!acc[provider]) {
-      acc[provider] = [];
-    }
-    acc[provider].push(model);
-    return acc;
-  }, {} as GroupedModels);
-
-  const toggleProvider = (provider: string) => {
-    const newExpanded = new Set(expandedProviders);
-    if (newExpanded.has(provider)) {
-      newExpanded.delete(provider);
-    } else {
-      newExpanded.add(provider);
-    }
-    setExpandedProviders(newExpanded);
-  };
-
-  const handleRefresh = async () => {
-    try {
-      // @ts-ignore
-      const status = await window.api.server.start();
-      const port = status.port || 11434;
-
-      await fetch(`http://localhost:${port}/v1/models/refresh`, {
-        method: 'POST',
-      });
-
-      await fetchModels();
-    } catch (err: any) {
-      setError(err.message || 'Failed to refresh models');
-    }
+  const handleRefresh = () => {
+    fetchAllData(false); // Force refresh from API, skip cache
   };
 
   if (loading) {
@@ -92,13 +138,13 @@ export const ModelsPage = () => {
     );
   }
 
-  if (error) {
+  if (globalError) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
-          <p className="text-red-500 mb-4">{error}</p>
+          <p className="text-red-500 mb-4">{globalError}</p>
           <button
-            onClick={fetchModels}
+            onClick={() => fetchAllData()}
             className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
           >
             Retry
@@ -129,66 +175,38 @@ export const ModelsPage = () => {
 
       {/* Models List */}
       <div className="flex-1 overflow-y-auto p-6">
-        {Object.keys(groupedModels).length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground">No models available</p>
-            <p className="text-sm text-muted-foreground mt-2">
-              Make sure your models.json file is properly configured
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {Object.entries(groupedModels)
-              .sort(([a], [b]) => a.localeCompare(b))
-              .map(([provider, providerModels]) => (
-                <div key={provider} className="border border-border rounded-lg overflow-hidden">
-                  {/* Provider Header */}
-                  <button
-                    onClick={() => toggleProvider(provider)}
-                    className="w-full flex items-center justify-between p-4 bg-muted/30 hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      {expandedProviders.has(provider) ? (
-                        <ChevronDown className="w-5 h-5 text-muted-foreground" />
-                      ) : (
-                        <ChevronRight className="w-5 h-5 text-muted-foreground" />
-                      )}
-                      <h2 className="text-lg font-semibold capitalize">{provider}</h2>
-                      <span className="text-sm text-muted-foreground">
-                        ({providerModels.length} models)
-                      </span>
-                    </div>
-                  </button>
+        <div className="space-y-6">
+          {providerModels.map((pm) => (
+            <div key={pm.providerId} className="space-y-2">
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold">{pm.providerName}</h2>
+                <span className="text-xs text-muted-foreground border px-1.5 py-0.5 rounded">
+                  {pm.providerId}
+                </span>
+              </div>
 
-                  {/* Models List */}
-                  {expandedProviders.has(provider) && (
-                    <div className="divide-y divide-border">
-                      {providerModels.map((model) => (
-                        <div key={model.id} className="p-4 hover:bg-muted/20 transition-colors">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <h3 className="font-mono text-sm font-medium">{model.id}</h3>
-                              {model.description && (
-                                <p className="text-sm text-muted-foreground mt-1">
-                                  {model.description}
-                                </p>
-                              )}
-                              <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
-                                <span>Type: {model.object}</span>
-                                <span>
-                                  Created: {new Date(model.created * 1000).toLocaleDateString()}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+              {pm.loading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground ml-2">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Loading...
                 </div>
-              ))}
-          </div>
-        )}
+              ) : pm.error ? (
+                <div className="flex items-center gap-2 text-sm text-amber-500 ml-2">
+                  <AlertTriangle className="h-3 w-3" /> {pm.error}
+                </div>
+              ) : pm.models.length > 0 ? (
+                <ul className="list-disc list-inside text-sm text-muted-foreground ml-2">
+                  {pm.models.map((modelId) => (
+                    <li key={modelId} className="font-mono">
+                      {modelId}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground italic ml-2">No models available.</p>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

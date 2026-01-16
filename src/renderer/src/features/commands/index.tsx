@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Terminal } from 'lucide-react';
 import { CommandConfig } from './types';
+import { getCachedModels } from '../../utils/model-cache';
 
 // Hardcoded commands
 const commands: CommandConfig[] = [
@@ -65,7 +66,24 @@ Diff:
         }
         const port = serverStatus.port;
 
-        // 5. Generate AI Message
+        // 5. Get dynamic model ID from cache
+        const getProviderModel = (providerId: string): string => {
+          const cached = getCachedModels(providerId);
+          return cached && cached.length > 0 ? cached[0].id : '';
+        };
+
+        const modelId =
+          selectedAccount.provider === 'Claude'
+            ? getProviderModel('Claude')
+            : selectedAccount.provider === 'DeepSeek'
+              ? getProviderModel('DeepSeek')
+              : '';
+
+        if (!modelId) {
+          return `⚠️  No model available for ${selectedAccount.provider}. Please load models first.`;
+        }
+
+        // 6. Generate AI Message
         const diff = status.slice(0, 6000); // Limit diff size
         const promptText = `
 You are an expert developer. Please analyze the following git diff and generate a concise, conventional commit message.
@@ -95,10 +113,7 @@ ${diff}
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              model:
-                selectedAccount.provider === 'Claude'
-                  ? 'claude-3-5-sonnet-20241022'
-                  : 'deepseek-chat',
+              model: modelId,
               messages: [{ role: 'user', content: promptText }],
               stream: false, // Simple non-streaming request
               thinking: false, // Disable thinking for commit messages
