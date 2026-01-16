@@ -6,9 +6,39 @@ import { join } from 'path';
 import { spawn, execSync } from 'child_process';
 import fs from 'fs';
 import { startProxy, stopProxy, proxyEvents } from './proxy';
+import { randomBytes } from 'crypto';
 
 const USER_AGENT =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36';
+
+// Manual UUIDv7 generator (time-based UUID)
+const uuidv7 = (): string => {
+  const timestamp = Date.now();
+  const bytes = randomBytes(16);
+
+  // Set timestamp (48 bits = 6 bytes)
+  // JS bitwise operators truncate to 32 bits, so we use math instead
+  bytes[0] = Math.floor(timestamp / 0x10000000000) & 0xff;
+  bytes[1] = Math.floor(timestamp / 0x100000000) & 0xff;
+  bytes[2] = Math.floor(timestamp / 0x1000000) & 0xff;
+  bytes[3] = Math.floor(timestamp / 0x10000) & 0xff;
+  bytes[4] = Math.floor(timestamp / 0x100) & 0xff;
+  bytes[5] = timestamp & 0xff;
+
+  // Set version 7 (4 bits)
+  bytes[6] = (bytes[6] & 0x0f) | 0x70;
+
+  // Set variant (2 bits)
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+  return [
+    bytes.subarray(0, 4).toString('hex'),
+    bytes.subarray(4, 6).toString('hex'),
+    bytes.subarray(6, 8).toString('hex'),
+    bytes.subarray(8, 10).toString('hex'),
+    bytes.subarray(10, 16).toString('hex'),
+  ].join('-');
+};
 
 // Helper to get cookies from account
 const getCookies = (account: Account) => {
@@ -404,9 +434,8 @@ export const chatCompletionStream = (req: Request, res: Response, account: Accou
   const lastMessage = messages[messages.length - 1];
   const userContent = lastMessage.content;
 
-  const crypto = require('crypto');
-  const newMsgId = crypto.randomUUID();
-  const sessionId = conversation_id || crypto.randomUUID();
+  const newMsgId = uuidv7();
+  const sessionId = conversation_id || uuidv7();
 
   const isNewChat = !conversation_id;
   const url = isNewChat
@@ -418,7 +447,7 @@ export const chatCompletionStream = (req: Request, res: Response, account: Accou
     mode: 'direct', // We only support direct chat for now?
     modelAId: model, // This MUST be the UUID of the model
     userMessageId: newMsgId,
-    modelAMessageId: crypto.randomUUID(), // Always new UUID for the upcoming response
+    modelAMessageId: uuidv7(), // Always new UUID for the upcoming response
     ...(isNewChat ? { modality: 'chat' } : {}),
     userMessage: {
       content: userContent,
@@ -440,18 +469,47 @@ export const chatCompletionStream = (req: Request, res: Response, account: Accou
     url,
   });
 
-  request.setHeader('Cookie', cookies);
-  request.setHeader('Content-Type', 'text/plain;charset=UTF-8');
-  request.setHeader('User-Agent', USER_AGENT);
-  request.setHeader('Origin', 'https://lmarena.ai');
-  request.setHeader('Referer', `https://lmarena.ai/c/${sessionId}`);
+  const headers = {
+    Cookie: cookies,
+    'Content-Type': 'text/plain;charset=UTF-8',
+    'User-Agent': USER_AGENT,
+    Origin: 'https://lmarena.ai',
+    Referer: `https://lmarena.ai/c/${sessionId}`,
+  };
 
-  request.write(JSON.stringify(payload));
+  request.setHeader('Cookie', headers.Cookie);
+  request.setHeader('Content-Type', headers['Content-Type']);
+  request.setHeader('User-Agent', headers['User-Agent']);
+  request.setHeader('Origin', headers.Origin);
+  request.setHeader('Referer', headers.Referer);
+
+  const payloadStr = JSON.stringify(payload);
+
+  console.log('[LMArena] Sending Request:', {
+    url,
+    headers: { ...headers, Cookie: '***' }, // Hide cookie in logs
+    payload,
+  });
+
+  request.write(payloadStr);
   request.on('response', (response: Electron.IncomingMessage) => {
     // Check status
     if (response.statusCode !== 200) {
       console.error('[LMArena] API Error:', response.statusCode, response.statusMessage);
-      res.status(response.statusCode || 500).json({ error: 'Upstream Error' });
+
+      // Read error body
+      let errData = '';
+      response.on('data', (chunk) => {
+        errData += chunk.toString();
+      });
+      response.on('end', () => {
+        console.error('[LMArena] Error Response Body:', errData);
+        res.status(response.statusCode || 500).json({
+          error: 'Upstream Error',
+          details: errData,
+          statusCode: response.statusCode,
+        });
+      });
       return;
     }
 

@@ -198,6 +198,7 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
       color: 'bg-orange-500/10 text-orange-500 border-orange-200/20',
       loginMethod: 'Direct / Google',
       browserType: 'Electron Window',
+      authMethod: 'OAuth',
     },
     {
       id: 'DeepSeek',
@@ -207,8 +208,8 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
       color: 'bg-blue-500/10 text-blue-500 border-blue-200/20',
       loginMethod: 'Direct / Google',
       browserType: 'Electron Window',
+      authMethod: 'Basic',
     },
-
     {
       id: 'Mistral',
       name: 'Mistral',
@@ -217,6 +218,7 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
       color: 'bg-yellow-500/10 text-yellow-500 border-yellow-200/20',
       loginMethod: 'Direct / Google',
       browserType: 'Electron Window',
+      authMethod: 'Basic',
     },
     {
       id: 'Kimi',
@@ -226,6 +228,7 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
       color: 'bg-indigo-500/10 text-indigo-500 border-indigo-200/20',
       loginMethod: 'Mobile / OTP',
       browserType: 'Electron Window',
+      authMethod: 'Basic',
     },
     {
       id: 'Qwen',
@@ -235,6 +238,7 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
       color: 'bg-purple-500/10 text-purple-500 border-purple-200/20',
       loginMethod: 'Direct',
       browserType: 'Electron Window',
+      authMethod: 'Basic',
     },
     {
       id: 'Cohere',
@@ -244,6 +248,7 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
       color: 'bg-teal-500/10 text-teal-500 border-teal-200/20',
       loginMethod: 'Direct',
       browserType: 'Electron Window',
+      authMethod: 'Basic',
     },
     {
       id: 'Perplexity',
@@ -253,6 +258,7 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
       color: 'bg-cyan-500/10 text-cyan-500 border-cyan-200/20',
       loginMethod: 'Google',
       browserType: 'Real Browser',
+      authMethod: 'Basic',
     },
     {
       id: 'Groq',
@@ -262,6 +268,7 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
       color: 'bg-orange-600/10 text-orange-600 border-orange-300/20',
       loginMethod: 'Google / Email',
       browserType: 'Real Browser',
+      authMethod: 'Basic',
     },
     {
       id: 'Gemini',
@@ -271,6 +278,7 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
       color: 'bg-sky-500/10 text-sky-500 border-sky-200/20',
       loginMethod: 'Google',
       browserType: 'Real Browser',
+      authMethod: 'OAuth',
     },
     {
       id: 'Antigravity',
@@ -280,6 +288,7 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
       color: 'bg-purple-500/10 text-purple-500 border-purple-200/20',
       loginMethod: 'Google OAuth',
       browserType: 'Auth Server',
+      authMethod: 'OAuth',
     },
     {
       id: 'HuggingChat',
@@ -289,6 +298,7 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
       color: 'bg-amber-500/10 text-amber-500 border-amber-200/20',
       loginMethod: 'Direct / Google',
       browserType: 'Electron Window',
+      authMethod: 'Basic',
     },
     {
       id: 'LMArena',
@@ -298,6 +308,7 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
       color: 'bg-emerald-500/10 text-emerald-500 border-emerald-200/20',
       loginMethod: 'Direct / Google',
       browserType: 'Electron Window',
+      authMethod: 'Basic',
     },
   ];
 
@@ -572,7 +583,20 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
                           <img src={p.icon} alt={p.name} className="w-5 h-5" />
                         </div>
                         <div>
-                          <h4 className="font-medium text-sm">{p.name}</h4>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-medium text-sm">{p.name}</h4>
+                            <span
+                              className={`text-[10px] px-1.5 py-0.5 rounded-full border ${
+                                // @ts-ignore
+                                p.authMethod === 'OAuth'
+                                  ? 'bg-blue-500/10 text-blue-500 border-blue-500/20'
+                                  : 'bg-muted text-muted-foreground border-border'
+                              }`}
+                            >
+                              {/* @ts-ignore */}
+                              {p.authMethod}
+                            </span>
+                          </div>
                           <p className="text-[10px] text-muted-foreground">{p.description}</p>
                         </div>
                       </div>
