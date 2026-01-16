@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Code, Book, Database } from 'lucide-react';
+import { Code, Book, Database, MessageSquare } from 'lucide-react';
 import { CodeBlock } from '@renderer/core/components/CodeBlock';
 import { cn } from '../../shared/lib/utils';
 import { ProviderReference } from './components/ProviderReference';
+import { MessagingReference } from './components/MessagingReference';
 
 interface APIEndpoint {
   path: string;
@@ -286,7 +287,9 @@ const apiEndpoints: APIEndpoint[] = [
 ];
 
 export default function TutorialPage() {
-  const [activeSection, setActiveSection] = useState<'endpoints' | 'providers'>('endpoints');
+  const [activeSection, setActiveSection] = useState<'endpoints' | 'providers' | 'messaging'>(
+    'endpoints',
+  );
 
   return (
     <div className="h-full flex flex-col bg-background p-4 gap-4">
@@ -322,6 +325,17 @@ export default function TutorialPage() {
             <Database className="w-4 h-4" />
             <span className="font-medium">Provider API Reference</span>
           </button>
+
+          <button
+            onClick={() => setActiveSection('messaging')}
+            className={cn(
+              'w-full p-2 text-left hover:bg-muted/50 rounded-md transition-colors flex items-center gap-2',
+              activeSection === 'messaging' ? 'bg-muted/50 text-primary' : 'text-muted-foreground',
+            )}
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span className="font-medium">Messaging API</span>
+          </button>
         </div>
 
         {/* Center Content + Right Sidebar */}
@@ -329,6 +343,10 @@ export default function TutorialPage() {
           {activeSection === 'providers' ? (
             <div className="flex-1 overflow-y-auto scroll-smooth">
               <ProviderReference />
+            </div>
+          ) : activeSection === 'messaging' ? (
+            <div className="flex-1 overflow-y-auto scroll-smooth">
+              <MessagingReference />
             </div>
           ) : (
             <>
