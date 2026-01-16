@@ -17,6 +17,8 @@ import {
 } from '../server/hugging-chat';
 import { login as lmArenaLogin } from '../server/lmarena';
 import { AntigravityAuthServer } from '../server/antigravity';
+import { login as loginStepFun } from '../server/stepfun';
+
 import { proxyEvents } from '../server/proxy';
 
 const DATA_FILE = path.join(app.getPath('userData'), 'accounts.json');
@@ -42,6 +44,7 @@ export interface Account {
     | 'Gemini'
     | 'Antigravity'
     | 'HuggingChat'
+    | 'StepFun'
     | 'LMArena';
 
   email: string;
@@ -263,6 +266,7 @@ export const setupAccountsHandlers = () => {
         | 'Gemini'
         | 'Perplexity'
         | 'HuggingChat'
+        | 'StepFun'
         | 'LMArena',
     ) => {
       return new Promise(async (resolve) => {
@@ -566,6 +570,37 @@ export const setupAccountsHandlers = () => {
             resolve({ success: true, account: newAccount });
           } catch (e: any) {
             resolve({ success: false, error: e.message || 'LMArena login failed' });
+          }
+          return;
+        }
+
+        if (provider === 'StepFun') {
+          try {
+            console.log('[Accounts] Starting StepFun login flow (Real Browser)...');
+            const { cookies, email } = await loginStepFun();
+            console.log('[Accounts] StepFun login success. Email:', email);
+
+            const newAccount: Account = {
+              id: crypto.randomUUID(),
+              provider: 'StepFun',
+              email: email || 'stepfun@user.com',
+              credential: cookies,
+              status: 'Active',
+              usage: '0',
+              totalRequests: 0,
+              successfulRequests: 0,
+              totalDuration: 0,
+              tokensToday: 0,
+              statsDate: new Date().toISOString().split('T')[0],
+              lastActive: new Date().toISOString(),
+              userAgent,
+              name: 'StepFun User',
+            };
+
+            saveAccount(newAccount);
+            resolve({ success: true, account: newAccount });
+          } catch (e: any) {
+            resolve({ success: false, error: e.message || 'StepFun login failed' });
           }
           return;
         }
@@ -912,6 +947,11 @@ export const setupAccountsHandlers = () => {
       console.error('[Accounts] Antigravity Token Add Error:', error);
       return { success: false, error: error.message };
     }
+  });
+
+  ipcMain.handle('accounts:stepfun:login', async (_, {}: { email: string; code: string }) => {
+    // Deprecated handler - kept just in case but shouldn't be called by frontend anymore
+    return { success: false, error: "Please use the 'Login with StepFun' button instead." };
   });
 
   ipcMain.handle(

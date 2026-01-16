@@ -157,6 +157,20 @@ export const startProxy = (): Promise<void> => {
             proxyEvents.emit('lmarena-cookies', reqCookies);
           }
         }
+
+        // StepFun
+        if (host.includes('stepfun.ai')) {
+          const reqCookies = ctx.clientToProxyRequest.headers.cookie;
+          if (
+            reqCookies &&
+            reqCookies.includes('Oasis-Token=') &&
+            reqCookies.includes('Oasis-Webid=')
+          ) {
+            console.log(`[Proxy] Intercepting StepFun request: ${url}`);
+            console.log('[Proxy] Found tokens in StepFun Request Cookie!');
+            proxyEvents.emit('stepfun-cookies', reqCookies);
+          }
+        }
       }
       return callback();
     });
@@ -197,7 +211,12 @@ export const startProxy = (): Promise<void> => {
           (host.includes('huggingface.co') &&
             ctx.clientToProxyRequest.url.includes('/api/whoami-v2')) ||
           (host.includes('lmarena.ai') &&
-            ctx.clientToProxyRequest.url.includes('/nextjs-api/sign-in/email'))
+            ctx.clientToProxyRequest.url.includes('/nextjs-api/sign-in/email')) ||
+          (host.includes('stepfun.ai') &&
+            (ctx.clientToProxyRequest.url.includes('/SignInByEmail') ||
+              ctx.clientToProxyRequest.url.includes(
+                '/api/user/proto.api.user.v1.UserService/GetUser',
+              )))
         ) {
           const encoding = ctx.serverToProxyResponse.headers['content-encoding'];
           const contentType = ctx.serverToProxyResponse.headers['content-type'];
@@ -284,6 +303,34 @@ export const startProxy = (): Promise<void> => {
                     console.error('[Proxy] Failed to parse LMArena Login Response:', e);
                   }
                 }
+
+                // Logic for StepFun Login
+                if (
+                  host.includes('stepfun.ai') &&
+                  ctx.clientToProxyRequest.url.includes('/SignInByEmail')
+                ) {
+                  try {
+                    // Extract authenticated cookies from set-cookie header
+                    const setCookieHeader = ctx.serverToProxyResponse.headers['set-cookie'];
+                    if (setCookieHeader) {
+                      const cookies = Array.isArray(setCookieHeader)
+                        ? setCookieHeader
+                        : [setCookieHeader];
+                      console.log(
+                        '[Proxy] DEBUG - Set-Cookie headers:',
+                        JSON.stringify(cookies, null, 2),
+                      );
+                      const cookieStr = cookies.map((c) => c.split(';')[0]).join('; ');
+                      console.log('[Proxy] DEBUG - Combined cookie string:', cookieStr);
+                      console.log(
+                        '[Proxy] ✓ Captured StepFun authenticated cookies from login response!',
+                      );
+                      proxyEvents.emit('stepfun-authenticated-cookies', cookieStr);
+                    }
+                  } catch (e) {
+                    console.error('[Proxy] Failed to process StepFun Login Response:', e);
+                  }
+                }
               });
 
               decoder.on('error', (err: any) => {
@@ -332,6 +379,81 @@ export const startProxy = (): Promise<void> => {
                     console.error(
                       '[Proxy] Failed to parse HuggingChat User Info (Uncompressed):',
                       e,
+                    );
+                  }
+                }
+
+                // Logic for StepFun Login (Uncompressed)
+                if (
+                  host.includes('stepfun.ai') &&
+                  ctx.clientToProxyRequest.url.includes('/SignInByEmail')
+                ) {
+                  try {
+                    const setCookieHeader = ctx.serverToProxyResponse.headers['set-cookie'];
+                    if (setCookieHeader) {
+                      const cookies = Array.isArray(setCookieHeader)
+                        ? setCookieHeader
+                        : [setCookieHeader];
+                      console.log(
+                        '[Proxy] DEBUG - Set-Cookie headers (Uncompressed):',
+                        JSON.stringify(cookies, null, 2),
+                      );
+                      const cookieStr = cookies.map((c) => c.split(';')[0]).join('; ');
+                      console.log(
+                        '[Proxy] DEBUG - Combined cookie string (Uncompressed):',
+                        cookieStr,
+                      );
+                      console.log(
+                        '[Proxy] ✓ Captured StepFun authenticated cookies from login response! (Uncompressed)',
+                      );
+                      proxyEvents.emit('stepfun-authenticated-cookies', cookieStr);
+                    }
+                  } catch (e) {
+                    console.error(
+                      '[Proxy] Failed to process StepFun Login Response (Uncompressed):',
+                      e,
+                    );
+                  }
+                }
+
+                // Logic for StepFun User Info
+                if (
+                  host.includes('stepfun.ai') &&
+                  ctx.clientToProxyRequest.url.includes(
+                    '/api/user/proto.api.user.v1.UserService/GetUser',
+                  )
+                ) {
+                  try {
+                    // Log raw body length to ensure we have data
+                    console.log(`[Proxy] DEBUG - GetUser Body Length: ${body.length}`);
+                    // Log the first 200 chars to check format (it might be Protobuf, not JSON?)
+                    console.log(
+                      `[Proxy] DEBUG - GetUser Raw Body Start: ${body.substring(0, 200)}`,
+                    );
+
+                    const userInfo = JSON.parse(body);
+                    console.log(
+                      '[Proxy] DEBUG - Found StepFun User Info:',
+                      JSON.stringify(userInfo, null, 2),
+                    );
+
+                    if (userInfo && userInfo.data && userInfo.data.email) {
+                      console.log('[Proxy] ✓ Captured StepFun User Email:', userInfo.data.email);
+                      proxyEvents.emit('stepfun-user-info', userInfo.data);
+                    } else if (userInfo && userInfo.email) {
+                      // Fallback structure check
+                      console.log(
+                        '[Proxy] ✓ Captured StepFun User Email (direct):',
+                        userInfo.email,
+                      );
+                      proxyEvents.emit('stepfun-user-info', userInfo);
+                    } else {
+                      console.warn('[Proxy] ⚠ GetUser JSON parsed but no email field found!');
+                    }
+                  } catch (e) {
+                    console.error('[Proxy] Failed to parse StepFun User Info (Uncompressed):', e);
+                    console.error(
+                      `[Proxy] DEBUG - Raw Body that failed to parse: ${body.substring(0, 500)}`,
                     );
                   }
                 }

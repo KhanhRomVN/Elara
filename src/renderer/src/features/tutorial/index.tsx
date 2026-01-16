@@ -1,5 +1,8 @@
-import { Code } from 'lucide-react';
+import { useState } from 'react';
+import { Code, Book, Database } from 'lucide-react';
 import { CodeBlock } from '@renderer/core/components/CodeBlock';
+import { cn } from '../../shared/lib/utils';
+import { ProviderReference } from './components/ProviderReference';
 
 interface APIEndpoint {
   path: string;
@@ -283,6 +286,8 @@ const apiEndpoints: APIEndpoint[] = [
 ];
 
 export default function TutorialPage() {
+  const [activeSection, setActiveSection] = useState<'endpoints' | 'providers'>('endpoints');
+
   return (
     <div className="h-full flex flex-col bg-background p-4 gap-4">
       <div>
@@ -295,187 +300,214 @@ export default function TutorialPage() {
       {/* Main Content Area Wrapper */}
       <div className="flex-1 flex overflow-hidden border border-dashed border-zinc-500/25 rounded-lg relative">
         {/* Left Sidebar */}
-        <div className="w-64 border-r bg-card p-4 overflow-y-auto hidden md:block">
-          {/* Sidebar content simplified */}
-          <button className="w-full p-2 text-left hover:bg-muted/50 rounded-md transition-colors bg-muted/50">
-            <span className="font-medium text-primary">API Reference</span>
+        <div className="w-64 border-r bg-card p-4 overflow-y-auto hidden md:block space-y-2">
+          <button
+            onClick={() => setActiveSection('endpoints')}
+            className={cn(
+              'w-full p-2 text-left hover:bg-muted/50 rounded-md transition-colors flex items-center gap-2',
+              activeSection === 'endpoints' ? 'bg-muted/50 text-primary' : 'text-muted-foreground',
+            )}
+          >
+            <Book className="w-4 h-4" />
+            <span className="font-medium">Getting Started</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSection('providers')}
+            className={cn(
+              'w-full p-2 text-left hover:bg-muted/50 rounded-md transition-colors flex items-center gap-2',
+              activeSection === 'providers' ? 'bg-muted/50 text-primary' : 'text-muted-foreground',
+            )}
+          >
+            <Database className="w-4 h-4" />
+            <span className="font-medium">Provider API Reference</span>
           </button>
         </div>
 
         {/* Center Content + Right Sidebar */}
         <div className="flex-1 flex overflow-hidden bg-background">
-          {/* Scrollable Content */}
-          <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
-            <div className="mb-6">
-              <h1 className="text-2xl font-bold mb-2">API Endpoints Reference</h1>
-              <p className="text-muted-foreground">
-                Danh sách API được sử dụng bởi các coding tools phổ biến
-              </p>
+          {activeSection === 'providers' ? (
+            <div className="flex-1 overflow-y-auto scroll-smooth">
+              <ProviderReference />
             </div>
+          ) : (
+            <>
+              {/* Scrollable Content */}
+              <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
+                <div className="mb-6">
+                  <h1 className="text-2xl font-bold mb-2">API Endpoints Reference</h1>
+                  <p className="text-muted-foreground">
+                    Danh sách API được sử dụng bởi các coding tools phổ biến
+                  </p>
+                </div>
 
-            {/* API Endpoints List */}
-            <div className="space-y-8">
-              {apiEndpoints.map((endpoint) => (
-                <div
-                  key={endpoint.path}
-                  id={endpoint.path}
-                  className="scroll-mt-6 rounded-lg border bg-card p-6"
-                >
-                  {/* Header */}
-                  <div className="mb-4">
-                    <div className="flex items-center gap-3 mb-3">
-                      <span
-                        className={`px-3 py-1 rounded text-sm font-mono font-semibold ${
-                          endpoint.method === 'POST'
-                            ? 'bg-green-500/20 text-green-500'
-                            : 'bg-blue-500/20 text-blue-500'
-                        }`}
-                      >
-                        {endpoint.method}
-                      </span>
-                      <code className="text-xl font-mono">{endpoint.path}</code>
-                    </div>
+                {/* API Endpoints List */}
+                <div className="space-y-8">
+                  {apiEndpoints.map((endpoint) => (
+                    <div
+                      key={endpoint.path}
+                      id={endpoint.path}
+                      className="scroll-mt-6 rounded-lg border bg-card p-6"
+                    >
+                      {/* Header */}
+                      <div className="mb-4">
+                        <div className="flex items-center gap-3 mb-3">
+                          <span
+                            className={`px-3 py-1 rounded text-sm font-mono font-semibold ${
+                              endpoint.method === 'POST'
+                                ? 'bg-green-500/20 text-green-500'
+                                : 'bg-blue-500/20 text-blue-500'
+                            }`}
+                          >
+                            {endpoint.method}
+                          </span>
+                          <code className="text-xl font-mono">{endpoint.path}</code>
+                        </div>
 
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-2">
-                        <Code className="h-4 w-4" />
-                        <span>Owner: {endpoint.owner}</span>
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <div className="flex items-center gap-2">
+                            <Code className="h-4 w-4" />
+                            <span>Owner: {endpoint.owner}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Description */}
+                      <div className="mb-4">
+                        <p className="text-muted-foreground">{endpoint.description}</p>
+                      </div>
+
+                      {/* Used By */}
+                      <div className="mb-4">
+                        <h4 className="text-sm font-semibold mb-2">Được sử dụng bởi:</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {endpoint.usedBy.map((tool) => (
+                            <span
+                              key={tool}
+                              className="px-2 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium"
+                            >
+                              {tool}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Request & Response Examples - Side by Side */}
+                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                        {/* Request Headers - Full Width on Mobile, Cell on XL */}
+                        <div className="xl:col-span-2">
+                          <h4 className="text-sm font-semibold mb-2">Request Headers</h4>
+                          <CodeBlock
+                            code={endpoint.requestHeaders}
+                            language="yaml"
+                            maxLines={10}
+                            showLineNumbers={false}
+                            editorOptions={{
+                              guides: {
+                                indentation: false,
+                                bracketPairs: false,
+                                highlightActiveIndentation: false,
+                              },
+                              renderLineHighlight: 'none',
+                              cursorStyle: 'line-thin',
+                              cursorBlinking: 'solid',
+                              domReadOnly: true,
+                              selectionHighlight: false,
+                              occurrencesHighlight: false,
+                              hover: { enabled: false },
+                            }}
+                          />
+                        </div>
+
+                        {/* Request */}
+                        <div>
+                          <h4 className="text-sm font-semibold mb-2">Request Body</h4>
+                          <CodeBlock
+                            code={endpoint.requestExample}
+                            language="json"
+                            maxLines={25}
+                            showLineNumbers={false}
+                            editorOptions={{
+                              guides: {
+                                indentation: false,
+                                bracketPairs: false,
+                                highlightActiveIndentation: false,
+                              },
+                              renderLineHighlight: 'none',
+                              cursorStyle: 'line-thin',
+                              cursorBlinking: 'solid',
+                              domReadOnly: true,
+                              selectionHighlight: false,
+                              occurrencesHighlight: false,
+                              hover: { enabled: false },
+                            }}
+                          />
+                        </div>
+
+                        {/* Response */}
+                        <div>
+                          <h4 className="text-sm font-semibold mb-2">Response Example</h4>
+                          <CodeBlock
+                            code={endpoint.responseExample}
+                            language="json"
+                            maxLines={25}
+                            showLineNumbers={false}
+                            editorOptions={{
+                              guides: {
+                                indentation: false,
+                                bracketPairs: false,
+                                highlightActiveIndentation: false,
+                              },
+                              renderLineHighlight: 'none',
+                              cursorStyle: 'line-thin',
+                              cursorBlinking: 'solid',
+                              domReadOnly: true,
+                              selectionHighlight: false,
+                              occurrencesHighlight: false,
+                              hover: { enabled: false },
+                            }}
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
-
-                  {/* Description */}
-                  <div className="mb-4">
-                    <p className="text-muted-foreground">{endpoint.description}</p>
-                  </div>
-
-                  {/* Used By */}
-                  <div className="mb-4">
-                    <h4 className="text-sm font-semibold mb-2">Được sử dụng bởi:</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {endpoint.usedBy.map((tool) => (
-                        <span
-                          key={tool}
-                          className="px-2 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium"
-                        >
-                          {tool}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Request & Response Examples - Side by Side */}
-                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                    {/* Request Headers - Full Width on Mobile, Cell on XL */}
-                    <div className="xl:col-span-2">
-                      <h4 className="text-sm font-semibold mb-2">Request Headers</h4>
-                      <CodeBlock
-                        code={endpoint.requestHeaders}
-                        language="yaml"
-                        maxLines={10}
-                        showLineNumbers={false}
-                        editorOptions={{
-                          guides: {
-                            indentation: false,
-                            bracketPairs: false,
-                            highlightActiveIndentation: false,
-                          },
-                          renderLineHighlight: 'none',
-                          cursorStyle: 'line-thin',
-                          cursorBlinking: 'solid',
-                          domReadOnly: true,
-                          selectionHighlight: false,
-                          occurrencesHighlight: false,
-                          hover: { enabled: false },
-                        }}
-                      />
-                    </div>
-
-                    {/* Request */}
-                    <div>
-                      <h4 className="text-sm font-semibold mb-2">Request Body</h4>
-                      <CodeBlock
-                        code={endpoint.requestExample}
-                        language="json"
-                        maxLines={25}
-                        showLineNumbers={false}
-                        editorOptions={{
-                          guides: {
-                            indentation: false,
-                            bracketPairs: false,
-                            highlightActiveIndentation: false,
-                          },
-                          renderLineHighlight: 'none',
-                          cursorStyle: 'line-thin',
-                          cursorBlinking: 'solid',
-                          domReadOnly: true,
-                          selectionHighlight: false,
-                          occurrencesHighlight: false,
-                          hover: { enabled: false },
-                        }}
-                      />
-                    </div>
-
-                    {/* Response */}
-                    <div>
-                      <h4 className="text-sm font-semibold mb-2">Response Example</h4>
-                      <CodeBlock
-                        code={endpoint.responseExample}
-                        language="json"
-                        maxLines={25}
-                        showLineNumbers={false}
-                        editorOptions={{
-                          guides: {
-                            indentation: false,
-                            bracketPairs: false,
-                            highlightActiveIndentation: false,
-                          },
-                          renderLineHighlight: 'none',
-                          cursorStyle: 'line-thin',
-                          cursorBlinking: 'solid',
-                          domReadOnly: true,
-                          selectionHighlight: false,
-                          occurrencesHighlight: false,
-                          hover: { enabled: false },
-                        }}
-                      />
-                    </div>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
 
-            {/* Footer Note */}
-            <div className="mt-8 rounded-lg border border-primary/20 bg-primary/5 p-6">
-              <h4 className="font-semibold mb-2">💡 Elara Integration</h4>
-              <p className="text-sm text-muted-foreground">
-                Elara proxy hỗ trợ tất cả các endpoints trên với multi-account load balancing. Bạn
-                có thể sử dụng các endpoints này với bất kỳ tool nào được liệt kê thông qua proxy
-                server của Elara.
-              </p>
-            </div>
-          </div>
+                {/* Footer Note */}
+                <div className="mt-8 rounded-lg border border-primary/20 bg-primary/5 p-6">
+                  <h4 className="font-semibold mb-2">💡 Elara Integration</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Elara proxy hỗ trợ tất cả các endpoints trên với multi-account load balancing.
+                    Bạn có thể sử dụng các endpoints này với bất kỳ tool nào được liệt kê thông qua
+                    proxy server của Elara.
+                  </p>
+                </div>
+              </div>
 
-          {/* Right Sidebar (TOC) */}
-          <div className="w-64 border-l bg-card p-4 overflow-y-auto hidden xl:block">
-            <h3 className="font-semibold mb-4 text-sm text-muted-foreground">ON THIS PAGE</h3>
-            <div className="flex flex-col gap-2">
-              {apiEndpoints.map((endpoint) => (
-                <a
-                  key={endpoint.path}
-                  href={`#${endpoint.path}`}
-                  className="text-sm text-muted-foreground hover:text-foreground transition-colors truncate block py-1"
-                  title={endpoint.path}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    document.getElementById(endpoint.path)?.scrollIntoView({ behavior: 'smooth' });
-                  }}
-                >
-                  {endpoint.path}
-                </a>
-              ))}
-            </div>
-          </div>
+              {/* Right Sidebar (TOC) - Only for Endpoints */}
+              <div className="w-64 border-l bg-card p-4 overflow-y-auto hidden xl:block">
+                <h3 className="font-semibold mb-4 text-sm text-muted-foreground">ON THIS PAGE</h3>
+                <div className="flex flex-col gap-2">
+                  {apiEndpoints.map((endpoint) => (
+                    <a
+                      key={endpoint.path}
+                      href={`#${endpoint.path}`}
+                      className="text-sm text-muted-foreground hover:text-foreground transition-colors truncate block py-1"
+                      title={endpoint.path}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        document
+                          .getElementById(endpoint.path)
+                          ?.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                    >
+                      {endpoint.path}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

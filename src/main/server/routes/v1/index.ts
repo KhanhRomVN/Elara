@@ -13,6 +13,7 @@ import groqRouter from './providers/groq';
 import antigravityRouter from './providers/antigravity';
 import geminiRouter from './providers/gemini';
 import lmArenaRouter from './providers/lmarena';
+import stepFunRouter from './providers/stepfun';
 
 const router = express.Router();
 
@@ -32,5 +33,6 @@ router.use('/groq', groqRouter);
 router.use('/antigravity', antigravityRouter);
 router.use('/gemini', geminiRouter);
 router.use('/lmarena', lmArenaRouter);
+router.use('/stepfun', stepFunRouter);
 
 export default router;

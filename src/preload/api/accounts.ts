@@ -15,4 +15,9 @@ export const accountsAPI = {
     completeOAuth: () => ipcRenderer.invoke('accounts:antigravity:complete-oauth'),
     addByToken: (token: string) => ipcRenderer.invoke('accounts:antigravity:add-by-token', token),
   },
+  stepfun: {
+    sendOTP: (email: string) => ipcRenderer.invoke('accounts:stepfun:send-otp', email),
+    login: (email: string, code: string) =>
+      ipcRenderer.invoke('accounts:stepfun:login', { email, code }),
+  },
 };

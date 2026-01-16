@@ -14,6 +14,7 @@ import geminiIcon from '../../../assets/provider_icons/gemini.svg';
 import antigravityIcon from '../../../assets/provider_icons/antigravity.svg';
 import huggingChatIcon from '../../../assets/provider_icons/huggingface.svg';
 import lmArenaIcon from '../../../assets/provider_icons/lmarena.svg';
+import stepfunIcon from '../../../assets/provider_icons/stepfun.svg';
 
 interface AddAccountDialogProps {
   open: boolean;
@@ -35,6 +36,8 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
   const [agOAuthUrl, setAgOAuthUrl] = useState('');
   const [agWaiting, setAgWaiting] = useState(false);
   const [agToken, setAgToken] = useState('');
+
+  // StepFun State Removed
 
   // Reset state when closing/opening
   useEffect(() => {
@@ -308,6 +311,16 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
       color: 'bg-emerald-500/10 text-emerald-500 border-emerald-200/20',
       loginMethod: 'Direct / Google',
       browserType: 'Electron Window',
+      authMethod: 'Basic',
+    },
+    {
+      id: 'StepFun',
+      name: 'StepFun',
+      description: 'StepFun AI',
+      icon: stepfunIcon,
+      color: 'bg-blue-600/10 text-blue-600 border-blue-300/20',
+      loginMethod: 'Direct / Google',
+      browserType: 'Real Browser',
       authMethod: 'Basic',
     },
   ];

@@ -13,6 +13,7 @@ import { chatCompletionStream as groqChat } from '../../groq';
 import { chatCompletionStream as antigravityChat } from '../../antigravity';
 import { chatCompletionStream as huggingChatChat } from '../../hugging-chat';
 import { chatCompletionStream as lmArenaChatCompletionStream } from '../../lmarena';
+import { chatCompletionStream as stepFunChat } from '../../stepfun';
 import * as gemini from '../../gemini';
 
 const router = express.Router();
@@ -111,7 +112,9 @@ router.post('/completions', async (req, res) => {
                         ? 'Groq'
                         : model.includes('gemini') && !model.includes('antigravity')
                           ? 'Gemini'
-                          : null;
+                          : model.includes('step')
+                            ? 'StepFun'
+                            : null;
 
       if (inferredProvider) {
         account = accounts.find((a) => a.provider === inferredProvider && a.status === 'Active');
@@ -288,6 +291,9 @@ router.post('/completions', async (req, res) => {
       return;
     } else if (account.provider === 'LMArena') {
       await lmArenaChatCompletionStream(req, res, account);
+      return;
+    } else if (account.provider === 'StepFun') {
+      await stepFunChat(req, res, account);
       return;
     } else {
       res.write(`data: {"error": "Provider not supported"}\n\n`);
