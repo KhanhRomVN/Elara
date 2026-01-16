@@ -1,7 +1,7 @@
-import { BrowserWindow, session } from 'electron';
+import { BrowserWindow } from 'electron';
 import { Request, Response } from 'express';
 import net from 'net';
-import { Account } from '../../ipc/accounts';
+import { Account } from '../ipc/accounts';
 
 const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
