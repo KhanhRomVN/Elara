@@ -24,8 +24,9 @@ import { ChatArea } from './components/ChatArea';
 import { InputArea } from './components/InputArea';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { TabBar } from './components/TabBar';
-import { Message, Account, PendingAttachment } from './types';
+import { Message, Account, PendingAttachment, ConversationTab } from './types';
 import { getStreamHandler } from './stream-handlers';
+import { getHistoryEndpoint, parseConversationList } from './utils/conversation-utils';
 
 // Interfaces moved to types.ts
 
@@ -189,15 +190,19 @@ export const PlaygroundPage = ({
   onTabClick,
   onTabClose,
   onNewTab,
+  onUpdateTab,
 }: {
-  tabs?: any[];
+  tabs?: ConversationTab[];
   activeTabId?: string;
   onTabClick?: (id: string) => void;
   onTabClose?: (id: string) => void;
   onNewTab?: () => void;
+  onUpdateTab?: (id: string, data: Partial<ConversationTab>) => void;
 } = {}) => {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
+  const activeTab = tabs?.find((t) => t.id === activeTabId);
+
+  const [messages, setMessages] = useState<Message[]>(() => activeTab?.messages || []);
+  const [input, setInput] = useState(() => activeTab?.input || '');
   const [accounts, setAccounts] = useState<Account[]>([]);
 
   const [selectedProvider, setSelectedProvider] = useState<
@@ -216,19 +221,30 @@ export const PlaygroundPage = ({
     | 'HuggingChat'
     | 'LMArena'
     | ''
-  >('');
-  const [selectedAccount, setSelectedAccount] = useState<string>('');
+  >(() => (activeTab?.selectedProvider as any) || '');
+  const [selectedAccount, setSelectedAccount] = useState<string>(
+    () => activeTab?.selectedAccount || '',
+  );
   const [loading, setLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [_currentMessageId, setCurrentMessageId] = useState<number | null>(null);
 
-  const [thinkingEnabled, setThinkingEnabled] = useState(true);
-  const [searchEnabled, setSearchEnabled] = useState(false);
-  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
-  const [tokenCount, setTokenCount] = useState(0);
-  const [inputTokenCount, setInputTokenCount] = useState(0);
-  const [accumulatedUsage, setAccumulatedUsage] = useState(0);
+  const [thinkingEnabled, setThinkingEnabled] = useState(() => activeTab?.thinkingEnabled ?? true);
+  const [searchEnabled, setSearchEnabled] = useState(() => activeTab?.searchEnabled ?? false);
+  const [attachments, setAttachments] = useState<PendingAttachment[]>(
+    () => activeTab?.attachments || [],
+  );
+  const [tokenCount, setTokenCount] = useState(() => activeTab?.tokenCount || 0);
+  const [inputTokenCount, setInputTokenCount] = useState(() => activeTab?.inputTokenCount || 0);
+  const [accumulatedUsage, setAccumulatedUsage] = useState(() => activeTab?.accumulatedUsage || 0);
+
+  const [activeChatId, setActiveChatId] = useState<string | null>(
+    () => activeTab?.activeChatId || null,
+  );
+  const [conversationTitle, setConversationTitle] = useState<string>(
+    () => activeTab?.conversationTitle || '',
+  );
 
   // Re-use Groq Model State for generic providers like LMArena
   const [groqModels, setGroqModels] = useState<any[]>([]);
@@ -315,38 +331,49 @@ export const PlaygroundPage = ({
     }
     return Array.from(items);
   };
-  const [claudeModel, setClaudeModel] = useState('claude-sonnet-4-5-20250929');
+  const [claudeModel, setClaudeModel] = useState(
+    () => activeTab?.claudeModel || 'claude-sonnet-4-5-20250929',
+  );
 
   // Antigravity State
-  const [antigravityModel, setAntigravityModel] = useState('models/gemini-3-pro-preview');
+  const [antigravityModel, setAntigravityModel] = useState(
+    () => activeTab?.antigravityModel || 'models/gemini-3-pro-preview',
+  );
   const [antigravityModelsList, setAntigravityModelsList] = useState<any[]>([]);
 
   // Gemini State
-  const [geminiModel, setGeminiModel] = useState('fbb127bbb056c959'); // Default to "Nhanh" usually
+  const [geminiModel, setGeminiModel] = useState(
+    () => activeTab?.geminiModel || 'fbb127bbb056c959',
+  ); // Default to "Nhanh" usually
   const [geminiModelsList, setGeminiModelsList] = useState<any[]>([]);
 
   // Groq State
-  const [groqModel, setGroqModel] = useState('openai/gpt-oss-120b');
+  const [groqModel, setGroqModel] = useState(() => activeTab?.groqModel || 'openai/gpt-oss-120b');
   const [groqModelsList, setGroqModelsList] = useState<any[]>([]);
 
   // HuggingChat State
-  const [huggingChatModel, setHuggingChatModel] = useState('');
+  const [huggingChatModel, setHuggingChatModel] = useState(() => activeTab?.huggingChatModel || '');
   const [huggingChatModelsList, setHuggingChatModelsList] = useState<any[]>([]);
 
   // DeepSeek State
-  const [deepseekModel, setDeepseekModel] = useState('deepseek-ai/DeepSeek-V3.2');
-  const [groqSettings, setGroqSettings] = useState({
-    temperature: 1,
-    maxTokens: 8192,
-    reasoning: 'medium' as 'none' | 'low' | 'medium' | 'high',
-    stream: true,
-    jsonMode: false,
-    tools: {
-      browserSearch: false,
-      codeInterpreter: false,
-    },
-    customFunctions: [] as FunctionParams[],
-  });
+  const [deepseekModel, setDeepseekModel] = useState(
+    () => activeTab?.deepseekModel || 'deepseek-ai/DeepSeek-V3.2',
+  );
+  const [groqSettings, setGroqSettings] = useState(
+    () =>
+      activeTab?.groqSettings || {
+        temperature: 1,
+        maxTokens: 8192,
+        reasoning: 'medium' as 'none' | 'low' | 'medium' | 'high',
+        stream: true,
+        jsonMode: false,
+        tools: {
+          browserSearch: false,
+          codeInterpreter: false,
+        },
+        customFunctions: [] as FunctionParams[],
+      },
+  );
 
   // Sidebar Resize State
   const [sidebarWidth, setSidebarWidth] = useState(260);
@@ -391,14 +418,7 @@ export const PlaygroundPage = ({
         return;
       }
 
-      let modelId = 'Xenova/Llama-2-7b-chat-tokenizer';
-      if (selectedProvider === 'DeepSeek') {
-        // DeepSeek uses Llama-based tokenizer. Xenova/Llama-3-8b-instruct is a good approximation for V3
-        // The user logs showed LlamaTokenizerFast.
-        modelId = 'Xenova/Llama-3-8b-instruct';
-      } else if (selectedProvider === 'Claude') {
-        modelId = 'Xenova/Llama-2-7b-chat-tokenizer';
-      }
+      /* Unused modelId logic removed */
     };
 
     const timer = setTimeout(updateInputTokenCount, 500);
@@ -422,7 +442,8 @@ export const PlaygroundPage = ({
           const otherAccount = data.find((acc) => acc.status === 'Active');
           const target = deepseekAccount || otherAccount || data[0];
 
-          if (target) {
+          // Only auto-select if we don't have a selection (or activeTab didn't have one)
+          if (target && !selectedProvider) {
             setSelectedProvider(target.provider);
             setSelectedAccount(target.id);
           }
@@ -803,6 +824,7 @@ export const PlaygroundPage = ({
       if (!reader) throw new Error('No response body');
 
       const streamHandler = getStreamHandler(account.provider);
+      let currentSessionId = activeChatId;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -826,6 +848,7 @@ export const PlaygroundPage = ({
               (sessionId) => {
                 console.log('Session Created:', sessionId);
                 setActiveChatId(sessionId);
+                currentSessionId = sessionId;
               },
               (title) => {
                 setConversationTitle(title);
@@ -836,24 +859,44 @@ export const PlaygroundPage = ({
       }
       setIsStreaming(false);
 
-      // Trigger title update for HuggingChat if it's a new conversation or title is default
+      // Generic title update: Fetch history if title is missing or default
       if (
-        account.provider === 'HuggingChat' &&
-        activeChatId &&
-        (!conversationTitle || conversationTitle === 'New Chat')
+        !conversationTitle ||
+        conversationTitle === 'New Chat' ||
+        conversationTitle === 'Untitled'
       ) {
-        console.log('[Frontend] Triggering HuggingChat title summary...');
+        console.log('[Frontend] Fetching history to update title...');
         try {
-          const summaryUrl = `http://localhost:${port}/v1/huggingchat/conversations/${activeChatId}/summarize?email=${encodeURIComponent(account.email)}`;
-          const summaryRes = await fetch(summaryUrl, { method: 'POST' });
-          if (summaryRes.ok) {
-            const summaryData = await summaryRes.json();
-            if (summaryData.title) {
-              setConversationTitle(summaryData.title);
+          const endpoint = getHistoryEndpoint(account.provider, port || 11434);
+          const historyRes = await fetch(`${endpoint}?email=${encodeURIComponent(account.email)}`);
+
+          if (historyRes.ok) {
+            const historyData = await historyRes.json();
+            const historyList = parseConversationList(account.provider, historyData);
+
+            // Try to find by ID
+            let targetChat = currentSessionId
+              ? historyList.find((c) => c.id === currentSessionId)
+              : null;
+
+            // If not found by ID (or ID unknown), and we just started a new chat, pick the first one (assuming sorted by recent)
+            if (
+              !targetChat &&
+              (!activeChatId || activeChatId === 'new-session') &&
+              historyList.length > 0
+            ) {
+              targetChat = historyList[0];
+            }
+
+            if (targetChat && targetChat.title && targetChat.title !== 'New Chat') {
+              setConversationTitle(targetChat.title);
+              if (!activeChatId || activeChatId === 'new-session') {
+                setActiveChatId(targetChat.id); // Ensure ID is synced if we guessed it
+              }
             }
           }
         } catch (e) {
-          console.error('[Frontend] Failed to update title:', e);
+          console.error('[Frontend] Failed to update title from history:', e);
         }
       }
     } catch (error) {
@@ -913,79 +956,13 @@ export const PlaygroundPage = ({
         const status = await window.api.server.start();
         const port = status.port || 11434;
 
-        const endpoint =
-          selectedProvider === 'Claude'
-            ? `http://localhost:${port}/v1/claude/conversations`
-            : selectedProvider === 'Mistral'
-              ? `http://localhost:${port}/v1/mistral/conversations`
-              : selectedProvider === 'Kimi'
-                ? `http://localhost:${port}/v1/kimi/conversations`
-                : selectedProvider === 'Qwen'
-                  ? `http://localhost:${port}/v1/qwen/conversations`
-                  : selectedProvider === 'Cohere'
-                    ? `http://localhost:${port}/v1/cohere/conversations`
-                    : selectedProvider === 'Perplexity'
-                      ? `http://localhost:${port}/v1/perplexity/conversations`
-                      : selectedProvider === 'Groq'
-                        ? `http://localhost:${port}/v1/groq/conversations`
-                        : selectedProvider === 'Antigravity'
-                          ? `http://localhost:${port}/v1/antigravity/conversations`
-                          : selectedProvider === 'HuggingChat'
-                            ? `http://localhost:${port}/v1/huggingchat/conversations`
-                            : selectedProvider === 'LMArena'
-                              ? `http://localhost:${port}/v1/lmarena/conversations`
-                              : `http://localhost:${port}/v1/deepseek/sessions`;
-
+        const endpoint = getHistoryEndpoint(selectedProvider, port);
         const response = await fetch(`${endpoint}?email=${encodeURIComponent(account.email)}`);
 
         if (response.ok) {
           const data = await response.json();
-
-          if (selectedProvider === 'LMArena') {
-            const formatted = (data.conversations || []).map((c: any) => ({
-              id: c.conversationId || c.id,
-              title: c.title || 'Conversation',
-            }));
-            setHistory(formatted);
-          } else {
-            // Format data for display
-            const formattedHistory =
-              selectedProvider === 'Claude'
-                ? data.map((conv: any) => ({
-                    id: conv.uuid,
-                    title: conv.name || conv.summary || 'Untitled',
-                    date: new Date(conv.updated_at).toLocaleDateString(),
-                  }))
-                : selectedProvider === 'Mistral'
-                  ? data.map((conv: any) => ({
-                      id: conv.id,
-                      title: conv.title || 'Untitled',
-                      date: new Date(conv.created_at || Date.now()).toLocaleDateString(),
-                    }))
-                  : selectedProvider === 'Qwen'
-                    ? data.map((conv: any) => ({
-                        id: conv.id,
-                        title: conv.title || 'Untitled',
-                        date: new Date(
-                          conv.updated_at ? conv.updated_at * 1000 : Date.now(),
-                        ).toLocaleDateString(),
-                      }))
-                    : selectedProvider === 'Kimi' || selectedProvider === 'Cohere'
-                      ? []
-                      : selectedProvider === 'HuggingChat'
-                        ? (data.json?.conversations || data.conversations || []).map((c: any) => ({
-                            id: c.conversationId || c.id || c._id,
-                            title: c.title || 'Untitled',
-                            date: new Date(c.updatedAt).toLocaleDateString(),
-                          }))
-                        : data.map((session: any) => ({
-                            id: session.id,
-                            title: session.title || 'Untitled',
-                            date: new Date(session.updated_at * 1000).toLocaleDateString(),
-                          }));
-
-            setHistory(formattedHistory);
-          }
+          const formattedHistory = parseConversationList(selectedProvider, data);
+          setHistory(formattedHistory);
         } else {
           const errorText = await response.text();
           console.error('[History] Failed to fetch:', response.status, errorText);
@@ -1004,6 +981,102 @@ export const PlaygroundPage = ({
     fetchHistory();
   }, [selectedProvider, selectedAccount, accounts]);
 
+  // Sync state to parent tab
+  const stateRef = useRef({
+    messages,
+    input,
+    selectedProvider,
+    selectedAccount,
+    claudeModel,
+    groqModel,
+    antigravityModel,
+    geminiModel,
+    huggingChatModel,
+    deepseekModel,
+    thinkingEnabled,
+    searchEnabled,
+    attachments,
+    tokenCount,
+    accumulatedUsage,
+    inputTokenCount,
+    groqSettings,
+    activeChatId,
+    conversationTitle,
+  });
+
+  useEffect(() => {
+    stateRef.current = {
+      messages,
+      input,
+      selectedProvider,
+      selectedAccount,
+      claudeModel,
+      groqModel,
+      antigravityModel,
+      geminiModel,
+      huggingChatModel,
+      deepseekModel,
+      thinkingEnabled,
+      searchEnabled,
+      attachments,
+      tokenCount,
+      accumulatedUsage,
+      inputTokenCount,
+      groqSettings,
+      activeChatId,
+      conversationTitle,
+    };
+  }, [
+    messages,
+    input,
+    selectedProvider,
+    selectedAccount,
+    claudeModel,
+    groqModel,
+    antigravityModel,
+    geminiModel,
+    huggingChatModel,
+    deepseekModel,
+    thinkingEnabled,
+    searchEnabled,
+    attachments,
+    tokenCount,
+    accumulatedUsage,
+    inputTokenCount,
+    groqSettings,
+    activeChatId,
+    conversationTitle,
+  ]);
+
+  // Save on unmount or activeTabId change (though with key={activeTabId}, this runs on unmount)
+  useEffect(() => {
+    return () => {
+      if (onUpdateTab && activeTabId) {
+        onUpdateTab(activeTabId, stateRef.current);
+      }
+    };
+  }, [activeTabId, onUpdateTab]);
+
+  // Also sync important state changes immediately to prevent data loss on crash/reload if desired?
+  // For now, let's just sync on unmount to keep performance high,
+  // BUT we should verify if "switching tabs" counts as unmount if we use key. Yes it does.
+  // What if we want the Title to update in the TabBar while we type?
+  // The TabBar uses `activeTab.title`.
+  // If we change `conversationTitle`, we might want to push that up immediately.
+
+  useEffect(() => {
+    if (onUpdateTab && activeTabId && conversationTitle) {
+      onUpdateTab(activeTabId, { conversationTitle });
+    }
+  }, [conversationTitle, activeTabId, onUpdateTab]);
+
+  // Also sync messages when streaming is done
+  useEffect(() => {
+    if (!isStreaming && messages.length > 0 && onUpdateTab && activeTabId) {
+      onUpdateTab(activeTabId, { messages, tokenCount, accumulatedUsage });
+    }
+  }, [isStreaming, messages, tokenCount, accumulatedUsage, activeTabId, onUpdateTab]);
+
   // Debug fetch history
   useEffect(() => {
     if (selectedProvider === 'DeepSeek') {
@@ -1011,8 +1084,7 @@ export const PlaygroundPage = ({
     }
   }, [history, selectedProvider]);
 
-  const [activeChatId, setActiveChatId] = useState<string | null>(null);
-  const [conversationTitle, setConversationTitle] = useState<string>('');
+  // State moved to top
 
   const startNewChat = () => {
     setActiveChatId(null);

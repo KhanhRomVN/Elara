@@ -64,6 +64,10 @@ export const PlaygroundWithTabs = () => {
     setActiveTabId(tabId);
   };
 
+  const handleUpdateTab = (tabId: string, updates: Partial<ConversationTab>) => {
+    setTabs((prevTabs) => prevTabs.map((tab) => (tab.id === tabId ? { ...tab, ...updates } : tab)));
+  };
+
   const activeTab = getActiveTab();
 
   // Update tab titles
@@ -83,11 +87,13 @@ export const PlaygroundWithTabs = () => {
 
       <div className="flex-1 flex overflow-hidden border border-dashed border-zinc-500/25 rounded-lg">
         <PlaygroundPage
+          key={activeTabId}
           tabs={tabs}
           activeTabId={activeTabId}
           onTabClick={switchTab}
           onTabClose={closeTab}
           onNewTab={createNewTab}
+          onUpdateTab={handleUpdateTab}
         />
       </div>
     </div>
