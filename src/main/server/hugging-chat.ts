@@ -1,7 +1,12 @@
 import { Request, Response } from 'express';
 import { Account } from '../ipc/accounts';
-import { net, app } from 'electron';
+import { app } from 'electron';
 import { join } from 'path';
+import { randomUUID } from 'crypto';
+import { spawn, execSync } from 'child_process';
+import fs from 'fs';
+import { startProxy, stopProxy, proxyEvents } from './proxy';
+import { request as httpRequest } from 'https';
 
 // Helper to get cookies from account
 const getCookies = (account: Account) => {
@@ -22,24 +27,41 @@ const buildCookieHeader = (cookies: any): string => {
   return '';
 };
 
-// Helper to fetch JSON
+// Helper to fetch JSON with full browser headers using HTTPS module
 const fetchJson = (url: string, cookies: string) => {
   return new Promise<any>((resolve) => {
-    const request = net.request({
+    const urlObj = new URL(url);
+    const options = {
       method: 'GET',
-      url,
-    });
-    request.setHeader('Cookie', cookies);
-    request.setHeader(
-      'User-Agent',
-      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
-    );
-    let data = '';
-    request.on('response', (response) => {
-      response.on('data', (chunk) => (data += chunk.toString()));
-      response.on('end', () => {
+      hostname: urlObj.hostname,
+      path: urlObj.pathname + urlObj.search,
+      headers: {
+        Cookie: cookies,
+        'User-Agent':
+          'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
+        'sec-ch-ua': '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Linux"',
+        'sec-fetch-site': 'same-origin',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-dest': 'empty',
+        Accept: 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        Origin: 'https://huggingface.co',
+        Referer: 'https://huggingface.co/chat/',
+      },
+    };
+
+    const req = httpRequest(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => (data += chunk.toString()));
+      res.on('end', () => {
         try {
-          // Handle potential prefix if any (though unlikely for API)
+          // If response is empty or not JSON, handle gracefully
+          if (!data.trim()) {
+            resolve({});
+            return;
+          }
           resolve(JSON.parse(data));
         } catch (e) {
           console.error(`[HuggingChat] Error parsing JSON from ${url}:`, e);
@@ -47,11 +69,12 @@ const fetchJson = (url: string, cookies: string) => {
         }
       });
     });
-    request.on('error', (e) => {
+
+    req.on('error', (e) => {
       console.error(`[HuggingChat] Request error for ${url}:`, e);
       resolve({});
     });
-    request.end();
+    req.end();
   });
 };
 
@@ -87,10 +110,6 @@ export const getProfile = async (
     return { email: null, name: null, avatar: null };
   }
 };
-
-import { spawn, execSync } from 'child_process';
-import fs from 'fs';
-import { startProxy, stopProxy, proxyEvents } from './proxy';
 
 // Find system Chrome/Chromium
 const findChrome = (): string | null => {
@@ -306,120 +325,113 @@ export const login = (): Promise<{ cookies: string; email?: string; username?: s
 
 // Get available models
 export const getModels = (cookies: string): Promise<any[]> => {
-  return new Promise((resolve, reject) => {
-    const request = net.request({
-      method: 'GET',
-      url: 'https://huggingface.co/chat/api/v2/models',
-    });
-
-    request.setHeader('Cookie', cookies);
-    request.setHeader(
-      'User-Agent',
-      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
-    );
-
-    let data = '';
-    request.on('response', (response) => {
-      response.on('data', (chunk) => (data += chunk.toString()));
-      response.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          const models = json.json || json || [];
-          resolve(models);
-        } catch (e) {
-          console.error('[HuggingChat] Error parsing models:', e);
-          reject(e);
-        }
-      });
-    });
-
-    request.on('error', (e) => {
-      console.error('[HuggingChat] Models request error:', e);
+  return new Promise(async (resolve, reject) => {
+    try {
+      const json = await fetchJson('https://huggingface.co/chat/api/v2/models', cookies);
+      const models = json.json || json || [];
+      resolve(models);
+    } catch (e) {
+      console.error('[HuggingChat] Error fetching models:', e);
       reject(e);
-    });
-
-    request.end();
+    }
   });
 };
 
 // Get conversation list
 export const getConversations = (cookies: string, page: number = 0): Promise<any> => {
-  return new Promise((resolve, reject) => {
-    const request = net.request({
-      method: 'GET',
-      url: `https://huggingface.co/chat/api/v2/conversations?p=${page}`,
-    });
-
-    request.setHeader('Cookie', cookies);
-    request.setHeader('Content-Type', 'application/json');
-    request.setHeader(
-      'User-Agent',
-      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
-    );
-
-    let data = '';
-    request.on('response', (response) => {
-      response.on('data', (chunk) => (data += chunk.toString()));
-      response.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          resolve(json);
-        } catch (e) {
-          console.error('[HuggingChat] Error parsing conversations:', e);
-          reject(e);
-        }
-      });
-    });
-
-    request.on('error', (e) => {
-      console.error('[HuggingChat] Conversations request error:', e);
+  return new Promise(async (resolve, reject) => {
+    try {
+      const json = await fetchJson(
+        `https://huggingface.co/chat/api/v2/conversations?p=${page}`,
+        cookies,
+      );
+      resolve(json);
+    } catch (e) {
+      console.error('[HuggingChat] Error fetching conversations:', e);
       reject(e);
-    });
-
-    request.end();
+    }
   });
 };
 
 // Get specific conversation detail
 export const getConversation = (cookies: string, conversationId: string): Promise<any> => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const json = await fetchJson(
+        `https://huggingface.co/chat/api/v2/conversations/${conversationId}`,
+        cookies,
+      );
+      resolve(json);
+    } catch (e) {
+      console.error('[HuggingChat] Error fetching conversation:', e);
+      reject(e);
+    }
+  });
+};
+
+// Create a new conversation
+const createConversation = (cookies: string, model: string): Promise<string> => {
   return new Promise((resolve, reject) => {
-    const request = net.request({
-      method: 'GET',
-      url: `https://huggingface.co/chat/api/v2/conversations/${conversationId}`,
-    });
+    console.log('[HuggingChat] Creating new conversation...');
 
-    request.setHeader('Cookie', cookies);
-    request.setHeader('Content-Type', 'application/json');
-    request.setHeader(
-      'User-Agent',
-      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
-    );
+    // Use proper HTTPS request
+    const postData = JSON.stringify({ model, preprompt: '' });
 
-    let data = '';
-    request.on('response', (response) => {
-      response.on('data', (chunk) => (data += chunk.toString()));
-      response.on('end', () => {
+    const options = {
+      method: 'POST',
+      hostname: 'huggingface.co',
+      path: '/chat/conversation',
+      headers: {
+        Cookie: cookies,
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData),
+        'User-Agent':
+          'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
+        'sec-ch-ua': '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Linux"',
+        'sec-fetch-site': 'same-origin',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-dest': 'empty',
+        Accept: 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9',
+        Origin: 'https://huggingface.co',
+        Referer: 'https://huggingface.co/chat/',
+      },
+    };
+
+    const req = httpRequest(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => (data += chunk.toString()));
+      res.on('end', () => {
         try {
           const json = JSON.parse(data);
-          resolve(json);
+          if (json.conversationId) {
+            console.log('[HuggingChat] New conversation created:', json.conversationId);
+            resolve(json.conversationId);
+          } else {
+            console.error('[HuggingChat] Failed to create conversation, response:', json);
+            reject(new Error('Failed to create conversation'));
+          }
         } catch (e) {
-          console.error('[HuggingChat] Error parsing conversation:', e);
+          console.error('[HuggingChat] Error parsing create conversation response:', e);
           reject(e);
         }
       });
     });
 
-    request.on('error', (e) => {
-      console.error('[HuggingChat] Conversation request error:', e);
+    req.on('error', (e) => {
+      console.error('[HuggingChat] Create conversation error:', e);
       reject(e);
     });
 
-    request.end();
+    req.write(postData);
+    req.end();
   });
 };
 
 // Chat completion stream
-export const chatCompletionStream = (req: Request, res: Response, account: Account) => {
+export const chatCompletionStream = async (req: Request, res: Response, account: Account) => {
   const { messages, model, conversation_id } = req.body;
   console.log(
     '[HuggingChat] Starting chat stream, model:',
@@ -441,66 +453,143 @@ export const chatCompletionStream = (req: Request, res: Response, account: Accou
   console.log('[HuggingChat] User message:', userContent.substring(0, 100) + '...');
 
   // Determine conversation ID - use existing or let server create new one
-  const targetConversationId = conversation_id || '';
+  let targetConversationId = conversation_id;
+
+  if (!targetConversationId) {
+    try {
+      targetConversationId = await createConversation(cookieHeader, model);
+    } catch (e: any) {
+      console.error('[HuggingChat] Failed to create new conversation:', e);
+      res.status(500).json({ error: 'Failed to create new conversation: ' + e.message });
+      return;
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // CRITICAL STEP: Fetch conversation details to get the REAL parent ID
+  // ---------------------------------------------------------------------
+  let parentMessageId = '';
+  try {
+    console.log('[HuggingChat] Fetching details for conversation:', targetConversationId);
+    const convoDetails = await getConversation(cookieHeader, targetConversationId);
+    const details = convoDetails.json || convoDetails; // Handle potential wrapper
+
+    // Logic to find parent ID from message history
+    if (details.messages && details.messages.length > 0) {
+      // The last message in the array is usually the one we want to reply to
+      const lastMsg = details.messages[details.messages.length - 1];
+      parentMessageId = lastMsg.id;
+      console.log('[HuggingChat] Found parent message ID from history:', parentMessageId);
+    } else if (details.rootMessageId) {
+      // If no messages yet (just created), use rootMessageId
+      parentMessageId = details.rootMessageId;
+      console.log('[HuggingChat] Using root message ID:', parentMessageId);
+    } else {
+      console.warn('[HuggingChat] No parent ID found, using random UUID (might fail)');
+      parentMessageId = randomUUID();
+    }
+  } catch (e) {
+    console.error('[HuggingChat] Failed to fetch conversation details:', e);
+    // Fallback
+    parentMessageId = randomUUID();
+  }
 
   // Build multipart form data
-  const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
+  const boundary =
+    '----WebKitFormBoundary' +
+    Math.random().toString(36).substring(2, 14) +
+    Math.random().toString(36).substring(2, 14);
   let formData = '';
 
-  // Add message content
+  // Construct proper payload matching user sample EXACTLY
+  const payload = {
+    inputs: userContent,
+    id: parentMessageId, // <--- Using the fetched parent ID
+    is_retry: false,
+    is_continue: false,
+    selectedMcpServerNames: [],
+    selectedMcpServers: [],
+  };
+
+  // Add message content - PAY ATTENTION TO CRLF
   formData += `--${boundary}\r\n`;
   formData += `Content-Disposition: form-data; name="data"\r\n\r\n`;
-  formData += JSON.stringify({ inputs: userContent, files: [] }) + '\r\n';
-
+  formData += JSON.stringify(payload) + '\r\n';
   formData += `--${boundary}--\r\n`;
 
-  const request = net.request({
+  // Use Buffer to get exact byte length
+  const formBuffer = Buffer.from(formData, 'utf-8');
+
+  // Use Node.js HTTPS module instead of Electron net Request
+  const match = targetConversationId.match(/[a-zA-Z0-9]+/);
+  const path = `/chat/conversation/${targetConversationId}`;
+
+  const options = {
     method: 'POST',
-    url: `https://huggingface.co/chat/conversation/${targetConversationId}`,
-  });
+    hostname: 'huggingface.co',
+    path: path,
+    headers: {
+      Cookie: cookieHeader,
+      'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      'Content-Length': formBuffer.length, // EXPLICIT CONTENT LENGTH
+      'User-Agent':
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
+      'sec-ch-ua': '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"',
+      'sec-ch-ua-mobile': '?0',
+      'sec-ch-ua-platform': '"Linux"',
+      'sec-fetch-site': 'same-origin',
+      'sec-fetch-mode': 'cors',
+      'sec-fetch-dest': 'empty',
+      Accept: '*/*',
+      'Accept-Language': 'en-US,en;q=0.9',
+      Origin: 'https://huggingface.co',
+      Referer: `https://huggingface.co/chat/conversation/${targetConversationId}`,
+      Priority: 'u=1, i',
+    },
+  };
 
-  console.log(
-    '[HuggingChat] Sending request to:',
-    `https://huggingface.co/chat/conversation/${targetConversationId}`,
-  );
-  console.log('[HuggingChat] Cookies length:', cookieHeader.length, 'chars');
-  console.log('[HuggingChat] Cookies preview:', cookieHeader.substring(0, 100) + '...');
-
-  request.setHeader('Cookie', cookieHeader);
-  request.setHeader('Content-Type', `multipart/form-data; boundary=${boundary}`);
-  request.setHeader(
-    'User-Agent',
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
-  );
+  console.log('[HuggingChat] Sending HTTPS request to:', 'https://huggingface.co' + path);
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
 
-  request.on('response', (response) => {
+  if (targetConversationId) {
+    const convoEvent = { type: 'conversation', id: targetConversationId };
+    res.write(`data: ${JSON.stringify(convoEvent)}\n\n`);
+  }
+
+  // Make request
+  const reqStream = httpRequest(options, (response) => {
     console.log('[HuggingChat] Response status:', response.statusCode);
-    console.log('[HuggingChat] Response headers:', response.headers);
 
     response.on('data', (chunk) => {
       const rawData = chunk.toString();
       // Remove null bytes that HuggingFace adds for padding
       const cleanedData = rawData.replace(/\\u0000/g, '');
-      const lines = cleanedData.split('\\n');
+
+      // Fix: split by actual newline character to handle concatenated JSONs
+      const lines = cleanedData.split('\n');
 
       for (const line of lines) {
         if (!line.trim()) continue;
 
         try {
-          // Parse JSONL format
           const parsed = JSON.parse(line);
-          console.log('[HuggingChat] Stream data received, type:', parsed.type);
 
-          // Forward the cleaned line to client for processing
-          res.write(`data: ${line}\\n\\n`);
+          // Log only important events to reduce noise
+          if (parsed.type === 'finalAnswer') {
+            console.log('[HuggingChat] Final answer received');
+          } else if (parsed.error) {
+            console.error('[HuggingChat] Stream error message:', parsed);
+          }
+
+          // Forward the cleaned line to client
+          // Use actual newlines for SSE format
+          res.write(`data: ${line}\n\n`);
         } catch (e) {
-          // If not JSON, might be HTML (auth error) or malformed
           console.error('[HuggingChat] Error parsing line:', e);
-          console.error('[HuggingChat] Raw line (first 200 chars):', line.substring(0, 200));
+          // Don't log the full line to avoid spam, just the error
         }
       }
     });
@@ -511,12 +600,12 @@ export const chatCompletionStream = (req: Request, res: Response, account: Accou
     });
   });
 
-  request.on('error', (e) => {
-    console.error('[HuggingChat] Stream error:', e);
+  reqStream.on('error', (e) => {
+    console.error('[HuggingChat] Stream request error:', e);
     res.write(`data: ${JSON.stringify({ error: e.message })}\\n\\n`);
     res.end();
   });
 
-  request.write(formData);
-  request.end();
+  reqStream.write(formBuffer);
+  reqStream.end();
 };
