@@ -609,3 +609,62 @@ export const chatCompletionStream = async (req: Request, res: Response, account:
   reqStream.write(formBuffer);
   reqStream.end();
 };
+
+// Summarize conversation
+export const summarizeConversation = (cookies: string, conversationId: string): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    console.log('[HuggingChat] Summarizing conversation:', conversationId);
+
+    const match = conversationId.match(/[a-zA-Z0-9]+/);
+    const path = `/chat/conversation/${conversationId}/summarize`;
+
+    const options = {
+      method: 'POST',
+      hostname: 'huggingface.co',
+      path: path,
+      headers: {
+        Cookie: cookies,
+        'User-Agent':
+          'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
+        'sec-ch-ua': '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Linux"',
+        'sec-fetch-site': 'same-origin',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-dest': 'empty',
+        Accept: 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9',
+        Origin: 'https://huggingface.co',
+        Referer: `https://huggingface.co/chat/conversation/${conversationId}`,
+        Priority: 'u=1, i',
+      },
+    };
+
+    const req = httpRequest(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => (data += chunk.toString()));
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          if (json.title) {
+            console.log('[HuggingChat] Conversation summarized:', json.title);
+            resolve(json.title);
+          } else {
+            console.error('[HuggingChat] Failed to summarize, response:', json);
+            reject(new Error('Failed to summarize conversation'));
+          }
+        } catch (e) {
+          console.error('[HuggingChat] Error parsing summarize response:', e);
+          reject(e);
+        }
+      });
+    });
+
+    req.on('error', (e) => {
+      console.error('[HuggingChat] Summarize request error:', e);
+      reject(e);
+    });
+
+    req.end();
+  });
+};

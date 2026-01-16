@@ -18,6 +18,7 @@ import { FunctionParams } from './components/GroqSidebarSettings';
 import { GroqModelSelector } from './components/GroqModelSelector';
 import { AntigravityModelSelector } from './components/AntigravityModelSelector';
 import { GeminiModelSelector } from './components/GeminiModelSelector';
+import { HuggingChatModelSelector } from './components/HuggingChatModelSelector';
 
 import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
@@ -37,11 +38,16 @@ const CustomSelect = ({
 }: {
   value: string;
   onChange: (value: string) => void;
-  options: { value: string; label: string; icon?: string | React.ReactNode }[];
+  options: { value: string; label: string; icon?: string | React.ReactNode; details?: any }[];
   placeholder?: string;
   disabled?: boolean;
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [hoveredOption, setHoveredOption] = useState<{
+    value: string;
+    label: string;
+    details?: any;
+  } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -80,32 +86,97 @@ const CustomSelect = ({
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 mt-1 max-h-60 w-max min-w-full overflow-auto rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2">
-          <div className="p-1">
-            {options.map((option) => (
-              <div
-                key={option.value}
-                onClick={() => {
-                  onChange(option.value);
-                  setIsOpen(false);
-                }}
-                className={cn(
-                  'relative flex select-none items-center rounded-sm px-2 py-2 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 cursor-pointer',
-                  value === option.value && 'bg-accent text-accent-foreground',
-                )}
-              >
-                <div className="flex items-center gap-2 truncate">
-                  {option.icon &&
-                    (typeof option.icon === 'string' ? (
-                      <img src={option.icon} alt="" className="w-5 h-5 shrink-0" />
-                    ) : (
-                      option.icon
-                    ))}
-                  <span className="truncate font-medium">{option.label}</span>
+        <div className="absolute z-50 mt-1 flex flex-row items-start">
+          <div className="max-h-60 w-max min-w-full overflow-auto rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2">
+            <div className="p-1">
+              {options.map((option) => (
+                <div
+                  key={option.value}
+                  onClick={() => {
+                    onChange(option.value);
+                    setIsOpen(false);
+                  }}
+                  onMouseEnter={() => setHoveredOption(option)}
+                  onMouseLeave={() => setHoveredOption(null)}
+                  className={cn(
+                    'relative flex select-none items-center rounded-sm px-2 py-2 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 cursor-pointer',
+                    value === option.value && 'bg-accent text-accent-foreground',
+                  )}
+                >
+                  <div className="flex items-center gap-2 truncate">
+                    {option.icon &&
+                      (typeof option.icon === 'string' ? (
+                        <img src={option.icon} alt="" className="w-5 h-5 shrink-0" />
+                      ) : (
+                        option.icon
+                      ))}
+                    <span className="truncate font-medium">{option.label}</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
+          {hoveredOption?.details && (
+            <div className="ml-2 w-80 max-h-80 overflow-y-auto rounded-md border bg-popover p-4 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95">
+              <h4 className="font-semibold mb-2 text-sm">{hoveredOption.label}</h4>
+              <div className="text-xs space-y-2">
+                {hoveredOption.details.description && (
+                  <p className="text-muted-foreground">{hoveredOption.details.description}</p>
+                )}
+                {hoveredOption.details.context_length && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Context Window:</span>
+                    <span>{hoveredOption.details.context_length.toLocaleString()}</span>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  {Object.entries(hoveredOption.details)
+                    .filter(
+                      ([key]) =>
+                        ![
+                          'id',
+                          'name',
+                          'displayName',
+                          'description',
+                          'context_length',
+                          'providers',
+                        ].includes(key),
+                    )
+                    .map(([key, val]) => {
+                      if (typeof val === 'object' || val === null) return null;
+                      return (
+                        <div key={key} className="flex flex-col">
+                          <span className="text-[10px] uppercase text-muted-foreground">{key}</span>
+                          <span className="truncate" title={String(val)}>
+                            {String(val)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                </div>
+                {hoveredOption.details.providers &&
+                  Array.isArray(hoveredOption.details.providers) && (
+                    <div className="mt-2 pt-2 border-t">
+                      <span className="text-[10px] uppercase text-muted-foreground block mb-1">
+                        Providers
+                      </span>
+                      <div className="space-y-1">
+                        {hoveredOption.details.providers.map((p: any, i: number) => (
+                          <div key={i} className="flex justify-between text-[10px]">
+                            <span>{p.provider}</span>
+                            <span
+                              className={p.status === 'live' ? 'text-green-500' : 'text-yellow-500'}
+                            >
+                              {p.status}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -744,11 +815,35 @@ export const PlaygroundPage = () => {
                 console.log('Session Created:', sessionId);
                 setActiveChatId(sessionId);
               },
+              (title) => {
+                setConversationTitle(title);
+              },
             );
           }
         }
       }
       setIsStreaming(false);
+
+      // Trigger title update for HuggingChat if it's a new conversation or title is default
+      if (
+        account.provider === 'HuggingChat' &&
+        activeChatId &&
+        (!conversationTitle || conversationTitle === 'New Chat')
+      ) {
+        console.log('[Frontend] Triggering HuggingChat title summary...');
+        try {
+          const summaryUrl = `http://localhost:${port}/v1/huggingchat/conversations/${activeChatId}/summarize?email=${encodeURIComponent(account.email)}`;
+          const summaryRes = await fetch(summaryUrl, { method: 'POST' });
+          if (summaryRes.ok) {
+            const summaryData = await summaryRes.json();
+            if (summaryData.title) {
+              setConversationTitle(summaryData.title);
+            }
+          }
+        } catch (e) {
+          console.error('[Frontend] Failed to update title:', e);
+        }
+      }
     } catch (error) {
       // Ignore abort errors
       if (
@@ -865,11 +960,17 @@ export const PlaygroundPage = () => {
                       }))
                     : selectedProvider === 'Kimi' || selectedProvider === 'Cohere'
                       ? []
-                      : data.map((session: any) => ({
-                          id: session.id,
-                          title: session.title || 'Untitled',
-                          date: new Date(session.updated_at * 1000).toLocaleDateString(),
-                        }));
+                      : selectedProvider === 'HuggingChat'
+                        ? (data.json?.conversations || data.conversations || []).map((c: any) => ({
+                            id: c.conversationId || c.id || c._id,
+                            title: c.title || 'Untitled',
+                            date: new Date(c.updatedAt).toLocaleDateString(),
+                          }))
+                        : data.map((session: any) => ({
+                            id: session.id,
+                            title: session.title || 'Untitled',
+                            date: new Date(session.updated_at * 1000).toLocaleDateString(),
+                          }));
 
             setHistory(formattedHistory);
           }
@@ -968,33 +1069,41 @@ export const PlaygroundPage = () => {
                     '',
                 }))
                 .filter((m: Message) => m.content) || []
-            : selectedProvider === 'Mistral'
-              ? data.messages?.map((msg: any) => ({
-                  id: msg.id || crypto.randomUUID(),
-                  role: msg.role,
-                  content: msg.content,
-                })) || []
-              : selectedProvider === 'Kimi' || selectedProvider === 'Qwen'
-                ? []
-                : selectedProvider === 'Perplexity'
-                  ? data.messages?.map((msg: any) => ({
-                      id: msg.id || crypto.randomUUID(),
-                      role: msg.role,
-                      content: msg.content,
-                      backend_uuid: msg.backend_uuid,
-                      read_write_token: msg.read_write_token,
-                    })) || []
-                  : data.chat_messages
-                      ?.map((msg: any) => ({
-                        id: msg.message_id,
-                        role: msg.role === 'USER' ? ('user' as const) : ('assistant' as const),
-                        content:
-                          msg.fragments
-                            ?.map((f: any) => f.content || '')
-                            .join('')
-                            .trim() || '',
-                      }))
-                      .filter((m: Message) => m.content) || [];
+            : selectedProvider === 'HuggingChat'
+              ? (data.json?.messages || data.messages || [])
+                  .filter((msg: any) => msg.from === 'user' || msg.from === 'assistant')
+                  .map((msg: any) => ({
+                    id: msg.id,
+                    role: msg.from === 'user' ? 'user' : 'assistant',
+                    content: msg.content,
+                  })) || []
+              : selectedProvider === 'Mistral'
+                ? data.messages?.map((msg: any) => ({
+                    id: msg.id || crypto.randomUUID(),
+                    role: msg.role,
+                    content: msg.content,
+                  })) || []
+                : selectedProvider === 'Kimi' || selectedProvider === 'Qwen'
+                  ? []
+                  : selectedProvider === 'Perplexity'
+                    ? data.messages?.map((msg: any) => ({
+                        id: msg.id || crypto.randomUUID(),
+                        role: msg.role,
+                        content: msg.content,
+                        backend_uuid: msg.backend_uuid,
+                        read_write_token: msg.read_write_token,
+                      })) || []
+                    : data.chat_messages
+                        ?.map((msg: any) => ({
+                          id: msg.message_id,
+                          role: msg.role === 'USER' ? ('user' as const) : ('assistant' as const),
+                          content:
+                            msg.fragments
+                              ?.map((f: any) => f.content || '')
+                              .join('')
+                              .trim() || '',
+                        }))
+                        .filter((m: Message) => m.content) || [];
 
         // Calculate total tokens for DeepSeek from history
         if (selectedProvider === 'DeepSeek' && data.chat_messages) {
@@ -1002,6 +1111,13 @@ export const PlaygroundPage = () => {
             return acc + (msg.accumulated_token_usage || 0);
           }, 0);
           setTokenCount(totalTokens);
+        } else if (selectedProvider === 'HuggingChat') {
+          // Estimate tokens for HuggingChat (roughly 4 chars per token)
+          const totalChars = formattedMessages.reduce(
+            (acc, msg) => acc + (msg.content?.length || 0),
+            0,
+          );
+          setTokenCount(Math.ceil(totalChars / 4));
         } else {
           // Reset or recalculate for other providers if needed, though they might not have this field
           // For now we rely on the realtime accumulation for new chats
@@ -1123,7 +1239,15 @@ export const PlaygroundPage = () => {
                         options={filteredAccounts.map((acc) => ({
                           value: acc.id,
                           label: acc.name || acc.email,
-                          icon: <User className="h-4 w-4" />,
+                          icon: acc.picture ? (
+                            <img
+                              src={acc.picture}
+                              alt=""
+                              className="w-4 h-4 rounded-full object-cover shrink-0"
+                            />
+                          ) : (
+                            <User className="h-4 w-4" />
+                          ),
                         }))}
                         placeholder="Select Account"
                         disabled={!selectedProvider}
@@ -1175,13 +1299,10 @@ export const PlaygroundPage = () => {
 
                       {selectedProvider === 'HuggingChat' && selectedAccount && (
                         <div className="w-[300px]">
-                          <CustomSelect
+                          <HuggingChatModelSelector
                             value={huggingChatModel}
                             onChange={setHuggingChatModel}
-                            options={huggingChatModelsList.map((model) => ({
-                              value: model.id,
-                              label: model.displayName || model.name || model.id,
-                            }))}
+                            models={huggingChatModelsList}
                             placeholder="Select Model"
                             disabled={huggingChatModelsList.length === 0}
                           />
@@ -1242,6 +1363,9 @@ export const PlaygroundPage = () => {
             <>
               {/* Header */}
               <div className="h-14 border-b flex items-center justify-between px-4 bg-background/50 backdrop-blur-sm sticky top-0 z-10">
+                <div className="max-w-[200px] text-xs font-medium text-muted-foreground mr-2 flex items-center gap-1 truncate">
+                  {selectedProvider === 'HuggingChat' && huggingChatModel}
+                </div>
                 <div className="font-medium truncate flex-1 text-center">
                   {conversationTitle || 'New Chat'}
                 </div>

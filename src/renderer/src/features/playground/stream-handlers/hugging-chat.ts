@@ -1,7 +1,7 @@
 import { StreamLineHandler } from './types';
 
 export const huggingChatHandler: StreamLineHandler = {
-  processLine: (line, currentMessageId, setMessages, onTokenUpdate, onSessionId) => {
+  processLine: (line, currentMessageId, setMessages, onTokenUpdate, onSessionId, onTitleUpdate) => {
     try {
       // Skip empty lines
       if (!line.trim()) return;
@@ -21,6 +21,9 @@ export const huggingChatHandler: StreamLineHandler = {
             };
           }),
         );
+        if (onTokenUpdate) {
+          onTokenUpdate(Math.ceil((token.length || 1) / 4));
+        }
       }
 
       // Handle final answer
@@ -41,6 +44,10 @@ export const huggingChatHandler: StreamLineHandler = {
       else if (parsed.type === 'status') {
         // Status updates like "Generating..." can be ignored or shown in UI
         console.log('[HuggingChat] Status:', parsed.status);
+      } else if (parsed.type === 'title' && parsed.title) {
+        if (onTitleUpdate) {
+          onTitleUpdate(parsed.title);
+        }
       }
 
       // Handle conversation ID creation (for new conversations)

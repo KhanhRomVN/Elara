@@ -45,6 +45,7 @@ import {
   getConversations as getHuggingChatConversations,
   getConversation as getHuggingChatConversation,
   getModels as getHuggingChatModels,
+  summarizeConversation as summarizeHuggingChatConversation,
 } from './hugging-chat';
 import {
   chatCompletionStream as lmArenaChatCompletionStream,
@@ -432,6 +433,36 @@ expressApp.post('/v1/chat/completions', async (req, res) => {
     if (!res.headersSent) {
       res.status(500).json({ error: error.message });
     }
+  }
+});
+
+// Summarize HuggingChat conversation
+expressApp.post('/v1/huggingchat/conversations/:id/summarize', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const emailQuery = req.query.email as string;
+
+    if (!fs.existsSync(DATA_FILE)) {
+      res.status(500).json({ error: 'Accounts database not found' });
+      return;
+    }
+
+    const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    let account = accounts.find((a) => a.email === emailQuery && a.provider === 'HuggingChat');
+
+    if (!account) {
+      account = accounts.find((a) => a.provider === 'HuggingChat' && a.status === 'Active');
+    }
+
+    if (!account) {
+      res.status(401).json({ error: 'No valid HuggingChat account found' });
+      return;
+    }
+
+    const title = await summarizeHuggingChatConversation(account.credential, id);
+    res.json({ title });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 });
 
