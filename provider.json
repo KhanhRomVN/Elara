@@ -1,0 +1,54 @@
+[
+  {
+    "provider_id": "antigravity",
+    "is_enabled": false
+  },
+  {
+    "provider_id": "claude",
+    "is_enabled": false
+  },
+  {
+    "provider_id": "cohere",
+    "is_enabled": false
+  },
+  {
+    "provider_id": "deepseek",
+    "is_enabled": true
+  },
+  {
+    "provider_id": "gemini",
+    "is_enabled": false
+  },
+  {
+    "provider_id": "groq",
+    "is_enabled": false
+  },
+  {
+    "provider_id": "hugging-chat",
+    "is_enabled": false
+  },
+  {
+    "provider_id": "kimi",
+    "is_enabled": false
+  },
+  {
+    "provider_id": "lmarena",
+    "is_enabled": false
+  },
+  {
+    "provider_id": "mistral",
+    "is_enabled": false
+  },
+  {
+    "provider_id": "perplexity",
+    "is_enabled": false
+  },
+  {
+    "provider_id": "qwen",
+    "is_enabled": false
+  },
+  {
+    "provider_id": "stepfun",
+    "is_enabled": false
+  }
+]

@@ -26,6 +26,7 @@ export interface MistralChatPayload {
     content: string;
   }[];
   temperature?: number;
+  chatId?: string;
 }
 
 interface ChatResponse {
@@ -37,19 +38,30 @@ export async function chatCompletionStream(
   payload: MistralChatPayload,
   callbacks: {
     onContent: (content: string) => void;
+    onMetadata?: (metadata: any) => void;
     onDone: () => void;
     onError: (error: Error) => void;
   },
 ) {
   try {
     const userMessage = payload.messages[payload.messages.length - 1].content;
-    const response = await createChat(cookies, userMessage);
+    let chatId = payload.chatId;
 
-    if (!response || !response.chatId) {
-      throw new Error('Failed to create chat: No chatId returned');
+    if (!chatId) {
+      const response = await createChat(cookies, userMessage);
+
+      if (!response || !response.chatId) {
+        throw new Error('Failed to create chat: No chatId returned');
+      }
+      chatId = response.chatId;
     }
 
-    await streamResponse(cookies, response.chatId, callbacks);
+    // Notify frontend of the conversation ID
+    if (callbacks.onMetadata) {
+      callbacks.onMetadata({ conversation_uuid: chatId });
+    }
+
+    await streamResponse(cookies, chatId!, callbacks, userMessage, !!payload.chatId);
   } catch (error: any) {
     callbacks.onError(error);
   }
@@ -172,6 +184,14 @@ async function createChat(cookies: string, content: string): Promise<ChatRespons
   });
 }
 
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    var r = (Math.random() * 16) | 0,
+      v = c == 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 async function streamResponse(
   cookies: string,
   chatId: string,
@@ -180,6 +200,8 @@ async function streamResponse(
     onDone: () => void;
     onError: (error: Error) => void;
   },
+  newContent?: string,
+  isAppendMode: boolean = false,
 ) {
   const request = net.request({
     method: 'POST',
@@ -197,7 +219,7 @@ async function streamResponse(
 
   const reasoningChunks = new Set<number>();
 
-  const payload = {
+  let payload: any = {
     chatId: chatId,
     mode: 'start',
     disabledFeatures: [],
@@ -210,6 +232,21 @@ async function streamResponse(
     shouldUseMessagePatch: true,
     shouldUsePersistentStream: true,
   };
+
+  if (isAppendMode && newContent) {
+    payload.mode = 'append';
+    payload.messageInput = [{ type: 'text', text: newContent }];
+    payload.messageFiles = [];
+    payload.messageId = generateUUID();
+    payload.features = [
+      'beta-code-interpreter',
+      'beta-imagegen',
+      'beta-websearch',
+      'beta-reasoning',
+    ];
+    payload.libraries = [];
+    payload.integrations = [];
+  }
 
   request.write(JSON.stringify(payload));
 

@@ -225,9 +225,11 @@ router.post('/completions', async (req, res) => {
         {
           model,
           messages,
+          chatId: conversation_id,
         },
         {
           onContent: callbacks.onContent,
+          onMetadata: callbacks.onMetadata,
           onDone: callbacks.onDone,
           onError: callbacks.onError,
         },
