@@ -62,6 +62,7 @@ export async function chatCompletionStream(
   userAgent: string | undefined, // We should try to use a real browser UA if possible, or the one passed in
   callbacks: {
     onContent: (content: string) => void;
+    onMetadata?: (metadata: any) => void;
     onDone: () => void;
     onError: (error: Error) => void;
   },
@@ -69,6 +70,14 @@ export async function chatCompletionStream(
   try {
     const origin = BASE_URL;
     const cookie = `sessionKey=${token}`;
+
+    // Log incoming request
+    console.log('[Claude] Chat Request:', {
+      conversation_id: (payload as any).conversation_id,
+      parent_message_id: (payload as any).parent_message_id,
+      model: payload.model,
+      messageCount: payload.messages.length,
+    });
 
     // Helper to set common headers
     const setCommonHeaders = (req: Electron.ClientRequest) => {
@@ -114,38 +123,48 @@ export async function chatCompletionStream(
     };
 
     // 1. Get Organization
-    // We can assume if we are logged in, we have an org.
     const orgs = await makeRequest(`${BASE_URL}/api/organizations`, 'GET');
     if (!orgs || !orgs.length) throw new Error('No organizations found');
-    const orgId = orgs[0].uuid; // Use the first org
+    const orgId = orgs[0].uuid;
+    console.log('[Claude] Organization ID:', orgId);
 
-    // 2. Create Conversation
-    const convUuid = crypto.randomUUID();
+    // 2. Conversation Handling - Use existing or create new
+    const convUuid = (payload as any).conversation_id || crypto.randomUUID();
+    const isNewConversation = !(payload as any).conversation_id;
 
-    // Use model from payload or default to Sonnet 4.5 (primary model)
-    const model = payload.model || 'claude-sonnet-4-5-20250929';
-
-    const convBody = {
+    console.log('[Claude] Conversation:', {
       uuid: convUuid,
-      name: '',
-      model, // CRITICAL: Model must be specified when creating conversation
-    };
+      isNew: isNewConversation,
+    });
 
-    await makeRequest(
-      `${BASE_URL}/api/organizations/${orgId}/chat_conversations`,
-      'POST',
-      convBody,
-    );
+    // Only create conversation if it doesn't exist
+    if (isNewConversation) {
+      const model = payload.model || 'claude-sonnet-4-5-20250929';
+      const convBody = {
+        uuid: convUuid,
+        name: '',
+        model,
+      };
+
+      console.log('[Claude] Creating new conversation:', convBody);
+      await makeRequest(
+        `${BASE_URL}/api/organizations/${orgId}/chat_conversations`,
+        'POST',
+        convBody,
+      );
+    } else {
+      console.log('[Claude] Reusing existing conversation:', convUuid);
+    }
 
     // 3. Send Completion
-    const prompt = payload.messages
-      .map((msg) => `${msg.role === 'user' ? 'Human' : 'Assistant'}: ${msg.content}`)
-      .join('\n\n');
+    // Get the last user message content
+    const lastUserMessage = [...payload.messages].reverse().find((m) => m.role === 'user');
+    const prompt = lastUserMessage?.content || '';
 
-    // Default formatting for web client (matching open-claude exactly)
+    // Use parent_message_id from payload if available
     const completionBody = {
       prompt,
-      parent_message_uuid: null, // CRITICAL: Must be null for first message, not convUuid
+      parent_message_uuid: (payload as any).parent_message_id || null,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       personalized_styles: [
         {
@@ -171,17 +190,24 @@ export async function chatCompletionStream(
       rendering_mode: 'messages',
     };
 
+    console.log('[Claude] Completion request:', {
+      url: `${BASE_URL}/api/organizations/${orgId}/chat_conversations/${convUuid}/completion`,
+      parent_message_uuid: completionBody.parent_message_uuid,
+      promptLength: prompt.length,
+    });
+
     const req = net.request({
       method: 'POST',
       url: `${BASE_URL}/api/organizations/${orgId}/chat_conversations/${convUuid}/completion`,
     });
 
     setCommonHeaders(req);
-    // Override Referer for chat
     req.setHeader('Referer', `${BASE_URL}/chat/${convUuid}`);
     req.setHeader('Accept', 'text/event-stream');
 
     req.write(JSON.stringify(completionBody));
+
+    let conversationUuidSent = false;
 
     req.on('response', (response) => {
       const decoder = new TextDecoder();
@@ -211,6 +237,24 @@ export async function chatCompletionStream(
             if (jsonStr === '[DONE]') continue;
             try {
               const data = JSON.parse(jsonStr);
+
+              // Log full response data to understand structure
+              console.log('[Claude] Response data:', JSON.stringify(data, null, 2));
+
+              // Send conversation_uuid back to frontend on first chunk
+              if (!conversationUuidSent && callbacks.onMetadata) {
+                callbacks.onMetadata({ conversation_uuid: convUuid });
+                conversationUuidSent = true;
+                console.log('[Claude] Sent conversation_uuid to frontend:', convUuid);
+              }
+
+              // Extract and send message_uuid from message_start event
+              if (data.type === 'message_start' && data.message?.uuid && callbacks.onMetadata) {
+                callbacks.onMetadata({ message_uuid: data.message.uuid });
+                console.log('[Claude] Sent message_uuid to frontend:', data.message.uuid);
+              }
+
+              // Extract content from different response types
               if (data.completion) {
                 callbacks.onContent(data.completion);
               } else if (data.delta?.text) {
@@ -226,11 +270,15 @@ export async function chatCompletionStream(
       });
 
       response.on('end', () => {
+        console.log('[Claude] Stream completed for conversation:', convUuid);
         callbacks.onDone();
       });
     });
 
-    req.on('error', (e) => callbacks.onError(e));
+    req.on('error', (e) => {
+      console.error('[Claude] Request error:', e);
+      callbacks.onError(e);
+    });
     req.end();
   } catch (e: any) {
     console.error('[Claude] Fatal Error:', e);

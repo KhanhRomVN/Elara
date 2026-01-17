@@ -139,6 +139,10 @@ router.post('/completions', async (req, res) => {
         // requestTokens += 1; // Estimation
         res.write(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`);
       },
+      onMetadata: (metadata: any) => {
+        // Write metadata directly to stream
+        res.write(`data: ${JSON.stringify({ choices: [{ delta: metadata }] })}\n\n`);
+      },
       onDone: () => {
         // const duration = Date.now() - startTime;
         // updateAccountStats(account!.id, {
@@ -205,7 +209,13 @@ router.post('/completions', async (req, res) => {
     } else if (account.provider === 'Claude') {
       await claudeChat(
         account.credential,
-        { model, messages, stream: true },
+        {
+          model,
+          messages,
+          stream: true,
+          conversation_id,
+          parent_message_id,
+        },
         account.userAgent,
         callbacks,
       );

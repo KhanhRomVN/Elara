@@ -428,8 +428,22 @@ export const usePlaygroundLogic = ({
   // Input Token Count
   useEffect(() => {
     const timer = setTimeout(async () => {
-      if (!input) setInputTokenCount(0);
-      // else logic removed as in original
+      if (!input) {
+        setInputTokenCount(0);
+        return;
+      }
+
+      // Claude token counting
+      if (selectedProvider === 'Claude') {
+        try {
+          const { countClaudeTokens } = await import('../utils/claude-tokenizer');
+          const tokens = countClaudeTokens(input);
+          setInputTokenCount(tokens);
+        } catch (error) {
+          console.error('Error counting Claude input tokens:', error);
+          setInputTokenCount(0);
+        }
+      }
     }, 500);
     return () => clearTimeout(timer);
   }, [input, selectedProvider, deepseekModel]);
@@ -521,9 +535,11 @@ export const usePlaygroundLogic = ({
           parent_message_id:
             account.provider === 'DeepSeek'
               ? [...messages].reverse().find((m) => m.role === 'assistant')?.deepseek_message_id
-              : messages.length > 0
-                ? messages[messages.length - 1].id
-                : undefined,
+              : account.provider === 'Claude'
+                ? [...messages].reverse().find((m) => m.role === 'assistant')?.claude_message_uuid
+                : messages.length > 0
+                  ? messages[messages.length - 1].id
+                  : undefined,
           ...(account.provider === 'Groq'
             ? {
                 temperature: groqSettings.temperature,
@@ -691,6 +707,15 @@ export const usePlaygroundLogic = ({
             role: m.sender === 'human' ? 'user' : 'assistant',
             content: m.content?.[0]?.text || m.text || '',
           }));
+
+          // Calculate total tokens for Claude conversations
+          try {
+            const { countClaudeMessagesTokens } = await import('../utils/claude-tokenizer');
+            const totalTokens = countClaudeMessagesTokens(formattedMessages);
+            setTokenCount(totalTokens);
+          } catch (error) {
+            console.error('Error counting Claude conversation tokens:', error);
+          }
         } else if (selectedProvider === 'DeepSeek') {
           formattedMessages = (data.chat_messages || []).map((m: any) => ({
             id: m.message_id,

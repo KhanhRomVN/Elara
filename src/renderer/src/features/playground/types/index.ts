@@ -9,6 +9,7 @@ export interface Message {
   thinking_elapsed?: number;
   _deepseek_mode?: 'THINK' | 'RESPONSE';
   deepseek_message_id?: number; // Response message ID from DeepSeek API for conversation threading
+  claude_message_uuid?: string; // Message UUID from Claude API for conversation threading
   attachments?: Attachment[];
 }
 
