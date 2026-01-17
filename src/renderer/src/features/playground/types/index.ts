@@ -48,7 +48,7 @@ export type Provider =
 
 export interface Account {
   id: string;
-  provider: Provider;
+  provider_id: string; // Changed from Provider type to string or keep Provider? Provider is a string union.
   email: string;
   name?: string;
   picture?: string;

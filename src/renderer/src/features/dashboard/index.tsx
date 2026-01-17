@@ -1,11 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BarChart3, Users, Zap, TrendingUp } from 'lucide-react';
-import {
-  fetchAllHistory,
-  aggregateUsage,
-  TokenUsageData,
-  AggregatedUsage,
-} from './utils/historyFetcher';
+import { aggregateUsage, TokenUsageData, AggregatedUsage } from './utils/historyFetcher';
 import { TokenUsageChart } from './components/TokenUsageChart';
 
 const Dashboard = () => {
@@ -51,7 +46,7 @@ const Dashboard = () => {
         // Smart Caching Logic for Token Usage
         const CACHE_KEY = 'dashboard-token-usage-v1';
         let cachedData: TokenUsageData[] = [];
-        let maxTimestamp = 0;
+        // let maxTimestamp = 0;
 
         try {
           const cached = localStorage.getItem(CACHE_KEY);
@@ -62,7 +57,7 @@ const Dashboard = () => {
 
             // Find max timestamp to fetch only new data
             if (cachedData.length > 0) {
-              maxTimestamp = Math.max(...cachedData.map((d) => d.timestamp));
+              // maxTimestamp = Math.max(...cachedData.map((d) => d.timestamp));
             }
           }
         } catch (e) {
@@ -225,13 +220,13 @@ const Dashboard = () => {
               >
                 <div className="flex items-center gap-3 overflow-hidden">
                   <div
-                    className={`w-2 h-2 rounded-full shrink-0 ${acc.provider === 'Claude' ? 'bg-orange-500' : 'bg-blue-500'}`}
+                    className={`w-2 h-2 rounded-full shrink-0 ${acc.provider_id === 'Claude' ? 'bg-orange-500' : 'bg-blue-500'}`}
                   />
                   <div className="flex flex-col overflow-hidden">
                     <span className="text-sm font-medium truncate">
                       {acc.email || acc.name || 'Unnamed Account'}
                     </span>
-                    <span className="text-xs text-muted-foreground">{acc.provider}</span>
+                    <span className="text-xs text-muted-foreground">{acc.provider_id}</span>
                   </div>
                 </div>
                 <div className="font-mono text-xs font-bold text-green-500">Active</div>
@@ -297,7 +292,7 @@ const Dashboard = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             {/* Provider Stats List */}
             <div className="md:col-span-1 border-r pr-6 space-y-4 max-h-[350px] overflow-y-auto">
-              {availableProviders.sort().map((p, i) => {
+              {availableProviders.sort().map((p) => {
                 const reqs = aggregatedUsage?.requestsByProvider[p] || 0;
                 const tokens = aggregatedUsage?.byProvider[p] || 0;
 

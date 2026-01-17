@@ -55,20 +55,20 @@ export const deepseekHandler: StreamLineHandler = {
             if (msg.id !== currentMessageId) return msg;
 
             let newMsg = { ...msg };
-            let updated = false;
+            // let updated = false;
 
             // 1. Explicit Thinking Content Update (e.g., {"p":"response/thinking_content","v":"H"})
             if (path === 'response/thinking_content' || path?.endsWith('thinking_content')) {
               newMsg.thinking = (newMsg.thinking || '') + value;
               newMsg._deepseek_mode = 'THINK';
-              updated = true;
+              // updated = true;
             }
 
             // 2. Explicit Content Update (e.g., {"p":"response/content","v":"X"})
             else if (path === 'response/content') {
               newMsg.content = (newMsg.content || '') + value;
               newMsg._deepseek_mode = 'RESPONSE';
-              updated = true;
+              // updated = true;
             }
 
             // 3. Fragment content update (e.g., {"p":"response/fragments/-1/content","v":"..."})
@@ -80,7 +80,7 @@ export const deepseekHandler: StreamLineHandler = {
               } else {
                 newMsg.content = (newMsg.content || '') + value;
               }
-              updated = true;
+              // updated = true;
             }
 
             // 4. Implicit Update (Missing 'p' or just has 'o' and 'v')
@@ -95,7 +95,7 @@ export const deepseekHandler: StreamLineHandler = {
               } else {
                 newMsg.content = (newMsg.content || '') + value;
               }
-              updated = true;
+              // updated = true;
             }
 
             return newMsg;

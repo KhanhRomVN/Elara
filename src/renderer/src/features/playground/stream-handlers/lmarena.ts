@@ -1,7 +1,7 @@
 import { StreamLineHandler } from './types';
 
 export const lmArenaHandler: StreamLineHandler = {
-  processLine: (line, currentMessageId, setMessages, onTokenUpdate, onSessionId) => {
+  processLine: (line, currentMessageId, setMessages, onTokenUpdate) => {
     try {
       if (!line.trim() || line.trim() === '[DONE]') return;
 

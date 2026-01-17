@@ -486,68 +486,11 @@ export async function login() {
     const onCookies = (cookies: string) => {
       console.log('[Perplexity] Cookies captured!');
       capturedCookies = cookies;
-
-      // Fetch user session for email/username
-      const fetchSession = () => {
-        console.log('[Perplexity] Fetching user session...');
-        const request = net.request({
-          method: 'GET',
-          url: 'https://www.perplexity.ai/api/auth/session',
-        });
-        request.setHeader('Cookie', cookies);
-        request.setHeader(
-          'User-Agent',
-          'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
-        );
-
-        request.on('response', (response) => {
-          let data = '';
-          response.on('data', (chunk) => (data += chunk.toString()));
-          response.on('end', () => {
-            let email = '';
-            let username = '';
-            try {
-              if (response.statusCode === 200) {
-                const json = JSON.parse(data);
-                console.log('[Perplexity] Session data received:', JSON.stringify(json, null, 2)); // Log full session for debugging
-                if (json.user) {
-                  email = json.user.email || '';
-                  username = json.user.username || '';
-                } else if (json.email) {
-                  // Fallback if structure is different
-                  email = json.email;
-                }
-              } else {
-                console.error(
-                  `[Perplexity] Session fetch failed with status: ${response.statusCode}`,
-                );
-                console.error(`[Perplexity] Response body: ${data}`);
-              }
-            } catch (e) {
-              console.error('[Perplexity] Error parsing session data:', e);
-            }
-
-            console.log(`[Perplexity] Resolved - Email: ${email}, Username: ${username}`);
-            // Resolve after a short delay to ensure everything is clean
-            setTimeout(() => {
-              cleanup();
-              resolve({ cookies: capturedCookies, email, username });
-            }, 500);
-          });
-        });
-        request.on('error', (err) => {
-          console.error('[Perplexity] Session request error:', err);
-          // Resolve with captured cookies anyway
-          setTimeout(() => {
-            cleanup();
-            resolve({ cookies: capturedCookies, email: '', username: '' });
-          }, 500);
-        });
-        request.end();
-      };
-
-      // Delay slightly to let cookies settle or ensure connection
-      setTimeout(fetchSession, 500);
+      // Resolve immediately with default email
+      setTimeout(() => {
+        cleanup();
+        resolve({ cookies: capturedCookies, email: 'perplexity@user.com' });
+      }, 500);
     };
 
     proxyEvents.on('perplexity-cookies', onCookies);

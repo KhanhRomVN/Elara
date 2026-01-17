@@ -9,7 +9,6 @@ export type SelectionStrategy = 'round-robin' | 'priority' | 'least-used';
 
 export class AccountSelector {
   private roundRobinIndex: Map<string, number> = new Map();
-  private requestCounts: Map<string, number> = new Map();
 
   /**
    * Select an account based on the strategy
@@ -37,8 +36,6 @@ export class AccountSelector {
         return this.roundRobin(provider || 'default', accounts);
       case 'priority':
         return this.priority(accounts);
-      case 'least-used':
-        return this.leastUsed(accounts);
       default:
         return accounts[0];
     }
@@ -55,10 +52,10 @@ export class AccountSelector {
 
       const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
 
-      let filtered = accounts.filter((a) => a.status === 'Active');
+      let filtered = accounts;
 
       if (provider) {
-        filtered = filtered.filter((a) => a.provider === provider);
+        filtered = filtered.filter((a) => a.provider_id === provider);
       }
 
       return filtered;
@@ -93,7 +90,9 @@ export class AccountSelector {
     const account = accounts[index % accounts.length];
     this.roundRobinIndex.set(key, index + 1);
 
-    console.log(`[AccountSelector] Round-robin selected: ${account.email} (${account.provider})`);
+    console.log(
+      `[AccountSelector] Round-robin selected: ${account.email} (${account.provider_id})`,
+    );
     return account;
   }
 
@@ -104,51 +103,8 @@ export class AccountSelector {
     // You could extend Account interface to include priority field
     // For now, just return first account
     const account = accounts[0];
-    console.log(`[AccountSelector] Priority selected: ${account.email} (${account.provider})`);
+    console.log(`[AccountSelector] Priority selected: ${account.email} (${account.provider_id})`);
     return account;
-  }
-
-  /**
-   * Least-used selection (based on request count tracking)
-   */
-  private leastUsed(accounts: Account[]): Account {
-    let minCount = Infinity;
-    let selectedAccount = accounts[0];
-
-    for (const account of accounts) {
-      const count = this.requestCounts.get(account.id) || 0;
-      if (count < minCount) {
-        minCount = count;
-        selectedAccount = account;
-      }
-    }
-
-    console.log(
-      `[AccountSelector] Least-used selected: ${selectedAccount.email} (${selectedAccount.provider})`,
-    );
-    return selectedAccount;
-  }
-
-  /**
-   * Track request for an account (used by least-used strategy)
-   */
-  trackRequest(accountId: string): void {
-    const count = this.requestCounts.get(accountId) || 0;
-    this.requestCounts.set(accountId, count + 1);
-  }
-
-  /**
-   * Reset request counts
-   */
-  resetCounts(): void {
-    this.requestCounts.clear();
-  }
-
-  /**
-   * Get request count for an account
-   */
-  getRequestCount(accountId: string): number {
-    return this.requestCounts.get(accountId) || 0;
   }
 }
 

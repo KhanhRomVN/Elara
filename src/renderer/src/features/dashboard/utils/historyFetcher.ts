@@ -9,7 +9,6 @@ export interface TokenUsageData {
 
 export interface AggregatedUsage {
   total: number;
-  total: number;
   byProvider: Record<string, number>;
   requestsByProvider: Record<string, number>;
   history: {
@@ -29,14 +28,14 @@ export const fetchAllHistory = async (
   for (const account of accounts) {
     if (account.status !== 'Active') continue;
     // Currently only DeepSeek supports detailed token usage extraction from history
-    if (account.provider !== 'DeepSeek') continue;
+    if (account.provider_id !== 'DeepSeek') continue;
 
     try {
       // @ts-ignore
       const status = await window.api.server.start();
       const port = status.port || 11434;
 
-      const endpoint = getEndpoint(account.provider, port);
+      const endpoint = getEndpoint(account.provider_id, port);
       const res = await fetch(`${endpoint}?email=${encodeURIComponent(account.email)}`);
 
       if (!res.ok) continue;
@@ -44,14 +43,14 @@ export const fetchAllHistory = async (
       const data = await res.json();
       const providerUsage = await parseHistory(
         data,
-        account.provider,
+        account.provider_id,
         account.email,
         port,
         lastTimestamp,
       );
       allUsage.push(...providerUsage);
     } catch (e) {
-      console.error(`Failed to fetch history for ${account.provider}:`, e);
+      console.error(`Failed to fetch history for ${account.provider_id}:`, e);
     }
   }
 
@@ -166,7 +165,6 @@ export const aggregateUsage = (
 ): AggregatedUsage => {
   const now = new Date();
   let filteredData = data;
-  let labels: string[] = [];
   let formatLabel: (date: Date) => string;
 
   if (viewMode === 'day') {

@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from 'react';
-import { User } from 'lucide-react';
 
 import { providers } from '../../config/providers';
 
@@ -119,7 +118,7 @@ export const PlaygroundPage = ({
   }, [isResizing]);
 
   const filteredAccounts = selectedProvider
-    ? accounts.filter((acc) => acc.provider === selectedProvider)
+    ? accounts.filter((acc) => acc.provider_id === selectedProvider)
     : [];
 
   const account = accounts.find((a) => a.id === selectedAccount);
@@ -168,7 +167,7 @@ export const PlaygroundPage = ({
                   value={selectedProvider}
                   onChange={(val) => {
                     setSelectedProvider(val as any);
-                    const providerAccounts = accounts.filter((acc) => acc.provider === val);
+                    const providerAccounts = accounts.filter((acc) => acc.provider_id === val);
                     if (providerAccounts.length > 0) {
                       setSelectedAccount(providerAccounts[0].id);
                     } else {
@@ -191,7 +190,7 @@ export const PlaygroundPage = ({
                         icon: (
                           <AccountAvatar
                             email={acc.email}
-                            provider={acc.provider}
+                            provider={acc.provider_id}
                             className="w-4 h-4 text-[8px]"
                           />
                         ),

@@ -1,27 +1,22 @@
-import { ipcMain, dialog, app, BrowserWindow, session, net } from 'electron';
+import { ipcMain, dialog, app, session } from 'electron';
 import fs from 'fs';
-import path, { join } from 'path';
+import path from 'path';
 
 const crypto = require('crypto');
 
-import { fetchMistralProfile, login as loginMistral } from '../server/mistral';
-import { login as loginKimi, getProfile as getKimiProfile } from '../server/kimi';
-import { login as loginQwen, getProfile as getQwenProfile } from '../server/qwen';
-import { login as loginCohere, getProfile as getCohereProfile } from '../server/cohere';
+import { login as loginMistral } from '../server/mistral';
+import { login as loginKimi } from '../server/kimi';
+import { login as loginQwen } from '../server/qwen';
+import { login as loginCohere } from '../server/cohere';
 import { login as loginClaude } from '../server/claude';
 import { login as loginGroq } from '../server/groq';
 import { login as loginGemini } from '../server/gemini';
 import { login as loginPerplexity } from '../server/perplexity';
-import {
-  login as loginHuggingChat,
-  getProfile as getHuggingChatProfile,
-} from '../server/hugging-chat';
+import { login as loginHuggingChat } from '../server/hugging-chat';
 import { login as lmArenaLogin } from '../server/lmarena';
 import { AntigravityAuthServer } from '../server/antigravity';
 import { login as loginStepFun } from '../server/stepfun';
 import { login as loginDeepSeek } from '../server/deepseek';
-
-import { proxyEvents } from '../server/proxy';
 
 const DATA_FILE = path.join(app.getPath('userData'), 'accounts.json');
 
@@ -31,71 +26,15 @@ if (!fs.existsSync(DATA_FILE)) {
 }
 
 export interface Account {
-  metadata?: any;
   id: string;
-  provider:
-    | 'Claude'
-    | 'DeepSeek'
-    | 'Mistral'
-    | 'Kimi'
-    | 'Qwen'
-    | 'Cohere'
-    | 'Perplexity'
-    | 'Groq'
-    | 'Gemini'
-    | 'Antigravity'
-    | 'HuggingChat'
-    | 'StepFun'
-    | 'LMArena';
-
+  provider_id: string;
   email: string;
-  credential: string; // cookie or api key
-  status: 'Active' | 'Rate Limit' | 'Error';
-  usage: string; // This might be legacy string usage, but we'll keep it for now or replace usage of it. User wanted "Total Token (Input+Output) Today" column. Usage field seems to be "0" originally.
-  // New Stats
-  // Lifetime Stats
-  totalRequests: number;
-  successfulRequests: number;
-  totalDuration: number;
-  // Today Stats
-  tokensToday: number;
-  statsDate: string; // YYYY-MM-DD
-  lastActive?: string;
-  userAgent?: string;
-  headers?: any;
+  credential: string;
 }
 
-const getSafeUserAgent = () => {
-  // Use a static, realistic Chrome User-Agent to avoid bot detection
-  return 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36';
-};
+// getSafeUserAgent removed
 
 export const setupAccountsHandlers = () => {
-  // Listen for Groq SDK Client Header
-  proxyEvents.on('groq-sdk-client', (headerValue: string) => {
-    try {
-      if (!fs.existsSync(DATA_FILE)) return;
-      const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
-      // Find the active Groq account or any Groq account
-      const index = accounts.findIndex((acc) => acc.provider === 'Groq' && acc.status === 'Active');
-
-      if (index !== -1) {
-        const acc = accounts[index];
-        const currentHeaders = acc.headers || {};
-
-        // Update if missing or changed
-        if (currentHeaders['x-sdk-client'] !== headerValue) {
-          acc.headers = { ...currentHeaders, 'x-sdk-client': headerValue };
-          accounts[index] = acc;
-          fs.writeFileSync(DATA_FILE, JSON.stringify(accounts, null, 2));
-          // console.log('[Accounts] Updated Groq x-sdk-client header');
-        }
-      }
-    } catch (e) {
-      console.error('[Accounts] Error processing Groq SDK header:', e);
-    }
-  });
-
   ipcMain.handle('accounts:get-all', async () => {
     try {
       if (!fs.existsSync(DATA_FILE)) return [];
@@ -143,7 +82,7 @@ export const setupAccountsHandlers = () => {
     ) => {
       return new Promise(async (resolve) => {
         // Use a consistent, real Chrome user agent by stripping Electron/App identifiers
-        const userAgent = getSafeUserAgent();
+        // const userAgent = getSafeUserAgent();
 
         const partition = `persist:${provider.toLowerCase()}`;
         const authSession = session.fromPartition(partition);
@@ -181,18 +120,9 @@ export const setupAccountsHandlers = () => {
 
             const newAccount: Account = {
               id: crypto.randomUUID(),
-              provider: 'Kimi',
+              provider_id: 'Kimi',
               email: finalEmail,
               credential: cookies,
-              status: 'Active',
-              usage: '0',
-              totalRequests: 0,
-              successfulRequests: 0,
-              totalDuration: 0,
-              tokensToday: 0,
-              statsDate: new Date().toISOString().split('T')[0],
-              lastActive: new Date().toISOString(),
-              userAgent,
             };
 
             saveAccount(newAccount);
@@ -212,18 +142,9 @@ export const setupAccountsHandlers = () => {
 
             const newAccount: Account = {
               id: crypto.randomUUID(),
-              provider: 'Mistral',
+              provider_id: 'Mistral',
               email: finalEmail,
               credential: cookies,
-              status: 'Active',
-              usage: '0',
-              totalRequests: 0,
-              successfulRequests: 0,
-              totalDuration: 0,
-              tokensToday: 0,
-              statsDate: new Date().toISOString().split('T')[0],
-              lastActive: new Date().toISOString(),
-              userAgent,
             };
 
             saveAccount(newAccount);
@@ -253,18 +174,9 @@ export const setupAccountsHandlers = () => {
 
             const newAccount: Account = {
               id: crypto.randomUUID(),
-              provider: 'Claude',
+              provider_id: 'Claude',
               email: finalEmail,
               credential: cookies, // This is sessionKey
-              status: 'Active',
-              usage: '0',
-              totalRequests: 0,
-              successfulRequests: 0,
-              totalDuration: 0,
-              tokensToday: 0,
-              statsDate: new Date().toISOString().split('T')[0],
-              lastActive: new Date().toISOString(),
-              userAgent,
             };
 
             saveAccount(newAccount);
@@ -279,27 +191,15 @@ export const setupAccountsHandlers = () => {
           try {
             console.log('[Accounts] Starting Qwen login flow...');
             // @ts-ignore
-            const { cookies, headers } = await loginQwen();
-            console.log('[Accounts] Qwen login success, fetching profile...');
-            const profile = await getQwenProfile(cookies);
-            console.log('[Accounts] Qwen profile fetched:', profile);
-            const email = profile?.email || 'qwen@user.com';
+            const { cookies } = await loginQwen();
+            console.log('[Accounts] Qwen login success');
+            const email = 'qwen@user.com';
 
             const newAccount: Account = {
               id: crypto.randomUUID(),
-              provider: 'Qwen',
+              provider_id: 'Qwen',
               email: email,
               credential: cookies,
-              headers: headers, // Save headers
-              status: 'Active',
-              usage: '0',
-              totalRequests: 0,
-              successfulRequests: 0,
-              totalDuration: 0,
-              tokensToday: 0,
-              statsDate: new Date().toISOString().split('T')[0],
-              lastActive: new Date().toISOString(),
-              userAgent,
             };
 
             saveAccount(newAccount);
@@ -318,18 +218,9 @@ export const setupAccountsHandlers = () => {
 
             const newAccount: Account = {
               id: crypto.randomUUID(),
-              provider: 'Cohere',
+              provider_id: 'Cohere',
               email: finalEmail,
               credential: cookies,
-              status: 'Active',
-              usage: '0',
-              totalRequests: 0,
-              successfulRequests: 0,
-              totalDuration: 0,
-              tokensToday: 0,
-              statsDate: new Date().toISOString().split('T')[0],
-              lastActive: new Date().toISOString(),
-              userAgent,
             };
 
             saveAccount(newAccount);
@@ -348,18 +239,9 @@ export const setupAccountsHandlers = () => {
 
             const newAccount: Account = {
               id: crypto.randomUUID(),
-              provider: 'Groq',
+              provider_id: 'Groq',
               email: finalEmail,
               credential: cookies,
-              status: 'Active',
-              usage: '0',
-              totalRequests: 0,
-              successfulRequests: 0,
-              totalDuration: 0,
-              tokensToday: 0,
-              statsDate: new Date().toISOString().split('T')[0],
-              lastActive: new Date().toISOString(),
-              userAgent,
             };
 
             saveAccount(newAccount);
@@ -373,24 +255,14 @@ export const setupAccountsHandlers = () => {
         if (provider === 'Gemini') {
           try {
             console.log('[Accounts] Starting Gemini login flow (Real Browser)...');
-            const { cookies, email, metadata } = await loginGemini();
+            const { cookies, email } = await loginGemini();
             const finalEmail = email || 'gemini@user.com';
 
             const newAccount: Account = {
               id: crypto.randomUUID(),
-              provider: 'Gemini',
+              provider_id: 'Gemini',
               email: finalEmail,
               credential: cookies,
-              metadata, // Save the critical tokens here
-              status: 'Active',
-              usage: '0',
-              totalRequests: 0,
-              successfulRequests: 0,
-              totalDuration: 0,
-              tokensToday: 0,
-              statsDate: new Date().toISOString().split('T')[0],
-              lastActive: new Date().toISOString(),
-              userAgent,
             };
 
             saveAccount(newAccount);
@@ -410,18 +282,9 @@ export const setupAccountsHandlers = () => {
 
             const newAccount: Account = {
               id: crypto.randomUUID(),
-              provider: 'Perplexity',
+              provider_id: 'Perplexity',
               email: finalEmail,
               credential: cookies,
-              status: 'Active',
-              usage: '0',
-              totalRequests: 0,
-              successfulRequests: 0,
-              totalDuration: 0,
-              tokensToday: 0,
-              statsDate: new Date().toISOString().split('T')[0],
-              lastActive: new Date().toISOString(),
-              userAgent,
             };
 
             saveAccount(newAccount);
@@ -435,26 +298,15 @@ export const setupAccountsHandlers = () => {
         if (provider === 'HuggingChat') {
           try {
             console.log('[Accounts] Starting HuggingChat login flow...');
-            console.log('[Accounts] HuggingChat login success, fetching profile...');
+            console.log('[Accounts] HuggingChat login success');
             const { cookies, email } = await loginHuggingChat();
-            const profile = await getHuggingChatProfile(cookies);
-            console.log('[Accounts] HuggingChat profile fetched:', profile);
-            const finalEmail = email || profile.email || 'huggingchat@user.com';
+            const finalEmail = email || 'huggingchat@user.com';
 
             const newAccount: Account = {
               id: crypto.randomUUID(),
-              provider: 'HuggingChat',
+              provider_id: 'HuggingChat',
               email: finalEmail,
               credential: cookies,
-              status: 'Active',
-              usage: '0',
-              totalRequests: 0,
-              successfulRequests: 0,
-              totalDuration: 0,
-              tokensToday: 0,
-              statsDate: new Date().toISOString().split('T')[0],
-              lastActive: new Date().toISOString(),
-              userAgent,
             };
 
             saveAccount(newAccount);
@@ -473,18 +325,9 @@ export const setupAccountsHandlers = () => {
 
             const newAccount: Account = {
               id: crypto.randomUUID(),
-              provider: 'LMArena',
+              provider_id: 'LMArena',
               email: email || 'lmarena@user.com',
               credential: cookies,
-              status: 'Active',
-              usage: '0',
-              totalRequests: 0,
-              successfulRequests: 0,
-              totalDuration: 0,
-              tokensToday: 0,
-              statsDate: new Date().toISOString().split('T')[0],
-              lastActive: new Date().toISOString(),
-              userAgent,
             };
 
             saveAccount(newAccount);
@@ -503,18 +346,9 @@ export const setupAccountsHandlers = () => {
 
             const newAccount: Account = {
               id: crypto.randomUUID(),
-              provider: 'StepFun',
+              provider_id: 'StepFun',
               email: email || 'stepfun@user.com',
               credential: cookies,
-              status: 'Active',
-              usage: '0',
-              totalRequests: 0,
-              successfulRequests: 0,
-              totalDuration: 0,
-              tokensToday: 0,
-              statsDate: new Date().toISOString().split('T')[0],
-              lastActive: new Date().toISOString(),
-              userAgent,
             };
 
             saveAccount(newAccount);
@@ -536,18 +370,9 @@ export const setupAccountsHandlers = () => {
 
             const newAccount: Account = {
               id: crypto.randomUUID(),
-              provider: 'DeepSeek',
+              provider_id: 'DeepSeek',
               email: email || 'deepseek@user.com',
               credential: cookies,
-              status: 'Active',
-              usage: '0',
-              totalRequests: 0,
-              successfulRequests: 0,
-              totalDuration: 0,
-              tokensToday: 0,
-              statsDate: new Date().toISOString().split('T')[0],
-              lastActive: new Date().toISOString(),
-              userAgent,
             };
 
             saveAccount(newAccount);
@@ -622,18 +447,9 @@ export const setupAccountsHandlers = () => {
       const email = userInfo.email;
       const newAccount: Account = {
         id: crypto.randomUUID(),
-        provider: 'Antigravity',
+        provider_id: 'Antigravity',
         email: email,
         credential: JSON.stringify(tokenRes), // Store full token response (access + refresh)
-        status: 'Active',
-        usage: '0',
-        totalRequests: 0,
-        successfulRequests: 0,
-        totalDuration: 0,
-        tokensToday: 0,
-        statsDate: new Date().toISOString().split('T')[0],
-        lastActive: new Date().toISOString(),
-        userAgent: getSafeUserAgent(),
       };
 
       saveAccount(newAccount);
@@ -662,18 +478,9 @@ export const setupAccountsHandlers = () => {
       const email = userInfo.email;
       const newAccount: Account = {
         id: crypto.randomUUID(),
-        provider: 'Antigravity',
+        provider_id: 'Antigravity',
         email: email,
         credential: JSON.stringify(tokenRes),
-        status: 'Active',
-        usage: '0',
-        totalRequests: 0,
-        successfulRequests: 0,
-        totalDuration: 0,
-        tokensToday: 0,
-        statsDate: new Date().toISOString().split('T')[0],
-        lastActive: new Date().toISOString(),
-        userAgent: getSafeUserAgent(),
       };
 
       saveAccount(newAccount);
@@ -736,14 +543,14 @@ export const setupAccountsHandlers = () => {
 
       for (const imported of importedAccounts) {
         // Validate required fields
-        if (!imported.provider || !imported.email || !imported.credential) {
+        if (!imported.provider_id || !imported.email || !imported.credential) {
           continue;
         }
 
         const existingIndex = currentAccounts.findIndex(
           (acc) =>
             acc.id === imported.id ||
-            (acc.provider === imported.provider && acc.email === imported.email),
+            (acc.provider_id === imported.provider_id && acc.email === imported.email),
         );
 
         if (existingIndex !== -1) {
@@ -752,22 +559,11 @@ export const setupAccountsHandlers = () => {
           currentAccounts[existingIndex] = {
             ...existing,
             ...imported,
-            // Preserve stats if imported ones are 0 or undefined, but prioritize real data
-            // A simple strategy: overwrite everything but maybe keep usage stats if imported is 0?
-            // Actually, usually import overwrites. But let's assume we want to just import valid accounts.
-            // If we treat import as "Restore", we overwrite.
           };
           updatedCount++;
         } else {
           // New account
           if (!imported.id) imported.id = crypto.randomUUID();
-          // Initialize stats if missing
-          if (imported.totalRequests === undefined) imported.totalRequests = 0;
-          if (imported.successfulRequests === undefined) imported.successfulRequests = 0;
-          if (imported.totalDuration === undefined) imported.totalDuration = 0;
-          if (imported.tokensToday === undefined) imported.tokensToday = 0;
-          if (imported.statsDate === undefined)
-            imported.statsDate = new Date().toISOString().split('T')[0];
 
           currentAccounts.push(imported);
           addedCount++;
@@ -804,7 +600,7 @@ export const setupAccountsHandlers = () => {
 
 // Exported function for internal use (e.g. from proxy listeners)
 export const updateAccountDirectly = (
-  provider: Account['provider'],
+  provider: string,
   updates: Partial<Account>,
   matchFn?: (acc: Account) => boolean,
 ): boolean => {
@@ -817,7 +613,7 @@ export const updateAccountDirectly = (
     if (matchFn) {
       index = accounts.findIndex(matchFn);
     } else {
-      index = accounts.findIndex((acc) => acc.provider === provider);
+      index = accounts.findIndex((acc) => acc.provider_id === provider);
     }
 
     if (index !== -1) {

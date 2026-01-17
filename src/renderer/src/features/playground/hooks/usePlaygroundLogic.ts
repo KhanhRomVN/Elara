@@ -285,13 +285,13 @@ export const usePlaygroundLogic = ({
 
         if (data.length > 0) {
           const deepseekAccount = data.find(
-            (acc: Account) => acc.provider === 'DeepSeek' && acc.status === 'Active',
+            (acc: Account) => acc.provider_id === 'DeepSeek' && acc.status === 'Active',
           );
           const otherAccount = data.find((acc: Account) => acc.status === 'Active');
           const target = deepseekAccount || otherAccount || data[0];
 
           if (target && !selectedProvider) {
-            setSelectedProvider(target.provider);
+            setSelectedProvider(target.provider_id as any);
             setSelectedAccount(target.id);
           }
         }
@@ -477,7 +477,7 @@ export const usePlaygroundLogic = ({
       const account = accounts.find((acc) => acc.id === selectedAccount);
       if (!account) throw new Error('Account not found');
 
-      const url = `http://localhost:${port}/v1/chat/completions?email=${encodeURIComponent(account.email)}&provider=${account.provider.toLowerCase()}`;
+      const url = `http://localhost:${port}/v1/chat/completions?email=${encodeURIComponent(account.email)}&provider=${account.provider_id.toLowerCase()}`;
 
       const controller = new AbortController();
       setAbortController(controller);
@@ -499,25 +499,25 @@ export const usePlaygroundLogic = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model:
-            account.provider === 'Claude'
+            account.provider_id === 'Claude'
               ? claudeModel
-              : account.provider === 'Mistral'
+              : account.provider_id === 'Mistral'
                 ? getProviderModel('Mistral')
-                : account.provider === 'Kimi'
+                : account.provider_id === 'Kimi'
                   ? getProviderModel('Kimi')
-                  : account.provider === 'Qwen'
+                  : account.provider_id === 'Qwen'
                     ? getProviderModel('Qwen')
-                    : account.provider === 'Cohere'
+                    : account.provider_id === 'Cohere'
                       ? getProviderModel('Cohere')
-                      : account.provider === 'Groq'
+                      : account.provider_id === 'Groq'
                         ? groqModel
-                        : account.provider === 'Antigravity'
+                        : account.provider_id === 'Antigravity'
                           ? antigravityModel
-                          : account.provider === 'Gemini'
+                          : account.provider_id === 'Gemini'
                             ? geminiModel
-                            : account.provider === 'HuggingChat'
+                            : account.provider_id === 'HuggingChat'
                               ? huggingChatModel
-                              : account.provider === 'LMArena'
+                              : account.provider_id === 'LMArena'
                                 ? groqModel
                                 : deepseekModel,
           messages: [
@@ -526,21 +526,21 @@ export const usePlaygroundLogic = ({
           ],
           stream: true,
           thinking:
-            account.provider === 'DeepSeek'
+            account.provider_id === 'DeepSeek'
               ? deepseekModel === 'deepseek-reasoner' || thinkingEnabled
               : undefined,
-          search: account.provider === 'DeepSeek' ? searchEnabled : undefined,
+          search: account.provider_id === 'DeepSeek' ? searchEnabled : undefined,
           ref_file_ids: uploadedFileIds.length > 0 ? uploadedFileIds : undefined,
           conversation_id: activeChatId !== 'new-session' ? activeChatId : undefined,
           parent_message_id:
-            account.provider === 'DeepSeek'
+            account.provider_id === 'DeepSeek'
               ? [...messages].reverse().find((m) => m.role === 'assistant')?.deepseek_message_id
-              : account.provider === 'Claude'
+              : account.provider_id === 'Claude'
                 ? [...messages].reverse().find((m) => m.role === 'assistant')?.claude_message_uuid
                 : messages.length > 0
                   ? messages[messages.length - 1].id
                   : undefined,
-          ...(account.provider === 'Groq'
+          ...(account.provider_id === 'Groq'
             ? {
                 temperature: groqSettings.temperature,
                 max_completion_tokens: groqSettings.maxTokens,
@@ -584,7 +584,7 @@ export const usePlaygroundLogic = ({
       let buffer = '';
       if (!reader) throw new Error('No response body');
 
-      const streamHandler = getStreamHandler(account.provider);
+      const streamHandler = getStreamHandler(account.provider_id as any);
       let currentSessionId = activeChatId;
 
       while (true) {
@@ -620,11 +620,11 @@ export const usePlaygroundLogic = ({
         conversationTitle === 'Untitled'
       ) {
         try {
-          const endpoint = getHistoryEndpoint(account.provider, port || 11434);
+          const endpoint = getHistoryEndpoint(account.provider_id, port || 11434);
           const historyRes = await fetch(`${endpoint}?email=${encodeURIComponent(account.email)}`);
           if (historyRes.ok) {
             const historyData = await historyRes.json();
-            const historyList = parseConversationList(account.provider, historyData);
+            const historyList = parseConversationList(account.provider_id, historyData);
             let targetChat = currentSessionId
               ? historyList.find((c) => c.id === currentSessionId)
               : null;

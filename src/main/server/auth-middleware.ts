@@ -109,8 +109,7 @@ export const createAuthMiddleware = (config: ProxyConfig) => {
 
         if (account) {
           req.account = account;
-          accountSelector.trackRequest(account.id);
-          console.log(`[Auth] Selected account: ${account.email} (${account.provider})`);
+          console.log(`[Auth] Selected account: ${account.email} (${account.provider_id})`);
           return next();
         }
 
@@ -126,10 +125,9 @@ export const createAuthMiddleware = (config: ProxyConfig) => {
       const accountId = extractAccountId(req);
       if (accountId) {
         const account = accountSelector.getAccountById(accountId);
-        if (account && account.status === 'Active') {
+        if (account) {
           req.account = account;
           req.authenticated = true;
-          accountSelector.trackRequest(account.id);
           console.log(`[Auth] Authenticated with account token: ${account.email}`);
           return next();
         }
@@ -143,7 +141,6 @@ export const createAuthMiddleware = (config: ProxyConfig) => {
         const account = accountSelector.selectAccount(provider, 'priority', email);
         if (account) {
           req.account = account;
-          accountSelector.trackRequest(account.id);
           console.log(`[Auth] Selected account by provider+email: ${account.email}`);
           return next();
         }
@@ -155,8 +152,7 @@ export const createAuthMiddleware = (config: ProxyConfig) => {
 
       if (account) {
         req.account = account;
-        accountSelector.trackRequest(account.id);
-        console.log(`[Auth] Auto-selected account: ${account.email} (${account.provider})`);
+        console.log(`[Auth] Auto-selected account: ${account.email} (${account.provider_id})`);
         return next();
       }
 

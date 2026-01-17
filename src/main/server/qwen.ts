@@ -166,54 +166,6 @@ export async function login() {
   });
 }
 
-export async function getProfile(cookies: string) {
-  return new Promise<{ email: string } | null>((resolve) => {
-    const request = net.request({
-      method: 'GET',
-      url: 'https://chat.qwen.ai/api/v1/auths/',
-      partition: 'persist:qwen',
-    });
-
-    request.setHeader('Cookie', cookies);
-    request.setHeader(
-      'User-Agent',
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    );
-
-    request.on('response', (response) => {
-      let data = '';
-      response.on('data', (chunk) => (data += chunk.toString()));
-      response.on('end', () => {
-        if (response.statusCode === 200) {
-          try {
-            const json = JSON.parse(data);
-            if (json.data) {
-              const { email } = json.data;
-              resolve({
-                email: email || '',
-              });
-            } else {
-              resolve(null);
-            }
-          } catch (e) {
-            console.error('[Qwen] getProfile JSON Parse Error:', e);
-            resolve(null);
-          }
-        } else {
-          console.error(`[Qwen] getProfile failed with status: ${response.statusCode}`);
-          resolve(null);
-        }
-      });
-    });
-
-    request.on('error', (e) => {
-      console.error('[Qwen] getProfile Request Error:', e);
-      resolve(null);
-    });
-    request.end();
-  });
-}
-
 // Helper to create a new chat
 async function createChat(cookies: string, headers?: Record<string, string>): Promise<string> {
   // const { v4: uuidv4 } = require('uuid');

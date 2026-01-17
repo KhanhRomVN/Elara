@@ -8,7 +8,6 @@ import {
   Search,
   AlignEndVertical,
   Upload,
-  ListFilter,
   ArrowUp,
   ArrowDown,
 } from 'lucide-react';
@@ -18,7 +17,7 @@ import { providers } from '../../config/providers';
 
 interface Account {
   id: string;
-  provider: string;
+  provider_id: string;
   email: string;
   credential: string;
   status: 'Active' | 'Rate Limit' | 'Error';
@@ -29,8 +28,6 @@ interface Account {
   tokensToday?: number;
   statsDate?: string;
   lastActive?: string;
-  // name?: string; // Removed
-  // picture?: string; // Removed
 }
 
 type SortKey = 'successRate' | 'avgResponse' | 'tokensToday' | null;
@@ -46,7 +43,7 @@ export const Accounts = () => {
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   // Filter & Sort State
-  const [filterProvider, setFilterProvider] = useState<string>('all');
+  const [filterProvider, _setFilterProvider] = useState<string>('all');
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({
     key: null,
     direction: null,
@@ -173,9 +170,9 @@ export const Accounts = () => {
     .filter((acc) => {
       const matchSearch =
         acc.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        acc.provider.toLowerCase().includes(searchQuery.toLowerCase());
+        acc.provider_id.toLowerCase().includes(searchQuery.toLowerCase());
       const matchProvider =
-        filterProvider === 'all' || acc.provider.toLowerCase() === filterProvider.toLowerCase();
+        filterProvider === 'all' || acc.provider_id.toLowerCase() === filterProvider.toLowerCase();
       return matchSearch && matchProvider;
     })
     .sort((a, b) => {
@@ -246,7 +243,7 @@ export const Accounts = () => {
 
   const copyApiUrl = (account: Account) => {
     const port = serverPort || 11434;
-    const url = `http://localhost:${port}/v1/chat/completions?email=${encodeURIComponent(account.email)}&provider=${account.provider.toLowerCase()}`;
+    const url = `http://localhost:${port}/v1/chat/completions?email=${encodeURIComponent(account.email)}&provider=${account.provider_id.toLowerCase()}`;
     navigator.clipboard.writeText(url);
   };
 
@@ -406,7 +403,7 @@ export const Accounts = () => {
                 </tr>
               )}
               {paginatedAccounts.map((account) => {
-                const providerConfig = providers.find((p) => p.id === account.provider);
+                const providerConfig = providers.find((p) => p.id === account.provider_id);
                 return (
                   <tr
                     key={account.id}
@@ -427,7 +424,7 @@ export const Accounts = () => {
                       <div className="flex items-center gap-3">
                         <AccountAvatar
                           email={account.email}
-                          provider={account.provider}
+                          provider={account.provider_id}
                           className="w-8 h-8 text-[10px]"
                         />
                         <div className="flex flex-col gap-1">
@@ -441,11 +438,11 @@ export const Accounts = () => {
                             {providerConfig?.icon && (
                               <img
                                 src={providerConfig.icon}
-                                alt={account.provider}
+                                alt={account.provider_id}
                                 className="w-3 h-3 mr-1"
                               />
                             )}
-                            {account.provider}
+                            {account.provider_id}
                           </div>
                         </div>
                       </div>
@@ -474,7 +471,7 @@ export const Accounts = () => {
                         onClick={() => copyApiUrl(account)}
                         title={'Click to copy full URL'}
                       >
-                        {`?email=${encodeURIComponent(account.email)}&provider=${account.provider.toLowerCase()}`}
+                        {`?email=${encodeURIComponent(account.email)}&provider=${account.provider_id.toLowerCase()}`}
                       </code>
                     </td>
                     <td className="p-4 align-middle text-right">

@@ -6,12 +6,11 @@ import {
   fetchAndCacheModels,
   startBackgroundSync,
   stopBackgroundSync,
-  Model,
 } from '../../utils/model-cache';
 
 interface Account {
   id: string;
-  provider: string;
+  provider_id: string;
   email: string;
   status: 'Active' | 'Rate Limit' | 'Error';
 }
@@ -53,8 +52,8 @@ export const ModelsPage = () => {
         try {
           // Find account for this provider
           const account =
-            accounts.find((a) => a.provider === provider.id && a.status === 'Active') ||
-            accounts.find((a) => a.provider === provider.id);
+            accounts.find((a) => a.provider_id === provider.id && a.status === 'Active') ||
+            accounts.find((a) => a.provider_id === provider.id);
 
           if (!account) {
             // Some providers need accounts to fetch models

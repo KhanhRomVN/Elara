@@ -1,14 +1,4 @@
-import {
-  Plus,
-  Upload,
-  StopCircle,
-  ArrowUpFromDot,
-  Sparkles,
-  Globe,
-  Loader2,
-  X,
-  FileText,
-} from 'lucide-react';
+import { Upload, StopCircle, ArrowUpFromDot, Globe, Loader2, X, FileText } from 'lucide-react';
 import { ChangeEvent, KeyboardEvent, useRef, useState, ClipboardEvent, DragEvent } from 'react';
 import { PendingAttachment } from '../types';
 import { cn } from '../../../shared/lib/utils';
@@ -50,8 +40,8 @@ export const InputArea = ({
   disabled,
   placeholder = 'Type a message...',
   className,
-  thinkingEnabled,
-  setThinkingEnabled,
+  thinkingEnabled: _thinkingEnabled,
+  setThinkingEnabled: _setThinkingEnabled,
   searchEnabled,
   setSearchEnabled,
   innerClassName,

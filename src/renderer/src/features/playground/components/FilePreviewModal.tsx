@@ -1,4 +1,4 @@
-import { X, FileText, Image as ImageIcon } from 'lucide-react';
+import { X, FileText } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { CodeBlock } from '../../../core/components/CodeBlock';
 import { getFileIconPath } from '../../../shared/utils/fileIconMapper';

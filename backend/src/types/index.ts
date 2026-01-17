@@ -2,8 +2,8 @@
 export interface Account {
   id: string;
   email: string;
-  provider: string;
-  status: string;
+  credential: string;
+  provider_id: string;
 }
 
 export interface Message {
