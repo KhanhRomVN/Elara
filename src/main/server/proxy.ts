@@ -171,6 +171,50 @@ export const startProxy = (): Promise<void> => {
             proxyEvents.emit('stepfun-cookies', reqCookies);
           }
         }
+
+        if (host.includes('chat.deepseek.com')) {
+          const auth = ctx.clientToProxyRequest.headers['authorization'];
+          if (auth) {
+            console.log('[Proxy] Intercepting DeepSeek request with Authorization header');
+            proxyEvents.emit('deepseek-auth-header', auth);
+          }
+        }
+
+        // Claude
+        if (host.includes('claude.ai')) {
+          const reqCookies = ctx.clientToProxyRequest.headers.cookie;
+          if (reqCookies && reqCookies.includes('sessionKey=')) {
+            // console.log('[Proxy] Found Claude sessionKey!');
+            proxyEvents.emit('claude-cookies', reqCookies);
+          }
+        }
+
+        // Mistral
+        if (host.includes('mistral.ai')) {
+          const reqCookies = ctx.clientToProxyRequest.headers.cookie;
+          if (reqCookies && reqCookies.includes('ory_session_')) {
+            // console.log('[Proxy] Found Mistral ory_session!');
+            proxyEvents.emit('mistral-cookies', reqCookies);
+          }
+        }
+
+        // Kimi
+        if (host.includes('kimi.moonshot.cn') || host.includes('www.kimi.com')) {
+          const reqCookies = ctx.clientToProxyRequest.headers.cookie;
+          if (reqCookies && reqCookies.includes('kimi-auth=')) {
+            // console.log('[Proxy] Found Kimi auth!');
+            proxyEvents.emit('kimi-cookies', reqCookies);
+          }
+        }
+
+        // Cohere
+        if (host.includes('dashboard.cohere.com')) {
+          const reqCookies = ctx.clientToProxyRequest.headers.cookie;
+          if (reqCookies && reqCookies.includes('access_token=')) {
+            // console.log('[Proxy] Found Cohere access_token!');
+            proxyEvents.emit('cohere-cookies', reqCookies);
+          }
+        }
       }
       return callback();
     });
@@ -257,6 +301,24 @@ export const startProxy = (): Promise<void> => {
                   if (snlm0eMatch && snlm0eMatch[1]) {
                     console.log('[Proxy] Found SNlM0e in Gemini Response Body!');
                     proxyEvents.emit('gemini-metadata', { snlm0e: snlm0eMatch[1] });
+                  }
+                }
+
+                // Logic for DeepSeek Google Login (Email Capture)
+                if (
+                  host.includes('accounts.google.com') &&
+                  ctx.clientToProxyRequest.url.includes('signin/oauth/id')
+                ) {
+                  // Try to find email in WIZ_global_data or similar structure
+                  // Pattern: "oPEP7c":"email@gmail.com"
+                  const emailMatch = body.match(/\"oPEP7c\":\"([^\"]+)\"/);
+                  if (emailMatch && emailMatch[1]) {
+                    console.log('[Proxy] Found Google Email for DeepSeek:', emailMatch[1]);
+                    proxyEvents.emit('deepseek-google-email', emailMatch[1]);
+                  } else {
+                    // Fallback: Try to find standard email pattern in the body if oPEP7c is missing
+                    // Be careful not to match random emails, look for context if possible
+                    // But for now, sticking to the requested oPEP7c is safer as it's the specific key
                   }
                 }
 
@@ -455,6 +517,25 @@ export const startProxy = (): Promise<void> => {
                     console.error(
                       `[Proxy] DEBUG - Raw Body that failed to parse: ${body.substring(0, 500)}`,
                     );
+                    console.error(
+                      `[Proxy] DEBUG - Raw Body that failed to parse: ${body.substring(0, 500)}`,
+                    );
+                  }
+                }
+
+                // Logic for DeepSeek User Info
+                if (
+                  host.includes('chat.deepseek.com') &&
+                  ctx.clientToProxyRequest.url.includes('/api/v0/users/current')
+                ) {
+                  try {
+                    const userInfo = JSON.parse(body);
+                    console.log('[Proxy] Found DeepSeek User Info:', JSON.stringify(userInfo));
+                    if (userInfo.code === 0 && userInfo.data) {
+                      proxyEvents.emit('deepseek-user-info', userInfo.data);
+                    }
+                  } catch (e) {
+                    console.error('[Proxy] Failed to parse DeepSeek User Info:', e);
                   }
                 }
               });

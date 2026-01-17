@@ -4,10 +4,11 @@ import path, { join } from 'path';
 
 const crypto = require('crypto');
 
-import { fetchMistralProfile } from '../server/mistral';
+import { fetchMistralProfile, login as loginMistral } from '../server/mistral';
 import { login as loginKimi, getProfile as getKimiProfile } from '../server/kimi';
 import { login as loginQwen, getProfile as getQwenProfile } from '../server/qwen';
 import { login as loginCohere, getProfile as getCohereProfile } from '../server/cohere';
+import { login as loginClaude } from '../server/claude';
 import { login as loginGroq } from '../server/groq';
 import { login as loginGemini } from '../server/gemini';
 import { login as loginPerplexity } from '../server/perplexity';
@@ -18,6 +19,7 @@ import {
 import { login as lmArenaLogin } from '../server/lmarena';
 import { AntigravityAuthServer } from '../server/antigravity';
 import { login as loginStepFun } from '../server/stepfun';
+import { login as loginDeepSeek } from '../server/deepseek';
 
 import { proxyEvents } from '../server/proxy';
 
@@ -41,7 +43,6 @@ export interface Account {
     | 'Perplexity'
     | 'Groq'
     | 'Gemini'
-    | 'Gemini'
     | 'Antigravity'
     | 'HuggingChat'
     | 'StepFun'
@@ -61,76 +62,12 @@ export interface Account {
   statsDate: string; // YYYY-MM-DD
   lastActive?: string;
   userAgent?: string;
-  name?: string;
-  picture?: string;
   headers?: any;
 }
 
 const getSafeUserAgent = () => {
   // Use a static, realistic Chrome User-Agent to avoid bot detection
   return 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36';
-};
-
-const fetchDeepSeekProfile = (
-  token: string,
-): Promise<{ email: string | null; name: string | null; picture: string | null }> => {
-  return new Promise((resolve) => {
-    const request = net.request({
-      method: 'GET',
-      url: 'https://chat.deepseek.com/api/v0/users/current',
-      useSessionCookies: true,
-    });
-    request.setHeader('Authorization', token);
-    request.on('response', (response) => {
-      let data = '';
-      response.on('data', (chunk) => (data += chunk.toString()));
-      response.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          // Try multiple possible paths based on observations
-          const email =
-            json.data?.email ||
-            json.data?.user?.email ||
-            json.data?.biz_data?.email ||
-            json.data?.biz_data?.user?.email ||
-            json.data?.biz_data?.user?.id_profile?.email ||
-            json.data?.biz_data?.id_profile?.email;
-
-          const name =
-            json.data?.name ||
-            json.data?.user?.name ||
-            json.data?.biz_data?.name ||
-            json.data?.biz_data?.user?.name ||
-            json.data?.biz_data?.user?.id_profile?.name ||
-            json.data?.biz_data?.id_profile?.name;
-
-          const picture =
-            json.data?.picture ||
-            json.data?.user?.picture ||
-            json.data?.biz_data?.picture ||
-            json.data?.biz_data?.user?.picture ||
-            json.data?.biz_data?.user?.id_profile?.picture ||
-            json.data?.biz_data?.id_profile?.picture;
-
-          if (email || name) {
-            resolve({
-              email: email || (name ? name + '@deepseek.user' : null),
-              name: name || null,
-              picture: picture || null,
-            });
-          } else {
-            resolve({ email: null, name: null, picture: null });
-          }
-        } catch (e) {
-          resolve({ email: null, name: null, picture: null });
-        }
-      });
-    });
-    request.on('error', (e) => {
-      resolve({ email: null, name: null, picture: null });
-    });
-    request.end();
-  });
 };
 
 export const setupAccountsHandlers = () => {
@@ -183,72 +120,6 @@ export const setupAccountsHandlers = () => {
     }
   });
 
-  const fetchClaudeProfile = (
-    sessionKey: string,
-  ): Promise<{ email: string | null; name: string | null; picture: string | null }> => {
-    return new Promise((resolve) => {
-      // Try organizations API first which includes account info
-      const request = net.request({
-        method: 'GET',
-        url: 'https://claude.ai/api/organizations',
-      });
-
-      request.setHeader('Cookie', `sessionKey=${sessionKey}`);
-      request.setHeader('User-Agent', getSafeUserAgent());
-
-      let data = '';
-      request.on('response', (response) => {
-        response.on('data', (chunk) => (data += chunk.toString()));
-        response.on('end', () => {
-          try {
-            const json = JSON.parse(data);
-            // Organizations API returns an array with account info
-            if (json && Array.isArray(json) && json.length > 0) {
-              const org = json[0];
-
-              // Try to extract email from organization name
-              // Format: "email@domain.com's Organization"
-              if (org.name && typeof org.name === 'string') {
-                const emailMatch = org.name.match(/^(.+@.+\..+)'s Organization$/);
-                if (emailMatch) {
-                  const email = emailMatch[1];
-                  resolve({
-                    email: email,
-                    name: email.split('@')[0],
-                    picture: null,
-                  });
-                  return;
-                }
-              }
-
-              // Check if there's account info in the organization
-              if (org.created_by_account) {
-                resolve({
-                  email: org.created_by_account.email_address || null,
-                  name:
-                    org.created_by_account.full_name || org.created_by_account.display_name || null,
-                  picture: null,
-                });
-                return;
-              }
-            }
-
-            // Fallback: no account info found
-            resolve({ email: null, name: null, picture: null });
-          } catch (e) {
-            console.error('[Claude] Error parsing organizations response:', e);
-            resolve({ email: null, name: null, picture: null });
-          }
-        });
-      });
-      request.on('error', (e) => {
-        console.error('[Claude] Organizations request error:', e);
-        resolve({ email: null, name: null, picture: null });
-      });
-      request.end();
-    });
-  };
-
   ipcMain.handle(
     'accounts:login',
     async (
@@ -268,6 +139,7 @@ export const setupAccountsHandlers = () => {
         | 'HuggingChat'
         | 'StepFun'
         | 'LMArena',
+      options?: any,
     ) => {
       return new Promise(async (resolve) => {
         // Use a consistent, real Chrome user agent by stripping Electron/App identifiers
@@ -279,7 +151,7 @@ export const setupAccountsHandlers = () => {
         // Clear previous session data to ensure fresh login
         await authSession.clearStorageData();
 
-        const url =
+        /*
           provider === 'Claude'
             ? 'https://claude.ai/login'
             : provider === 'Mistral'
@@ -297,21 +169,20 @@ export const setupAccountsHandlers = () => {
                         : provider === 'HuggingChat'
                           ? 'https://huggingface.co/login'
                           : 'https://chat.deepseek.com/login';
+          */
 
         // Handle providers with self-managed login (no polling needed)
+        // Handle Kimi
         if (provider === 'Kimi') {
           try {
-            console.log('[Accounts] Starting Kimi login flow...');
-            const { cookies } = await loginKimi();
-            console.log('[Accounts] Kimi login success, fetching profile...');
-            const profile = await getKimiProfile(cookies);
-            console.log('[Accounts] Kimi profile fetched:', profile);
-            const email = profile?.email || 'kimi@user.com';
+            console.log('[Accounts] Starting Kimi login flow (Real Browser)...');
+            const { cookies, email } = await loginKimi();
+            const finalEmail = email || 'kimi@user.com';
 
             const newAccount: Account = {
               id: crypto.randomUUID(),
               provider: 'Kimi',
-              email: email,
+              email: finalEmail,
               credential: cookies,
               status: 'Active',
               usage: '0',
@@ -322,14 +193,84 @@ export const setupAccountsHandlers = () => {
               statsDate: new Date().toISOString().split('T')[0],
               lastActive: new Date().toISOString(),
               userAgent,
-              name: profile?.name || undefined,
-              picture: profile?.avatar || undefined,
             };
 
             saveAccount(newAccount);
             resolve({ success: true, account: newAccount });
           } catch (e: any) {
             resolve({ success: false, error: e.message || 'Kimi login failed' });
+          }
+          return;
+        }
+
+        // Handle Mistral
+        if (provider === 'Mistral') {
+          try {
+            console.log('[Accounts] Starting Mistral login flow (Real Browser)...');
+            const { cookies, email } = await loginMistral();
+            const finalEmail = email || 'mistral@user.com';
+
+            const newAccount: Account = {
+              id: crypto.randomUUID(),
+              provider: 'Mistral',
+              email: finalEmail,
+              credential: cookies,
+              status: 'Active',
+              usage: '0',
+              totalRequests: 0,
+              successfulRequests: 0,
+              totalDuration: 0,
+              tokensToday: 0,
+              statsDate: new Date().toISOString().split('T')[0],
+              lastActive: new Date().toISOString(),
+              userAgent,
+            };
+
+            saveAccount(newAccount);
+            resolve({ success: true, account: newAccount });
+          } catch (e: any) {
+            resolve({ success: false, error: e.message || 'Mistral login failed' });
+          }
+          return;
+        }
+
+        // Handle Claude
+        if (provider === 'Claude') {
+          try {
+            console.log(
+              '[Accounts] Starting Claude login flow (Real Browser)... Options:',
+              options,
+            );
+            const { cookies, email } = await loginClaude(options);
+            // try fetching profile to get email if not captured
+            let finalEmail = email;
+            if (!finalEmail) {
+              // We can't easily fetch profile without exposing the logic or duplicating it.
+              // But browser-login might have captured it if we added validation logic.
+              // In claude.ts validation we didn't extract email yet.
+              finalEmail = 'claude@user.com';
+            }
+
+            const newAccount: Account = {
+              id: crypto.randomUUID(),
+              provider: 'Claude',
+              email: finalEmail,
+              credential: cookies, // This is sessionKey
+              status: 'Active',
+              usage: '0',
+              totalRequests: 0,
+              successfulRequests: 0,
+              totalDuration: 0,
+              tokensToday: 0,
+              statsDate: new Date().toISOString().split('T')[0],
+              lastActive: new Date().toISOString(),
+              userAgent,
+            };
+
+            saveAccount(newAccount);
+            resolve({ success: true, account: newAccount });
+          } catch (e: any) {
+            resolve({ success: false, error: e.message || 'Claude login failed' });
           }
           return;
         }
@@ -359,8 +300,6 @@ export const setupAccountsHandlers = () => {
               statsDate: new Date().toISOString().split('T')[0],
               lastActive: new Date().toISOString(),
               userAgent,
-              name: profile?.name || undefined,
-              picture: profile?.avatar || undefined,
             };
 
             saveAccount(newAccount);
@@ -373,17 +312,14 @@ export const setupAccountsHandlers = () => {
 
         if (provider === 'Cohere') {
           try {
-            console.log('[Accounts] Starting Cohere login flow...');
-            const { cookies } = await loginCohere();
-            console.log('[Accounts] Cohere login success, fetching profile...');
-            const profile = await getCohereProfile(cookies);
-            console.log('[Accounts] Cohere profile fetched:', profile);
-            const email = profile?.email || 'cohere@user.com';
+            console.log('[Accounts] Starting Cohere login flow (Real Browser)...');
+            const { cookies, email } = await loginCohere();
+            const finalEmail = email || 'cohere@user.com';
 
             const newAccount: Account = {
               id: crypto.randomUUID(),
               provider: 'Cohere',
-              email: email,
+              email: finalEmail,
               credential: cookies,
               status: 'Active',
               usage: '0',
@@ -394,8 +330,6 @@ export const setupAccountsHandlers = () => {
               statsDate: new Date().toISOString().split('T')[0],
               lastActive: new Date().toISOString(),
               userAgent,
-              name: profile?.name || undefined,
-              picture: profile?.avatar || undefined,
             };
 
             saveAccount(newAccount);
@@ -426,8 +360,6 @@ export const setupAccountsHandlers = () => {
               statsDate: new Date().toISOString().split('T')[0],
               lastActive: new Date().toISOString(),
               userAgent,
-              name: undefined,
-              picture: undefined,
             };
 
             saveAccount(newAccount);
@@ -441,7 +373,7 @@ export const setupAccountsHandlers = () => {
         if (provider === 'Gemini') {
           try {
             console.log('[Accounts] Starting Gemini login flow (Real Browser)...');
-            const { cookies, email, metadata, name, avatar } = await loginGemini();
+            const { cookies, email, metadata } = await loginGemini();
             const finalEmail = email || 'gemini@user.com';
 
             const newAccount: Account = {
@@ -459,8 +391,6 @@ export const setupAccountsHandlers = () => {
               statsDate: new Date().toISOString().split('T')[0],
               lastActive: new Date().toISOString(),
               userAgent,
-              name: name || undefined,
-              picture: avatar || undefined,
             };
 
             saveAccount(newAccount);
@@ -474,12 +404,9 @@ export const setupAccountsHandlers = () => {
         if (provider === 'Perplexity') {
           try {
             console.log('[Accounts] Starting Perplexity login flow (Real Browser)...');
-            const { cookies, email, username } = await loginPerplexity();
-
-            // If email is missing, we use a fallback to ensure account creation succeeds
             // The frontend will detect this specific fallback email and trigger the manual input dialog
+            const { cookies, email } = await loginPerplexity();
             const finalEmail = email || 'perplexity@user.com';
-            const name = username || undefined;
 
             const newAccount: Account = {
               id: crypto.randomUUID(),
@@ -495,8 +422,6 @@ export const setupAccountsHandlers = () => {
               statsDate: new Date().toISOString().split('T')[0],
               lastActive: new Date().toISOString(),
               userAgent,
-              name: name,
-              picture: undefined,
             };
 
             saveAccount(newAccount);
@@ -510,12 +435,11 @@ export const setupAccountsHandlers = () => {
         if (provider === 'HuggingChat') {
           try {
             console.log('[Accounts] Starting HuggingChat login flow...');
-            const { cookies, email, username } = await loginHuggingChat();
             console.log('[Accounts] HuggingChat login success, fetching profile...');
+            const { cookies, email } = await loginHuggingChat();
             const profile = await getHuggingChatProfile(cookies);
             console.log('[Accounts] HuggingChat profile fetched:', profile);
             const finalEmail = email || profile.email || 'huggingchat@user.com';
-            const finalName = username || profile.name || undefined;
 
             const newAccount: Account = {
               id: crypto.randomUUID(),
@@ -531,8 +455,6 @@ export const setupAccountsHandlers = () => {
               statsDate: new Date().toISOString().split('T')[0],
               lastActive: new Date().toISOString(),
               userAgent,
-              name: finalName,
-              picture: profile.avatar || undefined,
             };
 
             saveAccount(newAccount);
@@ -546,7 +468,7 @@ export const setupAccountsHandlers = () => {
         if (provider === 'LMArena') {
           try {
             console.log('[Accounts] Starting LMArena login flow...');
-            const { cookies, email, username } = await lmArenaLogin();
+            const { cookies, email } = await lmArenaLogin();
             console.log('[Accounts] LMArena login success, email:', email);
 
             const newAccount: Account = {
@@ -563,7 +485,6 @@ export const setupAccountsHandlers = () => {
               statsDate: new Date().toISOString().split('T')[0],
               lastActive: new Date().toISOString(),
               userAgent,
-              name: username || 'LMArena User',
             };
 
             saveAccount(newAccount);
@@ -594,7 +515,6 @@ export const setupAccountsHandlers = () => {
               statsDate: new Date().toISOString().split('T')[0],
               lastActive: new Date().toISOString(),
               userAgent,
-              name: 'StepFun User',
             };
 
             saveAccount(newAccount);
@@ -605,219 +525,38 @@ export const setupAccountsHandlers = () => {
           return;
         }
 
-        // For providers requiring polling (Claude, Mistral, DeepSeek)
-        const authWindow = new BrowserWindow({
-          width: 1000,
-          height: 800,
-          title: `Login to ${provider}`,
-          webPreferences: {
-            nodeIntegration: false,
-            contextIsolation: true,
-            partition, // Use separate partition for isolation
-            preload: join(__dirname, '../preload/auth-preload.js'),
-            spellcheck: false,
-            backgroundThrottling: false,
-          },
-        });
-
-        authWindow.webContents.setUserAgent(userAgent);
-
-        // Intercept login requests to capture email
-        let capturedEmail: string | null = null;
-
         if (provider === 'DeepSeek') {
-          authSession.webRequest.onBeforeRequest(
-            { urls: ['https://chat.deepseek.com/api/v0/users/login'] },
-            (details, callback) => {
-              if (details.method === 'POST' && details.uploadData) {
-                try {
-                  const uploadItem = details.uploadData[0];
-                  if (uploadItem.bytes) {
-                    const bodyString = Buffer.from(uploadItem.bytes).toString('utf-8');
-                    const parsed = JSON.parse(bodyString);
-                    if (parsed.email) {
-                      capturedEmail = parsed.email;
-                    }
-                  }
-                } catch (e) {}
-              }
-              callback({});
-            },
-          );
-        } else if (provider === 'Claude') {
-          // Intercept Claude Google login response to capture email
-          authSession.webRequest.onCompleted(
-            { urls: ['https://claude.ai/api/auth/verify_google'] },
-            () => {},
-          );
-
-          authSession.webRequest.onResponseStarted(
-            { urls: ['https://claude.ai/api/auth/verify_google'] },
-            async () => {},
-          );
-        }
-
-        authWindow.loadURL(url);
-
-        // Poll for credentials
-        const interval = setInterval(async () => {
-          if (authWindow.isDestroyed()) {
-            clearInterval(interval);
-            resolve({ success: false, error: 'Window closed' });
-            return;
-          }
-
           try {
-            if (provider === 'Claude') {
-              const cookies = await authWindow.webContents.session.cookies.get({
-                domain: '.claude.ai',
-              });
-              const sessionKey = cookies.find((c) => c.name === 'sessionKey')?.value;
+            console.log(
+              '[Accounts] Starting DeepSeek login flow (Real Browser)... Options:',
+              options,
+            );
+            const { cookies, email } = await loginDeepSeek(options);
+            console.log('[Accounts] DeepSeek login success. Email:', email);
 
-              if (sessionKey) {
-                clearInterval(interval);
-                const profile = await fetchClaudeProfile(sessionKey);
-                const email = profile.email || 'claude@user.com';
+            const newAccount: Account = {
+              id: crypto.randomUUID(),
+              provider: 'DeepSeek',
+              email: email || 'deepseek@user.com',
+              credential: cookies,
+              status: 'Active',
+              usage: '0',
+              totalRequests: 0,
+              successfulRequests: 0,
+              totalDuration: 0,
+              tokensToday: 0,
+              statsDate: new Date().toISOString().split('T')[0],
+              lastActive: new Date().toISOString(),
+              userAgent,
+            };
 
-                const newAccount: Account = {
-                  id: crypto.randomUUID(),
-                  provider: 'Claude',
-                  email: email,
-                  credential: sessionKey,
-                  status: 'Active',
-                  usage: '0',
-                  totalRequests: 0,
-                  successfulRequests: 0,
-                  totalDuration: 0,
-                  tokensToday: 0,
-                  statsDate: new Date().toISOString().split('T')[0],
-                  lastActive: new Date().toISOString(),
-                  userAgent,
-                  name: profile.name || undefined,
-                  picture: profile.picture || undefined,
-                };
-
-                saveAccount(newAccount);
-                authWindow.close();
-                resolve({ success: true, account: newAccount });
-              }
-            } else if (provider === 'Mistral') {
-              const cookies = await authWindow.webContents.session.cookies.get({
-                domain: 'mistral.ai',
-              });
-              // Try to find critical cookies that imply login
-              // Based on logs: ory_session_... and csrftoken
-              // ory_session prefix varies?
-              const orySession = cookies.find((c) => c.name.startsWith('ory_session_'));
-
-              if (orySession) {
-                clearInterval(interval);
-                // Reconstruct cookie string
-                const cookieStr = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
-
-                const profile = await fetchMistralProfile(cookieStr);
-                const email = profile?.email || 'mistral@user.com';
-
-                const newAccount: Account = {
-                  id: crypto.randomUUID(),
-                  provider: 'Mistral',
-                  email: email,
-                  credential: cookieStr,
-                  status: 'Active',
-                  usage: '0',
-                  totalRequests: 0,
-                  successfulRequests: 0,
-                  totalDuration: 0,
-                  tokensToday: 0,
-                  statsDate: new Date().toISOString().split('T')[0],
-                  lastActive: new Date().toISOString(),
-                  userAgent,
-                  name: profile?.name || undefined,
-                  picture: profile?.avatar || undefined,
-                };
-
-                saveAccount(newAccount);
-                authWindow.close();
-                resolve({ success: true, account: newAccount });
-              }
-            } else {
-              // DeepSeek - Check LocalStorage
-              const localStorageData = await authWindow.webContents
-                .executeJavaScript('JSON.stringify(localStorage)')
-                .catch(() => null);
-              if (localStorageData) {
-                const data = JSON.parse(localStorageData);
-                if (data.userToken) {
-                  const tokenObj = JSON.parse(data.userToken);
-                  if (tokenObj && tokenObj.value) {
-                    clearInterval(interval);
-                    const bearerToken = `Bearer ${tokenObj.value}`;
-
-                    // Fetch profile via API
-                    let profile = await fetchDeepSeekProfile(bearerToken);
-
-                    // Use captured email if available (and not masked), otherwise use API email
-                    if (capturedEmail && !capturedEmail.includes('***')) {
-                      profile.email = capturedEmail;
-                    }
-
-                    // Fallback: Try to scrape from DOM if still no email
-                    if (!profile.email) {
-                      const scrapedEmail = await authWindow.webContents
-                        .executeJavaScript(
-                          `
-                            (() => {
-                                // Try common selectors for email/username
-                                const el = document.querySelector('.user-email') || document.querySelector('.ds-avatar-name') || document.querySelector('[class*="user-info"]');
-                                return el ? el.innerText : null;
-                            })()
-                          `,
-                        )
-                        .catch(() => null);
-                      if (scrapedEmail) {
-                        profile.email = scrapedEmail;
-                      }
-                    }
-
-                    if (!profile.email) profile.email = 'deepseek@user.com';
-
-                    const newAccount: Account = {
-                      id: crypto.randomUUID(),
-                      provider: 'DeepSeek',
-                      email: profile.email,
-                      credential: bearerToken,
-                      status: 'Active',
-                      usage: '0',
-                      totalRequests: 0,
-                      successfulRequests: 0,
-                      totalDuration: 0,
-                      tokensToday: 0,
-                      statsDate: new Date().toISOString().split('T')[0],
-                      lastActive: new Date().toISOString(),
-                      userAgent,
-                      name: profile.name || undefined,
-                      picture: profile.picture || undefined,
-                    };
-
-                    saveAccount(newAccount);
-                    authWindow.close();
-                    resolve({ success: true, account: newAccount });
-                  }
-                }
-              }
-            }
-          } catch (e) {
-            // Log errors during polling for debugging
-            if (provider === 'Claude') {
-              console.error('[Claude] Error during login polling:', e);
-            }
+            saveAccount(newAccount);
+            resolve({ success: true, account: newAccount });
+          } catch (e: any) {
+            resolve({ success: false, error: e.message || 'DeepSeek login failed' });
           }
-        }, 1000);
-
-        authWindow.on('closed', () => {
-          clearInterval(interval);
-          resolve({ success: false, error: 'Window closed' });
-        });
+          return;
+        }
       });
     },
   );
@@ -895,8 +634,6 @@ export const setupAccountsHandlers = () => {
         statsDate: new Date().toISOString().split('T')[0],
         lastActive: new Date().toISOString(),
         userAgent: getSafeUserAgent(),
-        name: userInfo.name,
-        picture: userInfo.picture,
       };
 
       saveAccount(newAccount);
@@ -937,8 +674,6 @@ export const setupAccountsHandlers = () => {
         statsDate: new Date().toISOString().split('T')[0],
         lastActive: new Date().toISOString(),
         userAgent: getSafeUserAgent(),
-        name: userInfo.name,
-        picture: userInfo.picture,
       };
 
       saveAccount(newAccount);

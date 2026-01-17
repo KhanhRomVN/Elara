@@ -1,76 +1,35 @@
-import { BrowserWindow, session, net } from 'electron';
+import { net } from 'electron';
+import { loginWithRealBrowser } from './browser-login';
 
 export async function login() {
-  const win = new BrowserWindow({
-    width: 800,
-    height: 600,
-    show: false,
-    webPreferences: {
-      partition: 'persist:cohere',
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
-  });
-
-  win.loadURL('https://dashboard.cohere.com/welcome/login');
-  win.show();
-
-  return new Promise<{ cookies: string }>((resolve, reject) => {
-    let manuallyClosed = false;
-
-    const checkCookies = setInterval(async () => {
-      try {
-        const cookies = await session.fromPartition('persist:cohere').cookies.get({
-          domain: 'dashboard.cohere.com',
-        });
-        const tokenCookie = cookies.find((c) => c.name === 'access_token');
-
-        if (tokenCookie) {
-          const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
-
-          // Verify with profile fetch
-          const profile = await getProfile(tokenCookie.value);
-          if (profile) {
-            console.log('[Cohere] Login success.');
-            manuallyClosed = true;
-            clearInterval(checkCookies);
-            win.destroy();
-            resolve({ cookies: tokenCookie.value }); // Return token value as credential
-          }
-        }
-      } catch (error) {
-        if (!manuallyClosed) {
-          console.log('[Cohere] Error checking cookies:', error);
+  return await loginWithRealBrowser({
+    providerId: 'Cohere',
+    loginUrl: 'https://dashboard.cohere.com/welcome/login',
+    partition: 'persist:cohere',
+    cookieEvent: 'cohere-cookies',
+    validate: async (data: { cookies: string }) => {
+      // Logic: try to get token from cookies and fetch profile
+      const match = data.cookies.match(/access_token=([^;]+)/);
+      if (match && match[1]) {
+        const token = match[1];
+        const profile = await getProfile(token);
+        if (profile) {
+          // Pass the token as "cookies" credential (or full cookies if needed? Cohere uses simpler token usually)
+          // The old logic returned `tokenCookie.value`.
+          // Let's verify if `getProfile` needs full cookies or just token.
+          // `getProfile` below uses `Bearer ${token}`.
+          // So we should probably keep consistency and return the token if that's what was stored.
+          // However, consistency with validation response...
+          return { isValid: true, email: profile.email || 'cohere-user', cookies: token };
         }
       }
-    }, 1000);
-
-    win.on('closed', () => {
-      clearInterval(checkCookies);
-      if (manuallyClosed) return;
-
-      console.log('[Cohere] Window closed manually. Checking for cookies...');
-      session
-        .fromPartition('persist:cohere')
-        .cookies.get({ domain: 'dashboard.cohere.com' })
-        .then(async (cookies) => {
-          const tokenCookie = cookies.find((c) => c.name === 'access_token');
-          if (tokenCookie) {
-            const profile = await getProfile(tokenCookie.value);
-            if (profile) {
-              resolve({ cookies: tokenCookie.value });
-              return;
-            }
-          }
-          reject(new Error('Window closed and no valid Cohere session found.'));
-        })
-        .catch((err) => reject(new Error('Window closed: ' + err.message)));
-    });
+      return { isValid: false };
+    },
   });
 }
 
 export async function getProfile(token: string) {
-  return new Promise<{ name: string; email: string; avatar: string } | null>((resolve) => {
+  return new Promise<{ email: string } | null>((resolve) => {
     const request = net.request({
       method: 'POST',
       url: 'https://production.api.os.cohere.com/rpc/BlobheartAPI/Session',
@@ -98,9 +57,7 @@ export async function getProfile(token: string) {
             // Response format: { user: { email, name, ... } }
             if (json.user) {
               resolve({
-                name: json.user.name || 'Cohere User',
                 email: json.user.email || 'cohere@user.com',
-                avatar: '', // No avatar in log response
               });
             } else {
               resolve(null);
@@ -200,7 +157,7 @@ export async function sendMessage(
         resolve();
       });
 
-      response.on('error', (e) => reject(e));
+      response.on('error', (e: any) => reject(e));
     });
 
     request.on('error', (e) => reject(e));

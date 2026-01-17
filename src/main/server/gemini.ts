@@ -435,8 +435,6 @@ export async function login() {
   return new Promise<{
     cookies: string;
     email: string;
-    name?: string;
-    avatar?: string;
     metadata?: any;
   }>((resolve, reject) => {
     let resolved = false;
@@ -462,13 +460,9 @@ export async function login() {
 
       // Default values
       let email = 'gemini@user.com';
-      let name = '';
-      let avatar = '';
 
       if (capturedUserInfo) {
         email = capturedUserInfo.email || email;
-        name = capturedUserInfo.name || '';
-        avatar = capturedUserInfo.picture || '';
       }
 
       cleanup();
@@ -476,8 +470,6 @@ export async function login() {
       resolve({
         cookies: capturedCookies,
         email,
-        name,
-        avatar,
         metadata: capturedMetadata,
       });
     };

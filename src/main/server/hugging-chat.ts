@@ -103,8 +103,8 @@ export const getProfile = async (
       if (!avatar && hfProfile.avatarUrl) avatar = hfProfile.avatarUrl;
     }
 
-    console.log('[HuggingChat] Final Profile - username:', name, 'email:', email);
-    return { email, name, avatar };
+    console.log('[HuggingChat] Final Profile - email:', email);
+    return { email, name: null, avatar: null };
   } catch (e) {
     console.error('[HuggingChat] getProfile failed:', e);
     return { email: null, name: null, avatar: null };
@@ -139,7 +139,7 @@ const findChrome = (): string | null => {
 };
 
 // Login function - spawns Real Chrome via Proxy and captures cookies
-export const login = (): Promise<{ cookies: string; email?: string; username?: string }> => {
+export const login = (): Promise<{ cookies: string; email?: string }> => {
   console.log('[HuggingChat] Starting Real Browser login flow...');
 
   const chromePath = findChrome();
@@ -220,11 +220,9 @@ export const login = (): Promise<{ cookies: string; email?: string; username?: s
       if (resolved) return;
 
       let email = capturedLoginEmail || 'huggingchat@user.com';
-      let username = 'User';
 
       if (capturedUserInfo) {
         email = capturedUserInfo.email || email;
-        username = capturedUserInfo.username || username;
       }
 
       cleanup();
@@ -232,7 +230,6 @@ export const login = (): Promise<{ cookies: string; email?: string; username?: s
       resolve({
         cookies: capturedCookies,
         email,
-        username,
       });
     };
 
@@ -252,8 +249,6 @@ export const login = (): Promise<{ cookies: string; email?: string; username?: s
           console.log('[HuggingChat] Active profile fetch success:', profile.email);
           capturedUserInfo = {
             email: profile.email,
-            username: profile.name,
-            avatarUrl: profile.avatar,
           };
           checkForCompletion();
         } else {

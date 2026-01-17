@@ -1,5 +1,23 @@
 import { net, session } from 'electron';
 import { EventEmitter } from 'events';
+import { loginWithRealBrowser } from './browser-login';
+
+export async function login() {
+  return await loginWithRealBrowser({
+    providerId: 'Mistral',
+    loginUrl: 'https://auth.mistral.ai/ui/login', // Redirects to https://auth.mistral.ai/ui/login usually
+    partition: 'persist:mistral',
+    cookieEvent: 'mistral-cookies',
+    validate: async (data: { cookies: string }) => {
+      // Logic: try to get profile
+      const profile = await fetchMistralProfile(data.cookies);
+      if (profile && profile.email) {
+        return { isValid: true, email: profile.email, cookies: data.cookies };
+      }
+      return { isValid: false };
+    },
+  });
+}
 
 export interface MistralChatPayload {
   model: string;
@@ -345,9 +363,7 @@ async function streamResponse(
 // Profile Fetching
 // --------------------------------------------------------------------------------------
 
-export async function fetchMistralProfile(
-  cookies: string,
-): Promise<{ email: string; name: string; avatar?: string } | null> {
+export async function fetchMistralProfile(cookies: string): Promise<{ email: string } | null> {
   return new Promise((resolve) => {
     const request = net.request({
       method: 'GET',
@@ -372,8 +388,6 @@ export async function fetchMistralProfile(
             if (json.email) {
               resolve({
                 email: json.email,
-                name: json.name || json.first_name || 'Mistral User',
-                avatar: undefined, // Mistral console doesn't seem to return avatar URL in top level
               });
             } else {
               resolve(null);

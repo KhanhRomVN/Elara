@@ -76,8 +76,6 @@ const findChrome = (): string | null => {
 export const login = (): Promise<{
   cookies: string;
   email?: string;
-  username?: string;
-  avatar?: string;
 }> => {
   console.log('[LMArena] Starting Real Browser login flow...');
 
@@ -137,8 +135,6 @@ export const login = (): Promise<{
     // 4. Listen for Proxy Events
     let capturedCookies = '';
     let email = '';
-    let username = '';
-    let avatar = '';
     let resolved = false;
     let finishTimer: NodeJS.Timeout | null = null;
 
@@ -163,23 +159,19 @@ export const login = (): Promise<{
         const profile = getProfile(capturedCookies);
         if (profile.email) {
           email = profile.email;
-          username = profile.name;
-          avatar = profile.avatar;
         }
       }
 
       // Fallback defaults
       if (!email) email = 'user@lmarena.ai';
-      if (!username) username = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '');
-      if (!avatar) avatar = `https://ui-avatars.com/api/?name=${username}&background=random`;
+      // Fallback defaults
+      if (!email) email = 'user@lmarena.ai';
 
       cleanup();
 
       resolve({
         cookies: capturedCookies,
         email,
-        username,
-        avatar, // Add avatar to return type if interface allows, else rely on username
       });
     };
 
@@ -198,8 +190,8 @@ export const login = (): Promise<{
       if (profile.email) {
         console.log('[LMArena] Valid login cookies captured! Email:', profile.email);
         email = profile.email;
-        username = profile.name;
-        avatar = profile.avatar;
+        console.log('[LMArena] Valid login cookies captured! Email:', profile.email);
+        email = profile.email;
         attemptResolve();
       } else {
         // Maybe we got cookies but not the email yet (guest cookie?), allow update
@@ -211,8 +203,7 @@ export const login = (): Promise<{
       console.log('[LMArena] API Login Success Event:', user.email);
       if (user.email) {
         email = user.email;
-        username = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '');
-        avatar = `https://ui-avatars.com/api/?name=${username}&background=random`;
+        email = user.email;
         attemptResolve();
       }
     };
@@ -248,7 +239,7 @@ export const login = (): Promise<{
 };
 
 // Fetch user profile from cookie
-const getProfile = (cookies: string): { email: string; name: string; avatar: string } => {
+const getProfile = (cookies: string): { email: string } => {
   try {
     // Support both v1.0 and v1.1
     // v1.0: arena-auth-prod-v1.0=base64(...)
@@ -272,11 +263,8 @@ const getProfile = (cookies: string): { email: string; name: string; avatar: str
 
         if (data.email || (data.user && data.user.email)) {
           const email = data.email || data.user.email;
-          const name = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '');
           return {
             email,
-            name,
-            avatar: `https://ui-avatars.com/api/?name=${name}&background=random`,
           };
         }
       } catch (innerE) {
@@ -286,7 +274,7 @@ const getProfile = (cookies: string): { email: string; name: string; avatar: str
   } catch (e) {
     console.error('[LMArena] Error parsing auth cookie:', e);
   }
-  return { email: '', name: '', avatar: '' };
+  return { email: '' };
 };
 
 // Get Models via Next.js Server Action

@@ -167,7 +167,7 @@ export async function login() {
 }
 
 export async function getProfile(cookies: string) {
-  return new Promise<{ name: string; avatar: string; email: string } | null>((resolve) => {
+  return new Promise<{ email: string } | null>((resolve) => {
     const request = net.request({
       method: 'GET',
       url: 'https://chat.qwen.ai/api/v1/auths/',
@@ -188,10 +188,8 @@ export async function getProfile(cookies: string) {
           try {
             const json = JSON.parse(data);
             if (json.data) {
-              const { name, email, profile_image_url } = json.data;
+              const { email } = json.data;
               resolve({
-                name: name || 'Qwen User',
-                avatar: profile_image_url || '',
                 email: email || '',
               });
             } else {

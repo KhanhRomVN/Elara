@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { AlertCircle, X, Copy, Check, ExternalLink, RefreshCw, Key } from 'lucide-react';
+import { AlertCircle, X, Copy, Check, ExternalLink, RefreshCw, Key, Mail } from 'lucide-react';
 
 import { providers as allProviders } from '../../../config/providers';
+import googleIcon from '../../../assets/auth_icons/google.svg';
 
 interface AddAccountDialogProps {
   open: boolean;
@@ -24,6 +25,9 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
   const [agWaiting, setAgWaiting] = useState(false);
   const [agToken, setAgToken] = useState('');
 
+  // DeepSeek Specific State
+  const [deepseekMethod, setDeepseekMethod] = useState<'basic' | 'google'>('basic');
+
   // StepFun State Removed
 
   const providers = allProviders.filter((p) => p.active);
@@ -36,7 +40,10 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
       setShowEmailInput(false);
       setAgOAuthUrl('');
       setAgWaiting(false);
+      setAgOAuthUrl('');
+      setAgWaiting(false);
       setAgToken('');
+      setDeepseekMethod('basic');
     }
   }, [open, provider]);
 
@@ -54,7 +61,7 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
 
     try {
       // @ts-ignore
-      const result = await window.api.accounts.login(provider);
+      const result = await window.api.accounts.login(provider, { deepseekMethod });
 
       if (result.success) {
         console.log('[AddAccountDialog] Login success for', provider, 'Result:', result);
@@ -443,7 +450,11 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
                     <div
                       key={p.id}
                       onClick={() => setProvider(p.id)}
-                      className={`cursor-pointer rounded-lg border p-3 transition-all hover:bg-accent hover:text-accent-foreground ${provider === p.id ? 'ring-2 ring-primary border-primary bg-accent/50' : 'bg-card'}`}
+                      className={`cursor-pointer p-3 transition-all hover:bg-accent hover:text-accent-foreground ${
+                        provider === p.id
+                          ? 'bg-accent/50 border-l-4 border-l-primary rounded-r-lg'
+                          : 'bg-card border rounded-lg'
+                      }`}
                     >
                       <div className="flex items-center gap-3">
                         <div
@@ -453,20 +464,75 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <h4 className="font-medium text-sm">{p.name}</h4>
-                            <span
-                              className={`text-[10px] px-1.5 py-0.5 rounded-full border ${
-                                // @ts-ignore
-                                p.authMethod === 'OAuth'
-                                  ? 'bg-blue-500/10 text-blue-500 border-blue-500/20'
-                                  : 'bg-muted text-muted-foreground border-border'
-                              }`}
-                            >
-                              {/* @ts-ignore */}
-                              {p.authMethod}
-                            </span>
+                            <h4 className="font-medium text-sm">
+                              {p.id === 'DeepSeek' ? 'DeepSeek' : p.name}
+                            </h4>
                           </div>
-                          <p className="text-[10px] text-muted-foreground">{p.description}</p>
+
+                          {/* Badges Section */}
+                          <div className="flex items-center gap-1.5 mt-1">
+                            {p.id === 'DeepSeek' ? (
+                              <>
+                                <div
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setProvider(p.id);
+                                    setDeepseekMethod('basic');
+                                  }}
+                                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium cursor-pointer transition-colors ${
+                                    deepseekMethod === 'basic' && provider === 'DeepSeek'
+                                      ? 'bg-primary/20 text-primary border-primary/30'
+                                      : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
+                                  }`}
+                                >
+                                  <Mail className="w-3 h-3" />
+                                  <span>Basic</span>
+                                </div>
+                                <div
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setProvider(p.id);
+                                    setDeepseekMethod('google');
+                                  }}
+                                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium cursor-pointer transition-colors ${
+                                    deepseekMethod === 'google' && provider === 'DeepSeek'
+                                      ? 'bg-blue-500/20 text-blue-500 border-blue-500/30'
+                                      : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
+                                  }`}
+                                >
+                                  <img src={googleIcon} alt="Google" className="w-3 h-3" />
+                                  <span>Google</span>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                {/* Show Basic Badge if loginMethod contains keywords or authMethod is Basic (and not just Google) */}
+                                {(/Direct|Email|Basic|Mobile|OTP/i.test(p.loginMethod) ||
+                                  (p.authMethod === 'Basic' &&
+                                    !/Google|OAuth/i.test(p.loginMethod))) && (
+                                  <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium bg-muted/50 text-muted-foreground border-border">
+                                    <Mail className="w-3 h-3" />
+                                    <span>
+                                      {p.loginMethod.includes('Mobile') ? 'Mobile' : 'Basic'}
+                                    </span>
+                                  </div>
+                                )}
+
+                                {/* Show Google Badge if loginMethod contains keywords or authMethod is OAuth */}
+                                {(/Google|OAuth/i.test(p.loginMethod) ||
+                                  p.authMethod === 'OAuth') && (
+                                  <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium bg-muted/50 text-muted-foreground border-border">
+                                    <img src={googleIcon} alt="Google" className="w-3 h-3" />
+                                    <span>
+                                      {p.loginMethod.includes('OAuth') || p.authMethod === 'OAuth'
+                                        ? 'OAuth'
+                                        : 'Google'}
+                                    </span>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -490,9 +556,11 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
                         Login to {selectedProviderData?.name}
                       </h3>
                       <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-                        {selectedProviderData?.loginMethod === 'Direct'
-                          ? 'We will attempt to log you in automatically via the browser.'
-                          : 'A secure browser window will open for you to log in.'}
+                        {provider === 'DeepSeek' && deepseekMethod === 'google'
+                          ? 'We will utilize the Google Login flow for DeepSeek.'
+                          : selectedProviderData?.loginMethod === 'Direct'
+                            ? 'We will attempt to log you in automatically via the browser.'
+                            : 'A secure browser window will open for you to log in.'}
                       </p>
                     </div>
 

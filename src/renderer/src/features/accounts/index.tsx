@@ -1,9 +1,19 @@
-import { useEffect, useState } from 'react';
-
-import { useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { cn } from '../../shared/lib/utils';
-import { Copy, Plus, Download, Trash2, Search, AlignEndVertical, Upload } from 'lucide-react';
+import {
+  Copy,
+  Plus,
+  Download,
+  Trash2,
+  Search,
+  AlignEndVertical,
+  Upload,
+  ListFilter,
+  ArrowUp,
+  ArrowDown,
+} from 'lucide-react';
 import { AddAccountDialog } from './components/AddAccountDialog';
+import { AccountAvatar } from './components/AccountAvatar';
 import { providers } from '../../config/providers';
 
 interface Account {
@@ -19,9 +29,12 @@ interface Account {
   tokensToday?: number;
   statsDate?: string;
   lastActive?: string;
-  name?: string;
-  picture?: string;
+  // name?: string; // Removed
+  // picture?: string; // Removed
 }
+
+type SortKey = 'successRate' | 'avgResponse' | 'tokensToday' | null;
+type SortDirection = 'asc' | 'desc' | null;
 
 export const Accounts = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -32,6 +45,12 @@ export const Accounts = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  // Filter & Sort State
+  const [filterProvider, setFilterProvider] = useState<string>('all');
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({
+    key: null,
+    direction: null,
+  });
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -116,14 +135,81 @@ export const Accounts = () => {
   useEffect(() => {
     setCurrentPage(1);
     setSelectedAccounts(new Set());
-  }, [searchQuery]);
+  }, [searchQuery, filterProvider, sortConfig]);
 
-  const filteredAccounts = accounts.filter(
-    (acc) =>
-      acc.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      acc.provider.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (acc.name && acc.name.toLowerCase().includes(searchQuery.toLowerCase())),
-  );
+  // Sorting Logic
+  const handleSort = (key: SortKey) => {
+    setSortConfig((prev) => {
+      if (prev.key !== key) {
+        // New key, start with asc (Green for up/good? Logic request: Green (up), Red (down))
+        // Usually Ascending = Green (Increasing), Descending = Red (Decreasing)
+        // Wait, for SuccessRate: Higher is better. So maybe Descending is Green?
+        // User request: "green (lên) và red (xuống)" -> Green (Up/Asc), Red (Down/Desc).
+        // I will follow the user literally: Asc = Green, Desc = Red.
+        return { key, direction: 'asc' };
+      }
+      // Cycle: asc -> desc -> null
+      if (prev.direction === 'asc') return { key, direction: 'desc' };
+      if (prev.direction === 'desc') return { key: null, direction: null };
+      return { key: null, direction: null };
+    });
+  };
+
+  const getSortIcon = (key: SortKey) => {
+    if (sortConfig.key !== key) return null;
+    if (sortConfig.direction === 'asc') return <ArrowUp className="ml-1 h-3 w-3 text-green-500" />;
+    if (sortConfig.direction === 'desc') return <ArrowDown className="ml-1 h-3 w-3 text-red-500" />;
+    return null;
+  };
+
+  const getHeaderClass = (key: SortKey) => {
+    if (sortConfig.key !== key) return 'text-muted-foreground';
+    if (sortConfig.direction === 'asc') return 'text-green-500';
+    if (sortConfig.direction === 'desc') return 'text-red-500';
+    return 'text-muted-foreground';
+  };
+
+  const filteredAccounts = accounts
+    .filter((acc) => {
+      const matchSearch =
+        acc.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        acc.provider.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchProvider =
+        filterProvider === 'all' || acc.provider.toLowerCase() === filterProvider.toLowerCase();
+      return matchSearch && matchProvider;
+    })
+    .sort((a, b) => {
+      if (!sortConfig.key || !sortConfig.direction) return 0;
+
+      let valA = 0;
+      let valB = 0;
+
+      switch (sortConfig.key) {
+        case 'successRate':
+          valA =
+            a.totalRequests && a.totalRequests > 0
+              ? (a.successfulRequests || 0) / a.totalRequests
+              : 0;
+          valB =
+            b.totalRequests && b.totalRequests > 0
+              ? (b.successfulRequests || 0) / b.totalRequests
+              : 0;
+          break;
+        case 'avgResponse':
+          valA =
+            a.totalRequests && a.totalRequests > 0 ? (a.totalDuration || 0) / a.totalRequests : 0;
+          valB =
+            b.totalRequests && b.totalRequests > 0 ? (b.totalDuration || 0) / b.totalRequests : 0;
+          break;
+        case 'tokensToday':
+          valA = a.tokensToday || 0;
+          valB = b.tokensToday || 0;
+          break;
+      }
+
+      if (sortConfig.direction === 'asc') return valA - valB;
+      return valB - valA;
+    });
 
   const totalPages = Math.ceil(filteredAccounts.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -164,82 +250,90 @@ export const Accounts = () => {
     navigator.clipboard.writeText(url);
   };
 
+  const copyAccountJson = (account: Account) => {
+    navigator.clipboard.writeText(JSON.stringify(account, null, 2));
+  };
+
   return (
     <div className="space-y-4">
       <div className="mt-4">
         <h2 className="text-2xl font-bold tracking-tight">Accounts</h2>
         <p className="text-muted-foreground">Manage your connected accounts.</p>
       </div>
-      <div className="flex items-center justify-between gap-4">
-        {/* Left: Search Bar */}
-        <div className="relative w-full max-w-sm">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search accounts..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="flex h-9 w-full rounded-md border border-input bg-background pl-9 pr-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-          />
-        </div>
-
-        {/* Right: Actions */}
-        <div className="flex gap-2 items-center">
-          {selectedAccounts.size > 0 && (
-            <div className="flex items-center gap-2 mr-2">
-              <span className="text-sm text-muted-foreground">
-                {selectedAccounts.size} selected
-              </span>
-              <button
-                onClick={() => {
-                  if (confirm(`Delete ${selectedAccounts.size} accounts?`)) {
-                    selectedAccounts.forEach((id) => handleDelete(id));
-                    setSelectedAccounts(new Set());
-                  }
-                }}
-                className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-destructive/10 text-destructive hover:text-destructive h-9 px-3"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete
-              </button>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between gap-4">
+          {/* Left: Search Bar & Filter Toggle */}
+          <div className="flex items-center gap-2 w-full max-w-lg">
+            <div className="relative w-full">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search accounts..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="flex h-9 w-full rounded-md border border-input bg-background pl-9 pr-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              />
             </div>
-          )}
-          <button
-            onClick={() => setDialogOpen(true)}
-            className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-3 text-white"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Add Account
-          </button>
+          </div>
 
-          <div className="relative" ref={dropdownRef}>
-            <button
-              onClick={() => setShowDropdown(!showDropdown)}
-              className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 w-9"
-            >
-              <AlignEndVertical className="h-4 w-4" />
-            </button>
-
-            {showDropdown && (
-              <div className="absolute right-0 top-full mt-2 w-48 rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in zoom-in-95 duration-200 z-50">
-                <div className="p-1">
-                  <button
-                    onClick={handleImport}
-                    className="relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-                  >
-                    <Upload className="mr-2 h-4 w-4" />
-                    Import (JSON)
-                  </button>
-                  <button
-                    onClick={handleExport}
-                    className="relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    Export (JSON)
-                  </button>
-                </div>
+          {/* Right: Actions */}
+          <div className="flex gap-2 items-center">
+            {selectedAccounts.size > 0 && (
+              <div className="flex items-center gap-2 mr-2">
+                <span className="text-sm text-muted-foreground">
+                  {selectedAccounts.size} selected
+                </span>
+                <button
+                  onClick={() => {
+                    if (confirm(`Delete ${selectedAccounts.size} accounts?`)) {
+                      selectedAccounts.forEach((id) => handleDelete(id));
+                      setSelectedAccounts(new Set());
+                    }
+                  }}
+                  className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-destructive/10 text-destructive hover:text-destructive h-9 px-3"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </button>
               </div>
             )}
+            <button
+              onClick={() => setDialogOpen(true)}
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-3 text-white"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add Account
+            </button>
+
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setShowDropdown(!showDropdown)}
+                className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 w-9"
+              >
+                <AlignEndVertical className="h-4 w-4" />
+              </button>
+
+              {showDropdown && (
+                <div className="absolute right-0 top-full mt-2 w-48 rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in zoom-in-95 duration-200 z-50">
+                  <div className="p-1">
+                    <button
+                      onClick={handleImport}
+                      className="relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                    >
+                      <Upload className="mr-2 h-4 w-4" />
+                      Import (JSON)
+                    </button>
+                    <button
+                      onClick={handleExport}
+                      className="relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Export (JSON)
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -252,7 +346,7 @@ export const Accounts = () => {
                 <th className="h-12 px-4 align-middle w-[40px]">
                   <input
                     type="checkbox"
-                    className="h-4 w-4 rounded border-zinc-500 bg-zinc-900/50 text-blue-500 focus:ring-blue-500 focus:ring-offset-zinc-900 cursor-pointer"
+                    className="appearance-none h-4 w-4 rounded border border-zinc-600 bg-zinc-900/50 checked:bg-blue-600 checked:border-blue-600 indeterminate:bg-blue-600 indeterminate:border-blue-600 cursor-pointer flex items-center justify-center after:text-white after:text-[10px] after:font-bold after:hidden checked:after:content-['✔'] checked:after:block indeterminate:after:content-['−'] indeterminate:after:block transition-all"
                     checked={allVisibleSelected}
                     ref={(input) => {
                       if (input) input.indeterminate = !allVisibleSelected && someVisibleSelected;
@@ -260,18 +354,38 @@ export const Accounts = () => {
                     onChange={toggleAll}
                   />
                 </th>
-                <th className="h-12 px-4 align-middle font-medium text-muted-foreground">Email</th>
+                <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
+                  Account
+                </th>
                 <th className="h-12 px-4 align-middle font-medium text-muted-foreground text-nowrap">
                   Last Used
                 </th>
-                <th className="h-12 px-4 align-middle font-medium text-muted-foreground text-nowrap">
-                  Success(%)
+                <th
+                  className={cn(
+                    'h-12 px-4 align-middle font-medium text-nowrap cursor-pointer hover:bg-muted/50 select-none',
+                    getHeaderClass('successRate'),
+                  )}
+                  onClick={() => handleSort('successRate')}
+                >
+                  <div className="flex items-center">Success(%) {getSortIcon('successRate')}</div>
                 </th>
-                <th className="h-12 px-4 align-middle font-medium text-muted-foreground text-nowrap">
-                  Avg Response
+                <th
+                  className={cn(
+                    'h-12 px-4 align-middle font-medium text-nowrap cursor-pointer hover:bg-muted/50 select-none',
+                    getHeaderClass('avgResponse'),
+                  )}
+                  onClick={() => handleSort('avgResponse')}
+                >
+                  <div className="flex items-center">Avg Response {getSortIcon('avgResponse')}</div>
                 </th>
-                <th className="h-12 px-4 align-middle font-medium text-muted-foreground text-nowrap">
-                  Tokens Today
+                <th
+                  className={cn(
+                    'h-12 px-4 align-middle font-medium text-nowrap cursor-pointer hover:bg-muted/50 select-none',
+                    getHeaderClass('tokensToday'),
+                  )}
+                  onClick={() => handleSort('tokensToday')}
+                >
+                  <div className="flex items-center">Tokens Today {getSortIcon('tokensToday')}</div>
                 </th>
                 <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
                   API Endpoint
@@ -304,46 +418,39 @@ export const Accounts = () => {
                     <td className="p-4 align-middle">
                       <input
                         type="checkbox"
-                        className="h-4 w-4 rounded border-zinc-500 bg-zinc-900/50 text-blue-500 focus:ring-blue-500 focus:ring-offset-zinc-900 cursor-pointer"
+                        className="appearance-none h-4 w-4 rounded border border-zinc-600 bg-zinc-900/50 checked:bg-blue-600 checked:border-blue-600 cursor-pointer flex items-center justify-center after:text-white after:text-[10px] after:font-bold after:hidden checked:after:content-['✔'] checked:after:block transition-all"
                         checked={selectedAccounts.has(account.id)}
                         onChange={() => toggleSelection(account.id)}
                       />
                     </td>
                     <td className="p-4 align-middle">
                       <div className="flex items-center gap-3">
-                        {account.picture && (
-                          <img
-                            src={account.picture}
-                            alt={account.name || account.email}
-                            className="w-8 h-8 rounded-full object-cover"
-                          />
-                        )}
+                        <AccountAvatar
+                          email={account.email}
+                          provider={account.provider}
+                          className="w-8 h-8 text-[10px]"
+                        />
                         <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-2">
-                            {account.name && (
-                              <span className="font-medium text-sm">{account.name}</span>
+                          <span className="font-medium text-sm">{account.email}</span>
+                          <div
+                            className={cn(
+                              'inline-flex items-center rounded-md border px-2.5 py-0.5 text-[10px] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 w-fit',
+                              providerConfig?.color || 'bg-blue-500/10 text-blue-500',
                             )}
-                            <div
-                              className={cn(
-                                'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
-                                providerConfig?.color || 'bg-blue-500/10 text-blue-500',
-                              )}
-                            >
-                              {providerConfig?.icon && (
-                                <img
-                                  src={providerConfig.icon}
-                                  alt={account.provider}
-                                  className="w-3.5 h-3.5 mr-1"
-                                />
-                              )}
-                              {account.provider}
-                            </div>
+                          >
+                            {providerConfig?.icon && (
+                              <img
+                                src={providerConfig.icon}
+                                alt={account.provider}
+                                className="w-3 h-3 mr-1"
+                              />
+                            )}
+                            {account.provider}
                           </div>
-                          <span className="text-xs text-muted-foreground">{account.email}</span>
                         </div>
                       </div>
                     </td>
-                    <td className="p-4 align-middle text-nowrap">
+                    <td className="p-4 align-middle text-nowrap text-muted-foreground text-xs">
                       {account.lastActive ? new Date(account.lastActive).toLocaleString() : 'Never'}
                     </td>
                     <td className="p-4 align-middle text-nowrap">
@@ -362,7 +469,7 @@ export const Accounts = () => {
                     <td className="p-4 align-middle group relative">
                       <code
                         className={cn(
-                          'relative rounded  font-mono text-xs break-all block cursor-pointer hover:text-primary transition-colors',
+                          'relative rounded  font-mono text-xs break-all block cursor-pointer hover:text-primary transition-colors text-muted-foreground',
                         )}
                         onClick={() => copyApiUrl(account)}
                         title={'Click to copy full URL'}
@@ -373,9 +480,9 @@ export const Accounts = () => {
                     <td className="p-4 align-middle text-right">
                       <div className="flex justify-end gap-2">
                         <button
-                          onClick={() => copyApiUrl(account)}
+                          onClick={() => copyAccountJson(account)}
                           className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-8 w-8"
-                          title="Copy API URL"
+                          title="Copy JSON"
                         >
                           <Copy className="h-4 w-4" />
                         </button>

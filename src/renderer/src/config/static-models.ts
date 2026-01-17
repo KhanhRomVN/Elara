@@ -29,10 +29,8 @@ export const STATIC_MODELS: Record<string, StaticModel[]> = {
   ],
 
   Claude: [
-    { id: 'claude-opus-4-20250514', name: 'Claude Opus 4' },
-    { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4' },
-    { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
-    { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku' },
+    { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5' },
+    { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5' },
   ],
 
   Mistral: [

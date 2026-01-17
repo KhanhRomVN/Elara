@@ -3,6 +3,8 @@
 import { net, app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
+import { spawn, execSync } from 'child_process';
+import { startProxy, stopProxy, proxyEvents } from './proxy';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -785,3 +787,171 @@ export async function uploadFile(
     throw error;
   }
 }
+
+// --- Spawn Chrome Login Logic (Ported from StepFun) ---
+
+// Find system Chrome/Chromium
+const findChrome = (): string | null => {
+  const commonPaths = [
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/snap/bin/chromium',
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+  ];
+
+  for (const p of commonPaths) {
+    if (fs.existsSync(p)) return p;
+  }
+
+  try {
+    const output = execSync('which google-chrome || which chromium', { encoding: 'utf-8' });
+    if (output.trim()) return output.trim();
+  } catch (e) {
+    // ignore
+  }
+
+  return null;
+};
+
+export const login = (options?: {
+  deepseekMethod?: 'basic' | 'google';
+}): Promise<{
+  cookies: string;
+  email?: string;
+}> => {
+  console.log(
+    '[DeepSeek] Starting Real Browser login flow... Method:',
+    options?.deepseekMethod || 'basic',
+  );
+
+  const chromePath = findChrome();
+  if (!chromePath) {
+    return Promise.reject(
+      new Error('Chrome or Chromium not found. Please install it to use DeepSeek.'),
+    );
+  }
+
+  return new Promise(async (resolve, reject) => {
+    // 1. Start Proxy
+    try {
+      await startProxy();
+    } catch (e) {
+      reject(new Error('Failed to start proxy: ' + e));
+      return;
+    }
+
+    // 2. Prepare Profile Dir
+    const profilePath = path.join(app.getPath('userData'), 'profiles', 'deepseek');
+    if (fs.existsSync(profilePath)) {
+      console.log('[DeepSeek] Clearing old profile...');
+      fs.rmSync(profilePath, { recursive: true, force: true });
+    }
+    fs.mkdirSync(profilePath, { recursive: true });
+
+    // 3. Spawn Chrome
+    console.log('[DeepSeek] Spawning Chrome at:', chromePath);
+    // DeepSeek sometimes needs more standard browser behavior for Google Login
+    const args = [
+      '--proxy-server=http=127.0.0.1:22122;https=127.0.0.1:22122',
+      '--proxy-bypass-list=<-loopback>',
+      '--ignore-certificate-errors',
+      `--user-data-dir=${profilePath}`,
+      '--no-first-run',
+      '--no-default-browser-check',
+      '--class=deepseek-browser', // helps window managers identify
+      'https://chat.deepseek.com/login',
+    ];
+
+    const chromeProcess = spawn(chromePath, args, {
+      detached: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    if (chromeProcess.stdout) {
+      chromeProcess.stdout.on('data', (data) => console.log(`[DeepSeek Chrome Out]: ${data}`));
+    }
+    if (chromeProcess.stderr) {
+      chromeProcess.stderr.on('data', (data) => console.error(`[DeepSeek Chrome Err]: ${data}`));
+    }
+
+    // 4. Listen for Proxy Events
+    let capturedCookies = '';
+    let capturedEmail = '';
+    let resolved = false;
+    let finishTimer: NodeJS.Timeout | null = null;
+
+    const cleanup = () => {
+      if (!resolved) {
+        resolved = true;
+        if (finishTimer) clearTimeout(finishTimer);
+        try {
+          chromeProcess.kill();
+        } catch (e) {}
+        stopProxy();
+        proxyEvents.off('deepseek-auth-header', onAuthHeader);
+        proxyEvents.off('deepseek-user-info', onUserInfo);
+        proxyEvents.off('deepseek-google-email', onGoogleEmail);
+      }
+    };
+
+    const finalize = async () => {
+      if (resolved) return;
+      cleanup();
+      resolve({
+        cookies: capturedCookies,
+        email: capturedEmail,
+      });
+    };
+
+    const onAuthHeader = (headerValue: string) => {
+      console.log('[DeepSeek] Captured Auth Header');
+      capturedCookies = headerValue;
+
+      if (finishTimer) clearTimeout(finishTimer);
+      // Wait a bit to capture user info if possible
+      finishTimer = setTimeout(finalize, 3000);
+    };
+
+    const onUserInfo = (info: any) => {
+      console.log('[DeepSeek] Captured User Info:', info);
+      if (info.email) capturedEmail = info.email;
+    };
+
+    const onGoogleEmail = (email: string) => {
+      console.log('[DeepSeek] Captured Google Email:', email);
+      capturedEmail = email;
+    };
+
+    proxyEvents.on('deepseek-auth-header', onAuthHeader);
+    proxyEvents.on('deepseek-user-info', onUserInfo);
+    proxyEvents.on('deepseek-google-email', onGoogleEmail);
+
+    // Hard limit 5 minutes
+    setTimeout(() => {
+      if (!resolved) {
+        if (capturedCookies) {
+          finalize();
+        } else {
+          cleanup();
+          reject(new Error('Login timed out'));
+        }
+      }
+    }, 300000);
+
+    chromeProcess.on('close', (code) => {
+      if (!resolved) {
+        if (capturedCookies) {
+          finalize();
+        } else {
+          console.log('[DeepSeek] Chrome closed with code:', code);
+          cleanup();
+          reject(new Error('User closed login window'));
+        }
+      }
+    });
+  });
+};

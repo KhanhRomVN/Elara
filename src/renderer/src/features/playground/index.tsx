@@ -9,6 +9,7 @@ import { GeminiModelSelector } from './components/GeminiModelSelector';
 import { HuggingChatModelSelector } from './components/HuggingChatModelSelector';
 import { LMArenaModelSelector } from './components/LMArenaModelSelector';
 import { CustomSelect } from './components/CustomSelect';
+import { AccountAvatar } from '../accounts/components/AccountAvatar';
 import { getStaticModels } from '../../config/static-models';
 
 import { Sidebar } from './components/Sidebar';
@@ -186,21 +187,18 @@ export const PlaygroundPage = ({
                       onChange={setSelectedAccount}
                       options={filteredAccounts.map((acc) => ({
                         value: acc.id,
-                        label: acc.name || acc.email,
-                        icon: acc.picture ? (
-                          <img
-                            src={acc.picture}
-                            alt=""
-                            className="w-4 h-4 rounded-full object-cover shrink-0"
+                        label: acc.email,
+                        icon: (
+                          <AccountAvatar
+                            email={acc.email}
+                            provider={acc.provider}
+                            className="w-4 h-4 text-[8px]"
                           />
-                        ) : (
-                          <User className="h-4 w-4" />
                         ),
                       }))}
                       placeholder="Select Account"
                       disabled={!selectedProvider}
                     />
-
                     {selectedProvider === 'Groq' && selectedAccount && (
                       <div className="space-y-4">
                         <GroqModelSelector
@@ -210,7 +208,6 @@ export const PlaygroundPage = ({
                         />
                       </div>
                     )}
-
                     {selectedProvider === 'Antigravity' && selectedAccount && (
                       <AntigravityModelSelector
                         value={antigravityModel}
@@ -225,7 +222,6 @@ export const PlaygroundPage = ({
                         models={geminiModelsList}
                       />
                     )}
-
                     {selectedProvider === 'HuggingChat' && selectedAccount && (
                       <div className="w-[300px]">
                         <HuggingChatModelSelector
@@ -237,7 +233,6 @@ export const PlaygroundPage = ({
                         />
                       </div>
                     )}
-
                     {selectedProvider === 'LMArena' && selectedAccount && (
                       <div className="w-[300px]">
                         <LMArenaModelSelector
@@ -249,7 +244,6 @@ export const PlaygroundPage = ({
                         />
                       </div>
                     )}
-
                     {selectedProvider === 'Claude' && (
                       <CustomSelect
                         value={claudeModel}
@@ -261,7 +255,6 @@ export const PlaygroundPage = ({
                         placeholder="Select Claude Model"
                       />
                     )}
-
                     {selectedProvider === 'DeepSeek' && (
                       <div className="w-[300px]">
                         <CustomSelect
