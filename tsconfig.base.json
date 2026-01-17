@@ -19,7 +19,8 @@
       "@renderer/*": ["./src/renderer/src/*"],
       "@shared/*": ["./src/renderer/src/shared/*"],
       "@core/*": ["./src/renderer/src/core/*"],
-      "@features/*": ["./src/renderer/src/features/*"]
+      "@features/*": ["./src/renderer/src/features/*"],
+      "@backend/*": ["./backend/src/*"]
     }
   }
 }

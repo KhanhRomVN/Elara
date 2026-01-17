@@ -4,18 +4,18 @@ import path from 'path';
 import { createLogger } from '../utils/logger';
 
 const logger = createLogger('Database');
-const dbPath = path.resolve(__dirname, '../../database.sqlite');
-
 let db: sqlite3.Database;
 
-export const initDatabase = (): Promise<void> => {
+export const initDatabase = (customPath?: string): Promise<void> => {
+  const dbPath = customPath || path.resolve(__dirname, '../../database.sqlite');
+
   return new Promise((resolve, reject) => {
-    db = new sqlite3.Database(dbPath, (err) => {
+    db = new sqlite3.Database(dbPath, (err: Error | null) => {
       if (err) {
         logger.error('Could not connect to database', err);
         reject(err);
       } else {
-        logger.info('Connected to SQLite database');
+        logger.info(`Connected to SQLite database at ${dbPath}`);
         createTables();
         resolve();
       }

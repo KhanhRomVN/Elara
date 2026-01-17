@@ -1,3 +1,4 @@
+import path from 'path';
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { electronApp, optimizer } from '@electron-toolkit/utils';
 import { windowManager } from './core/window';
@@ -9,6 +10,7 @@ import { setupEventHandlers } from './core/events';
 import { setupAccountsHandlers } from './ipc/accounts';
 import { setupServerHandlers } from './ipc/server';
 import { startServer } from './server';
+import { startBackend } from '@backend/start';
 
 import { setupCommandsHandlers } from './ipc/commands';
 import { setupStatsHandlers } from './ipc/stats';
@@ -64,6 +66,14 @@ if (!gotTheLock) {
 
     // Start API server
     startServer();
+
+    // Start Integrated Backend (Only in Production)
+    if (app.isPackaged) {
+      const dbPath = path.join(app.getPath('userData'), 'database.sqlite');
+      startBackend({ dbPath }).catch((err) =>
+        console.error('Failed to start integrated backend:', err),
+      );
+    }
 
     // Start CLI server
     startCLIServer();

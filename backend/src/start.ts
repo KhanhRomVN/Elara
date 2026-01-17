@@ -5,8 +5,8 @@ import { killPort } from './utils/port';
 
 const logger = createLogger('Startup');
 
-const main = async () => {
-  logger.info('Starting standalone backend service...');
+const main = async (options?: { dbPath?: string }) => {
+  logger.info('Starting backend service...');
 
   // Kill any existing process on port 11434
   await killPort(11434);
@@ -15,10 +15,11 @@ const main = async () => {
 
   // Initialize database
   try {
-    await initDatabase();
+    await initDatabase(options?.dbPath);
   } catch (error) {
     logger.error('Failed to initialize database', error);
-    process.exit(1);
+    if (require.main === module) process.exit(1);
+    throw error;
   }
 
   const result = await startServer();
@@ -27,22 +28,25 @@ const main = async () => {
     logger.info(`Backend service started successfully on port ${result.port}`);
   } else {
     logger.error(`Failed to start backend service: ${result.error}`);
-    process.exit(1);
+    if (require.main === module) process.exit(1);
+    throw new Error(result.error);
   }
 
   // Handle graceful shutdown
-  process.on('SIGTERM', () => {
-    logger.info('SIGTERM received, shutting down...');
-    process.exit(0);
-  });
+  const shutdown = () => {
+    logger.info('Shutting down...');
+    if (require.main === module) process.exit(0);
+  };
 
-  process.on('SIGINT', () => {
-    logger.info('SIGINT received, shutting down...');
-    process.exit(0);
-  });
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 };
 
-main().catch((err) => {
-  logger.error('Unhandled error during startup', err);
-  process.exit(1);
-});
+export const startBackend = main;
+
+if (require.main === module) {
+  main().catch((err) => {
+    logger.error('Unhandled error during startup', err);
+    process.exit(1);
+  });
+}
