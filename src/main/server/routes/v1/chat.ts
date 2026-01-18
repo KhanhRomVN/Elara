@@ -63,7 +63,8 @@ router.post('/accounts/:accountId/messages', async (req: Request, res: Response)
         model,
         messages,
         conversationId,
-        search,
+        stream: stream !== false,
+        search: ref_file_ids && ref_file_ids.length > 0 ? false : search,
         ref_file_ids,
         userAgent: req.headers['user-agent'],
         onContent: (content) => {

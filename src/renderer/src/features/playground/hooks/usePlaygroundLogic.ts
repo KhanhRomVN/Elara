@@ -115,6 +115,13 @@ export const usePlaygroundLogic = ({
     setAttachments((prev) => [...prev, ...newAttachments]);
   };
 
+  // Auto-disable search if files are attached (DeepSeek)
+  useEffect(() => {
+    if (selectedProvider === 'DeepSeek' && attachments.length > 0 && searchEnabled) {
+      setSearchEnabled(false);
+    }
+  }, [attachments, searchEnabled, selectedProvider]);
+
   const handleRemoveAttachment = (index: number) => {
     setAttachments((prev) => prev.filter((_, i) => i !== index));
   };
@@ -191,6 +198,7 @@ export const usePlaygroundLogic = ({
                       : p,
                   ),
                 );
+                setAccumulatedUsage((prev) => prev + (data.data.token_usage || 0));
               } else {
                 throw new Error(data.error || 'Invalid upload response');
               }
@@ -538,11 +546,21 @@ export const usePlaygroundLogic = ({
     setTokenCount((prev) => prev + accumulatedUsage);
     setAccumulatedUsage(0);
 
+    const messageAttachments = attachments.map((att) => ({
+      id: att.id,
+      name: att.file.name,
+      type: att.file.type.startsWith('image/') ? 'image' : 'file',
+      url: att.previewUrl,
+      size: att.file.size,
+      mimeType: att.file.type,
+    }));
+
     const userMessage: Message = {
       id: crypto.randomUUID(),
       role: 'user',
       content: input,
       timestamp: new Date(),
+      attachments: messageAttachments.length > 0 ? (messageAttachments as any) : undefined,
     };
 
     setMessages((prev) => [...prev, userMessage]);

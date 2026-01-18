@@ -4,13 +4,14 @@ import { CodeBlock } from '../../../core/components/CodeBlock';
 import { getFileIconPath } from '../../../shared/utils/fileIconMapper';
 
 interface FilePreviewModalProps {
-  file: File | null;
+  file: File | { name: string; type: string; url?: string; size?: number } | null;
   onClose: () => void;
 }
 
 export const FilePreviewModal = ({ file, onClose }: FilePreviewModalProps) => {
   const [content, setContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const isImage = file?.type.startsWith('image/') || file?.type === 'image';
 
   useEffect(() => {
     if (!file) {
@@ -18,26 +19,18 @@ export const FilePreviewModal = ({ file, onClose }: FilePreviewModalProps) => {
       return;
     }
 
-    if (file.type.startsWith('image/')) {
-      const url = URL.createObjectURL(file);
-      setContent(url);
-      return () => URL.revokeObjectURL(url);
+    if (isImage) {
+      if (file instanceof File) {
+        const url = URL.createObjectURL(file);
+        setContent(url);
+        return () => URL.revokeObjectURL(url);
+      } else if ('url' in file && file.url) {
+        setContent(file.url);
+      }
+      return;
     }
 
-    if (
-      file.type.startsWith('text/') ||
-      file.name.endsWith('.json') ||
-      file.name.endsWith('.md') ||
-      file.name.endsWith('.ts') ||
-      file.name.endsWith('.tsx') ||
-      file.name.endsWith('.js') ||
-      file.name.endsWith('.py') ||
-      file.name.endsWith('.java') ||
-      file.name.endsWith('.c') ||
-      file.name.endsWith('.cpp') ||
-      file.name.endsWith('.html') ||
-      file.name.endsWith('.css')
-    ) {
+    if (file instanceof File) {
       setLoading(true);
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -53,11 +46,9 @@ export const FilePreviewModal = ({ file, onClose }: FilePreviewModalProps) => {
       setContent(null);
     }
     return undefined;
-  }, [file]);
+  }, [file, isImage]);
 
   if (!file) return null;
-
-  const isImage = file.type.startsWith('image/');
 
   const getLanguage = (filename: string) => {
     const ext = filename.split('.').pop()?.toLowerCase();
@@ -110,7 +101,7 @@ export const FilePreviewModal = ({ file, onClose }: FilePreviewModalProps) => {
             <div className="flex flex-col min-w-0">
               <span className="font-medium truncate text-sm">{file.name}</span>
               <span className="text-xs text-muted-foreground whitespace-nowrap">
-                {(file.size / 1024).toFixed(1)} KB
+                {((file.size || 0) / 1024).toFixed(1)} KB
               </span>
             </div>
           </div>

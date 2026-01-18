@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import { Message } from '../types';
 import { MessageContent } from './MessageContent';
+import { FilePreviewModal } from './FilePreviewModal';
+import { FileText } from 'lucide-react';
 
 interface ChatAreaProps {
   messages: Message[];
@@ -16,6 +19,12 @@ export const ChatArea = ({
   conversationTitle,
   className,
 }: ChatAreaProps) => {
+  const [previewFile, setPreviewFile] = useState<{
+    name: string;
+    type: string;
+    url?: string;
+  } | null>(null);
+
   return (
     <div className={`flex flex-col flex-1 min-h-0 bg-background ${className || ''}`}>
       {/* Conversation Title Header */}
@@ -35,8 +44,50 @@ export const ChatArea = ({
               {/* User Message - Right Aligned */}
               {message.role === 'user' ? (
                 <div className="flex justify-end">
-                  <div className="max-w-[85%] rounded-lg px-4 py-3 bg-primary/10 text-foreground">
-                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                  <div className="flex flex-col items-end gap-2 max-w-[85%]">
+                    <div className="rounded-lg px-4 py-3 bg-primary/10 text-foreground w-full">
+                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    </div>
+                    {/* Attachments */}
+                    {message.attachments && message.attachments.length > 0 && (
+                      <div className="flex flex-wrap gap-2 justify-end">
+                        {message.attachments.map((att) => (
+                          <div
+                            key={att.id}
+                            onClick={() => setPreviewFile(att)}
+                            className="relative group shrink-0 w-auto max-w-sm h-14 rounded-lg border bg-muted/20 flex items-center p-2 pr-4 cursor-pointer hover:bg-muted/30 transition-colors"
+                          >
+                            <div className="w-10 h-10 shrink-0 rounded-md overflow-hidden bg-background/50 flex items-center justify-center shadow-sm relative">
+                              {att.type === 'image' && att.url ? (
+                                <img
+                                  src={att.url}
+                                  alt={att.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <FileText className="w-6 h-6 text-muted-foreground" />
+                              )}
+                            </div>
+
+                            <div className="flex flex-col min-w-0 flex-1 ml-2">
+                              <span
+                                className="text-xs font-medium truncate leading-tight text-left"
+                                title={att.name}
+                              >
+                                {att.name}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground text-left">
+                                {att.size && att.size < 1024
+                                  ? `${att.size} B`
+                                  : att.size && att.size < 1024 * 1024
+                                    ? `${(att.size / 1024).toFixed(1)} KB`
+                                    : `${((att.size || 0) / (1024 * 1024)).toFixed(1)} MB`}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -89,6 +140,8 @@ export const ChatArea = ({
           )}
         </div>
       </div>
+
+      <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />
     </div>
   );
 };

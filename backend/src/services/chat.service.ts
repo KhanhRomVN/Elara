@@ -31,6 +31,7 @@ export interface SendMessageOptions {
   conversationId?: string;
   search?: boolean;
   ref_file_ids?: string[];
+  stream?: boolean;
   userAgent?: string;
   onContent: (chunk: string) => void;
   onMetadata?: (meta: any) => void;
