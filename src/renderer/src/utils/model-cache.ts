@@ -5,10 +5,8 @@
  * - Cache-first loading strategy
  * - Background sync mechanism
  * - Per-provider caching with timestamps
- * - Static model lists for providers without APIs
+ * - Unified API endpoint for all providers
  */
-
-import { hasStaticModels, getStaticModels } from '../config/static-models';
 
 export interface Model {
   id: string;
@@ -102,43 +100,20 @@ export function clearAllModelCaches(): void {
 }
 
 /**
- * Fetch models from API for a specific provider
+ * Fetch models from unified API endpoint
  */
-async function fetchModelsFromAPI(
-  providerId: string,
-  email: string,
-  port: number,
-): Promise<Model[]> {
-  // Check if provider has static models (no API)
-  if (hasStaticModels(providerId)) {
-    console.log(`[Model Cache] Using static models for ${providerId}`);
-    return getStaticModels(providerId);
-  }
-
+async function fetchModelsFromAPI(providerId: string, port: number): Promise<Model[]> {
   try {
-    let endpoint = '';
-
-    // Map provider IDs to their API endpoints (only for providers with dynamic APIs)
-    switch (providerId) {
-      case 'Groq':
-        endpoint = `http://localhost:${port}/v1/groq/models?email=${encodeURIComponent(email)}`;
-        break;
-      case 'Antigravity':
-        endpoint = `http://localhost:${port}/v1/antigravity/models?email=${encodeURIComponent(email)}`;
-        break;
-      case 'HuggingChat':
-        endpoint = `http://localhost:${port}/v1/huggingchat/models?email=${encodeURIComponent(email)}`;
-        break;
-      case 'LMArena':
-        endpoint = `http://localhost:${port}/v1/lmarena/models?email=${encodeURIComponent(email)}`;
-        break;
-      case 'StepFun':
-        endpoint = `http://localhost:${port}/v1/stepfun/models?email=${encodeURIComponent(email)}`;
-        break;
-      default:
-        console.warn(`No API endpoint defined for provider: ${providerId}`);
-        return [];
+    // Normalize provider ID (handle special cases)
+    let normalizedProviderId = providerId.toLowerCase();
+    if (normalizedProviderId === 'huggingchat') {
+      normalizedProviderId = 'hugging-chat';
     }
+
+    // Use unified endpoint for all providers
+    const endpoint = `http://localhost:${port}/v1/providers/${normalizedProviderId}/models`;
+
+    console.log(`[Model Cache] Fetching models from: ${endpoint}`);
 
     const response = await fetch(endpoint);
 
@@ -148,48 +123,21 @@ async function fetchModelsFromAPI(
 
     const data = await response.json();
 
-    // Parse response based on provider format
-    let models: Model[] = [];
-
-    if (providerId === 'Groq' || providerId === 'LMArena') {
-      models = (data.data || []).map((m: any) => ({
-        id: m.id,
-        name: m.name || m.id,
-        ...m,
-      }));
-    } else if (providerId === 'Antigravity') {
-      if (data.models) {
-        if (Array.isArray(data.models)) {
-          models = data.models.map((m: any) => ({
-            id: m.id || m.name,
-            name: m.name || m.id,
-            ...m,
-          }));
-        } else {
-          models = Object.values(data.models).map((m: any) => ({
-            id: m.id || m.name,
-            name: m.name || m.id,
-            ...m,
-          }));
-        }
-      }
-    } else if (Array.isArray(data)) {
-      models = data.map((m: any) => ({
-        id: m.id,
-        name: m.name || m.id,
-        ...m,
-      }));
-    } else if (data.data && Array.isArray(data.data)) {
-      models = data.data.map((m: any) => ({
-        id: m.id,
-        name: m.name || m.id,
-        ...m,
-      }));
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to fetch models');
     }
 
+    // Parse response
+    const models: Model[] = (data.data || []).map((m: any) => ({
+      id: m.id,
+      name: m.name || m.id,
+      ...m,
+    }));
+
+    console.log(`[Model Cache] Fetched ${models.length} models for ${providerId}`);
     return models;
   } catch (error) {
-    console.error(`Error fetching models for ${providerId}:`, error);
+    console.error(`[Model Cache] Error fetching models for ${providerId}:`, error);
     return [];
   }
 }
@@ -200,14 +148,14 @@ async function fetchModelsFromAPI(
  */
 export async function fetchAndCacheModels(
   providerId: string,
-  email: string,
+  _email: string, // Kept for backward compatibility but not used
   port: number,
 ): Promise<Model[]> {
   // Try cache first
   const cached = getCachedModels(providerId);
 
   // Fetch from API
-  const models = await fetchModelsFromAPI(providerId, email, port);
+  const models = await fetchModelsFromAPI(providerId, port);
 
   // Update cache if we got models
   if (models.length > 0) {
@@ -237,9 +185,9 @@ async function performBackgroundSync(): Promise<void> {
   });
 
   // Sync models for each provider
-  const syncPromises = Array.from(providerAccounts.entries()).map(async ([providerId, account]) => {
+  const syncPromises = Array.from(providerAccounts.entries()).map(async ([providerId]) => {
     try {
-      const models = await fetchModelsFromAPI(providerId, account.email, currentPort);
+      const models = await fetchModelsFromAPI(providerId, currentPort);
       if (models.length > 0) {
         setCachedModels(providerId, models);
         console.log(`[Model Cache] Synced ${models.length} models for ${providerId}`);
@@ -296,9 +244,9 @@ export async function getDefaultModelId(
     return cached[0].id;
   }
 
-  // If email and port provided, try fetching
-  if (email && port) {
-    const models = await fetchAndCacheModels(providerId, email, port);
+  // If port provided, try fetching
+  if (port) {
+    const models = await fetchAndCacheModels(providerId, email || '', port);
     if (models.length > 0) {
       return models[0].id;
     }

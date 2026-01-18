@@ -73,6 +73,8 @@ export const usePlaygroundLogic = ({
   const [antigravityModelsList, setAntigravityModelsList] = useState<any[]>([]);
   const [geminiModelsList, setGeminiModelsList] = useState<any[]>([]);
   const [huggingChatModelsList, setHuggingChatModelsList] = useState<any[]>([]);
+  const [claudeModelsList, setClaudeModelsList] = useState<any[]>([]);
+  const [deepseekModelsList, setDeepseekModelsList] = useState<any[]>([]);
 
   const [groqSettings, setGroqSettings] = useState(
     () =>
@@ -391,13 +393,10 @@ export const usePlaygroundLogic = ({
     fetchAccountsByProvider();
   }, [selectedProvider]);
 
-  // Fetch Models using cache
+  // Fetch Models using cache - trigger on provider selection
   useEffect(() => {
     const fetchModels = async () => {
-      if (!selectedAccount) return;
-
-      const acc = accounts.find((a) => a.id === selectedAccount);
-      if (!acc) return;
+      if (!selectedProvider) return;
 
       try {
         // @ts-ignore
@@ -412,7 +411,7 @@ export const usePlaygroundLogic = ({
             if (!groqModel) setGroqModel(cached[0].id);
           }
           // Fetch and update
-          const models = await fetchAndCacheModels('Groq', acc.email, port);
+          const models = await fetchAndCacheModels('Groq', '', port);
           if (models.length > 0) {
             setGroqModelsList(models.sort((a: any, b: any) => a.id.localeCompare(b.id)));
             if (!groqModel) setGroqModel(models[0].id);
@@ -423,7 +422,7 @@ export const usePlaygroundLogic = ({
             setAntigravityModelsList(cached);
             if (!antigravityModel) setAntigravityModel(cached[0].id || cached[0].name || '');
           }
-          const models = await fetchAndCacheModels('Antigravity', acc.email, port);
+          const models = await fetchAndCacheModels('Antigravity', '', port);
           if (models.length > 0) {
             setAntigravityModelsList(models);
             if (!antigravityModel) setAntigravityModel(models[0].id || models[0].name || '');
@@ -434,7 +433,7 @@ export const usePlaygroundLogic = ({
             setGeminiModelsList(cached);
             if (!geminiModel) setGeminiModel(cached[0].id);
           }
-          const models = await fetchAndCacheModels('Gemini', acc.email, port);
+          const models = await fetchAndCacheModels('Gemini', '', port);
           if (models.length > 0) {
             setGeminiModelsList(models);
             if (!geminiModel) setGeminiModel(models[0].id);
@@ -445,7 +444,7 @@ export const usePlaygroundLogic = ({
             setHuggingChatModelsList(cached);
             if (!huggingChatModel) setHuggingChatModel(cached[0].id);
           }
-          const models = await fetchAndCacheModels('HuggingChat', acc.email, port);
+          const models = await fetchAndCacheModels('HuggingChat', '', port);
           if (models.length > 0) {
             setHuggingChatModelsList(models);
             if (!huggingChatModel) setHuggingChatModel(models[0].id);
@@ -456,28 +455,32 @@ export const usePlaygroundLogic = ({
             setGroqModels(cached);
             if (!groqModel) setGroqModel(cached[0].id);
           }
-          const models = await fetchAndCacheModels('LMArena', acc.email, port);
+          const models = await fetchAndCacheModels('LMArena', '', port);
           if (models.length > 0) {
             setGroqModels(models);
             if (!groqModel) setGroqModel(models[0].id);
           }
         } else if (selectedProvider === 'DeepSeek') {
           const cached = getCachedModels('DeepSeek');
-          if (cached && cached.length > 0 && !deepseekModel) {
-            setDeepseekModel(cached[0].id);
+          if (cached && cached.length > 0) {
+            setDeepseekModelsList(cached);
+            if (!deepseekModel) setDeepseekModel(cached[0].id);
           }
-          const models = await fetchAndCacheModels('DeepSeek', acc.email, port);
-          if (models.length > 0 && !deepseekModel) {
-            setDeepseekModel(models[0].id);
+          const models = await fetchAndCacheModels('DeepSeek', '', port);
+          if (models.length > 0) {
+            setDeepseekModelsList(models);
+            if (!deepseekModel) setDeepseekModel(models[0].id);
           }
         } else if (selectedProvider === 'Claude') {
           const cached = getCachedModels('Claude');
-          if (cached && cached.length > 0 && !claudeModel) {
-            setClaudeModel(cached[0].id);
+          if (cached && cached.length > 0) {
+            setClaudeModelsList(cached);
+            if (!claudeModel) setClaudeModel(cached[0].id);
           }
-          const models = await fetchAndCacheModels('Claude', acc.email, port);
-          if (models.length > 0 && !claudeModel) {
-            setClaudeModel(models[0].id);
+          const models = await fetchAndCacheModels('Claude', '', port);
+          if (models.length > 0) {
+            setClaudeModelsList(models);
+            if (!claudeModel) setClaudeModel(models[0].id);
           }
         }
       } catch (error) {
@@ -485,7 +488,7 @@ export const usePlaygroundLogic = ({
       }
     };
     fetchModels();
-  }, [selectedProvider, selectedAccount, accounts]);
+  }, [selectedProvider]);
 
   // Fetch History
   useEffect(() => {
@@ -908,6 +911,8 @@ export const usePlaygroundLogic = ({
     antigravityModelsList,
     geminiModelsList,
     huggingChatModelsList,
+    claudeModelsList,
+    deepseekModelsList,
     groqSettings,
     setGroqSettings,
     history,

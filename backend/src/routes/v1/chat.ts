@@ -77,7 +77,7 @@ router.post('/completions', async (req, res) => {
 
     // Strategy 3: Default to first active account of requested model's provider
     if (!account) {
-      const inferredProvider = model.includes('claude')
+      let inferredProvider = model.includes('claude')
         ? 'Claude'
         : model.includes('deepseek')
           ? 'DeepSeek'
@@ -102,6 +102,17 @@ router.post('/completions', async (req, res) => {
                         : model.includes('step')
                           ? 'StepFun'
                           : null;
+
+      // If model is generic (e.g. gpt-4) or no specific provider inferred, default to DeepSeek
+      if (!inferredProvider) {
+        // Check if we have any DeepSeek account, if so use it as primary fallback
+        const deepseekAccount = accounts.find(
+          (a) => a.provider === 'DeepSeek' && a.status === 'Active',
+        );
+        if (deepseekAccount) {
+          inferredProvider = 'DeepSeek';
+        }
+      }
 
       if (inferredProvider) {
         account = accounts.find(
@@ -152,10 +163,10 @@ router.post('/completions', async (req, res) => {
       await deepseekChat(
         account.credential,
         {
-          model,
+          model: 'deepseek-chat', // Enforce deepseek-chat
           messages,
           stream: true,
-          thinking,
+          thinking: false, // Enforce no thinking
           search,
           conversation_id,
           parent_message_id,

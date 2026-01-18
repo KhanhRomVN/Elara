@@ -4,7 +4,8 @@
     "provider_name": "Antigravity",
     "is_enabled": false,
     "website": "https://antigravity.google/",
-    "is_search": false
+    "is_search": false,
+    "is_upload": false
   },
   {
     "provider_id": "claude",
@@ -12,7 +13,17 @@
     "is_enabled": true,
     "website": "https://claude.ai/",
     "is_search": false,
-    "is_upload": false
+    "is_upload": false,
+    "models": [
+      {
+        "id": "claude-sonnet-4-5-20250929",
+        "name": "Claude Sonnet 4.5"
+      },
+      {
+        "id": "claude-haiku-4-5-20251001",
+        "name": "Claude Haiku 4.5"
+      }
+    ]
   },
   {
     "provider_id": "cohere",
@@ -28,7 +39,17 @@
     "is_enabled": true,
     "website": "https://deepseek.com",
     "is_search": true,
-    "is_upload": true
+    "is_upload": true,
+    "models": [
+      {
+        "id": "deepseek-chat",
+        "name": "DeepSeek Chat"
+      },
+      {
+        "id": "deepseek-reasoner",
+        "name": "DeepSeek Reasoner"
+      }
+    ]
   },
   {
     "provider_id": "gemini",
@@ -43,55 +64,63 @@
     "provider_name": "Groq",
     "is_enabled": false,
     "website": "https://groq.com",
-    "is_search": false
+    "is_search": false,
+    "is_upload": false
   },
   {
     "provider_id": "hugging-chat",
     "provider_name": "HuggingChat",
     "is_enabled": false,
     "website": "https://huggingface.co/",
-    "is_search": false
+    "is_search": false,
+    "is_upload": false
   },
   {
     "provider_id": "kimi",
     "provider_name": "Kimi",
     "is_enabled": false,
     "website": "https://www.kimi.com/",
-    "is_search": false
+    "is_search": false,
+    "is_upload": false
   },
   {
     "provider_id": "lmarena",
     "provider_name": "LMArena",
     "is_enabled": false,
     "website": "https://lmarena.ai/",
-    "is_search": false
+    "is_search": false,
+    "is_upload": false
   },
   {
     "provider_id": "mistral",
     "provider_name": "Mistral",
     "is_enabled": false,
     "website": "https://mistral.ai/",
-    "is_search": false
+    "is_search": false,
+    "is_upload": false
   },
   {
     "provider_id": "perplexity",
     "provider_name": "Perplexity",
     "is_enabled": false,
     "website": "https://www.perplexity.ai/",
-    "is_search": false
+    "is_search": false,
+    "is_upload": false
   },
   {
     "provider_id": "qwen",
     "provider_name": "Qwen",
     "is_enabled": false,
     "website": "https://qwenlm.ai/",
-    "is_search": false
+    "is_search": false,
+    "is_upload": false
   },
   {
     "provider_id": "stepfun",
     "provider_name": "StepFun",
     "is_enabled": false,
     "website": "https://stepfun.ai/",
-    "is_search": false
+    "is_search": false,
+    "is_upload": false
   }
 ]

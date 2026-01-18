@@ -11,6 +11,7 @@ import accountRouter from './account.routes';
 import chatHistoryRouter from './chat.routes';
 
 import providerRouter from './provider';
+import messagesRouter from './messages';
 
 // Register routes
 router.use('/chat', chatRouter);
@@ -18,5 +19,6 @@ router.use('/models', modelsRouter);
 router.use('/management', managementRouter);
 router.use('/accounts', accountRouter);
 router.use('/providers', providerRouter);
+router.use('/messages', messagesRouter);
 router.use('/', chatHistoryRouter); // For /v1/accounts/:accountId/conversations
 export default router;

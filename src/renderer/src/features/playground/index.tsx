@@ -9,7 +9,6 @@ import { HuggingChatModelSelector } from './components/HuggingChatModelSelector'
 import { LMArenaModelSelector } from './components/LMArenaModelSelector';
 import { CustomSelect } from './components/CustomSelect';
 import { AccountAvatar } from '../accounts/components/AccountAvatar';
-import { getStaticModels } from '../../config/static-models';
 
 import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
@@ -75,6 +74,8 @@ export const PlaygroundPage = ({
     antigravityModelsList,
     geminiModelsList,
     huggingChatModelsList,
+    claudeModelsList,
+    deepseekModelsList,
     groqSettings,
     setGroqSettings,
     history,
@@ -260,7 +261,7 @@ export const PlaygroundPage = ({
                       <CustomSelect
                         value={claudeModel}
                         onChange={setClaudeModel}
-                        options={getStaticModels('Claude').map((m) => ({
+                        options={claudeModelsList.map((m) => ({
                           value: m.id,
                           label: m.name,
                         }))}
@@ -272,7 +273,7 @@ export const PlaygroundPage = ({
                         <CustomSelect
                           value={deepseekModel}
                           onChange={setDeepseekModel}
-                          options={getStaticModels('DeepSeek').map((m) => ({
+                          options={deepseekModelsList.map((m) => ({
                             value: m.id,
                             label: m.name,
                           }))}

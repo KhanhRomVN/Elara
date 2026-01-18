@@ -263,6 +263,8 @@ export interface ChatPayload {
   search?: boolean;
   conversation_id?: string;
   ref_file_ids?: string[];
+  thinking?: boolean;
+  parent_message_id?: string;
 }
 
 export interface Account {
@@ -387,10 +389,11 @@ export async function chatCompletionStream(
 
     const requestPayload: any = {
       chat_session_id: sessionId,
-      parent_message_id: parentMessageId || null,
+      parent_message_id: payload.parent_message_id || parentMessageId || null,
       prompt: payload.messages[payload.messages.length - 1].content,
       ref_file_ids: payload.ref_file_ids || [],
-      thinking_enabled: payload.model === 'deepseek-reasoner',
+      thinking_enabled:
+        payload.thinking ?? payload.model === 'deepseek-reasoner',
       search_enabled: payload.search || false,
       client_stream_id: clientStreamId,
     };

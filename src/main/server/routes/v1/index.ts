@@ -2,6 +2,7 @@ import express from 'express';
 import modelsRouter from './models';
 import chatRouter from './chat';
 import accountsRouter from './accounts';
+import providersRouter from './providers';
 import claudeRouter from './providers/claude';
 import deepseekRouter from './providers/deepseek';
 import huggingChatRouter from './providers/huggingchat';
@@ -21,6 +22,7 @@ const router = express.Router();
 router.use('/models', modelsRouter);
 router.use('/chat', chatRouter);
 router.use('/accounts', accountsRouter);
+router.use('/providers', providersRouter);
 
 // Provider specific routes
 router.use('/claude', claudeRouter);

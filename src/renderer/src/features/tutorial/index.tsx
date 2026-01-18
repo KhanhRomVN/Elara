@@ -1,530 +1,741 @@
 import { useState } from 'react';
-import { Code, Book, Database, MessageSquare } from 'lucide-react';
+import { Server, Zap } from 'lucide-react';
 import { CodeBlock } from '@renderer/core/components/CodeBlock';
-import { cn } from '../../shared/lib/utils';
-import { ProviderReference } from './components/ProviderReference';
-import { MessagingReference } from './components/MessagingReference';
 
 interface APIEndpoint {
   path: string;
   method: string;
-  owner: string;
-  usedBy: string[];
   description: string;
-  requestExample: string;
-  requestHeaders: string;
-  responseExample: string;
+  params?: { name: string; type: string; required: boolean; description: string }[];
+  requestFields?: { name: string; type: string; required: boolean; description: string }[];
+  responseFields?: { name: string; type: string; description: string }[];
+  requestBody?: string;
+  responseBody?: string;
+  queryParams?: string;
 }
 
-const apiEndpoints: APIEndpoint[] = [
+interface EmbeddedAPI {
+  category: string;
+  endpoints: APIEndpoint[];
+}
+
+const embeddedAPIs: EmbeddedAPI[] = [
   {
-    path: '/v1/chat/completions',
-    method: 'POST',
-    owner: 'OpenAI',
-    usedBy: [
-      'Cursor IDE',
-      'Continue.dev',
-      'Cline',
-      'Aider',
-      'GitHub Copilot Chat',
-      'ChatGPT Desktop',
-      'ClaudeCode CLI (via proxy)',
-      'Cody by Sourcegraph',
-      'Tabnine',
-      'Windsurf Editor',
-    ],
-    description:
-      'OpenAI-compatible chat completions API. Standard de-facto cho AI coding assistants. Hỗ trợ streaming, function calling, và multi-turn conversations.',
-    requestHeaders: `Authorization: Bearer sk-...\nContent-Type: application/json`,
-    requestExample: `{
-  "model": "gpt-4-turbo",
-  "messages": [
+    category: 'Account Management',
+    endpoints: [
+      {
+        path: '/v1/accounts',
+        method: 'GET',
+        description: 'Get all accounts from the database with optional filtering',
+        params: [
+          {
+            name: 'page',
+            type: 'number',
+            required: false,
+            description: 'Page number for pagination (default: 1)',
+          },
+          {
+            name: 'limit',
+            type: 'number',
+            required: false,
+            description: 'Number of items per page (default: 10)',
+          },
+          {
+            name: 'provider_id',
+            type: 'string',
+            required: false,
+            description: 'Filter by provider (e.g., "deepseek", "claude")',
+          },
+        ],
+        queryParams: 'page=1&limit=10&provider_id=deepseek',
+        responseBody: `{
+  "success": true,
+  "message": "Accounts retrieved successfully",
+  "data": [
     {
-      "role": "system",
-      "content": "You are a helpful coding assistant."
-    },
-    {
-      "role": "user", 
-      "content": "Write a function to reverse a string in Python"
+      "id": "acc_123456",
+      "email": "user@example.com",
+      "provider_id": "deepseek",
+      "credential": "...",
+      "created_at": "2026-01-19T00:00:00.000Z"
     }
   ],
-  "temperature": 0.7,
-  "stream": true
-}`,
-    responseExample: `{
-  "id": "chatcmpl-123",
-  "object": "chat.completion",
-  "created": 1677652288,
-  "model": "gpt-4-turbo",
-  "choices": [
-    {
-      "index": 0,
-      "message": {
-        "role": "assistant",
-        "content": "def reverse_string(s):\\n    return s[::-1]"
-      },
-      "finish_reason": "stop"
-    }
-  ],
-  "usage": {
-    "prompt_tokens": 25,
-    "completion_tokens": 15,
-    "total_tokens": 40
+  "meta": {
+    "timestamp": "2026-01-19T00:00:00.000Z",
+    "page": 1,
+    "limit": 10,
+    "total": 25
   }
 }`,
-  },
-  {
-    path: '/v1/completions',
-    method: 'POST',
-    owner: 'OpenAI',
-    usedBy: ['GitHub Copilot', 'Tabnine', 'CodeWhisperer', 'Legacy coding tools'],
-    description:
-      'Legacy text completion API. Được dùng bởi older coding assistants. Đang dần được thay thế bởi /v1/chat/completions.',
-    requestHeaders: `Authorization: Bearer sk-...\nContent-Type: application/json`,
-    requestExample: `{
-  "model": "gpt-3.5-turbo-instruct",
-  "prompt": "def fibonacci(n):",
-  "max_tokens": 100,
-  "temperature": 0.5,
-  "stop": ["\\n\\n"]
+        responseFields: [
+          { name: 'success', type: 'boolean', description: 'Request success status' },
+          { name: 'message', type: 'string', description: 'Human-readable message' },
+          { name: 'data', type: 'array', description: 'Array of account objects' },
+          { name: 'data[].id', type: 'string', description: 'Unique account identifier' },
+          { name: 'data[].email', type: 'string', description: 'Account email address' },
+          { name: 'data[].provider_id', type: 'string', description: 'Provider name' },
+          { name: 'data[].credential', type: 'object', description: 'Authentication credentials' },
+          { name: 'meta.page', type: 'number', description: 'Current page number' },
+          { name: 'meta.limit', type: 'number', description: 'Items per page' },
+          { name: 'meta.total', type: 'number', description: 'Total number of accounts' },
+        ],
+      },
+      {
+        path: '/v1/accounts/:id',
+        method: 'DELETE',
+        description: 'Delete an account by ID',
+        responseBody: `{
+  "success": true,
+  "message": "Account deleted successfully",
+  "meta": {
+    "timestamp": "2026-01-19T00:00:00.000Z"
+  }
 }`,
-    responseExample: `{
-  "id": "cmpl-123",
-  "object": "text_completion",
-  "created": 1677652288,
-  "model": "gpt-3.5-turbo-instruct",
-  "choices": [
+      },
+      {
+        path: '/v1/accounts/import',
+        method: 'POST',
+        description: 'Import multiple accounts at once',
+        requestBody: `{
+  "accounts": [
     {
-      "text": "\\n    if n <= 1:\\n        return n\\n    return fibonacci(n-1) + fibonacci(n-2)",
-      "index": 0,
-      "finish_reason": "stop"
+      "email": "user1@example.com",
+      "provider_id": "DeepSeek",
+      "credential": {
+        "cookie": "session=...",
+        "jwt": "eyJ..."
+      }
     }
   ]
 }`,
-  },
-  {
-    path: '/v1/messages',
-    method: 'POST',
-    owner: 'Anthropic',
-    usedBy: [
-      'ClaudeCode CLI',
-      'Claude Desktop',
-      'Cursor (Claude mode)',
-      'Continue.dev (Claude)',
-      'Cline',
-      'Windsurf (Claude)',
-    ],
-    description:
-      'Anthropic Claude Messages API. Tối ưu cho long-context coding tasks. Hỗ trợ 200K tokens context window.',
-    requestHeaders: `x-api-key: sk-ant-...\nanthropic-version: 2023-06-01\ncontent-type: application/json`,
-    requestExample: `{
-  "model": "claude-3-opus-20240229",
-  "max_tokens": 4096,
-  "messages": [
-    {
-      "role": "user",
-      "content": "Explain this code: def foo(x): return x ** 2"
-    }
-  ],
-  "system": "You are a code reviewer."
-}`,
-    responseExample: `{
-  "id": "msg_123",
-  "type": "message",
-  "role": "assistant",
-  "content": [
-    {
-      "type": "text",
-      "text": "This function squares the input value x..."
-    }
-  ],
-  "model": "claude-3-opus-20240229",
-  "stop_reason": "end_turn",
-  "usage": {
-    "input_tokens": 20,
-    "output_tokens": 50
+        requestFields: [
+          {
+            name: 'accounts',
+            type: 'array',
+            required: true,
+            description: 'Array of account objects to import',
+          },
+          {
+            name: 'accounts[].email',
+            type: 'string',
+            required: true,
+            description: 'Account email',
+          },
+          {
+            name: 'accounts[].provider_id',
+            type: 'string',
+            required: true,
+            description: 'Provider identifier',
+          },
+          {
+            name: 'accounts[].credential',
+            type: 'object',
+            required: true,
+            description: 'Authentication credentials',
+          },
+          {
+            name: 'accounts[].credential.cookie',
+            type: 'string',
+            required: false,
+            description: 'Session cookie',
+          },
+          {
+            name: 'accounts[].credential.jwt',
+            type: 'string',
+            required: false,
+            description: 'JWT token',
+          },
+        ],
+        responseBody: `{
+  "success": true,
+  "message": "Accounts imported successfully",
+  "data": {
+    "imported": 2,
+    "failed": 0
   }
 }`,
+      },
+    ],
   },
   {
-    path: '/v1beta/models/:model:generateContent',
-    method: 'POST',
-    owner: 'Google (Gemini)',
-    usedBy: ['Google AI Studio', 'Gemini Code Assist', 'Cursor (Gemini)', 'IDX Editor'],
-    description:
-      'Google Gemini generation API. Hỗ trợ multimodal (text + images + video). Tốt cho code understanding với visual context.',
-    requestHeaders: `Content-Type: application/json`,
-    requestExample: `{
-  "contents": [
+    category: 'Models',
+    endpoints: [
+      {
+        path: '/v1/providers/:providerId/models',
+        method: 'GET',
+        description: 'Get available models for a specific provider (unified endpoint)',
+        params: [
+          {
+            name: 'providerId',
+            type: 'string',
+            required: true,
+            description: 'Provider identifier (e.g., "deepseek", "claude", "groq")',
+          },
+          {
+            name: 'email',
+            type: 'string',
+            required: false,
+            description:
+              'Required only for dynamic providers (Groq, Antigravity, HuggingChat, etc.)',
+          },
+        ],
+        queryParams: 'email=user@example.com',
+        responseBody: `{
+  "success": true,
+  "data": [
     {
-      "parts": [
+      "id": "deepseek-chat",
+      "name": "DeepSeek Chat"
+    },
+    {
+      "id": "deepseek-reasoner",
+      "name": "DeepSeek Reasoner"
+    }
+  ],
+  "source": "static"
+}`,
+        responseFields: [
+          { name: 'success', type: 'boolean', description: 'Request success status' },
+          { name: 'data', type: 'array', description: 'Array of model objects' },
+          { name: 'data[].id', type: 'string', description: 'Model identifier' },
+          { name: 'data[].name', type: 'string', description: 'Model display name' },
+          {
+            name: 'source',
+            type: 'string',
+            description: 'Data source: "static" (hardcoded) or "dynamic" (from API)',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    category: 'Conversation Management',
+    endpoints: [
+      {
+        path: '/v1/accounts/:accountId/conversations',
+        method: 'GET',
+        description: 'Get conversation history for an account',
+        params: [
+          {
+            name: 'accountId',
+            type: 'string',
+            required: true,
+            description: 'Account ID from path parameter',
+          },
+          {
+            name: 'limit',
+            type: 'number',
+            required: false,
+            description: 'Number of conversations to return (default: 30)',
+          },
+          {
+            name: 'page',
+            type: 'number',
+            required: false,
+            description: 'Page number for pagination (default: 1)',
+          },
+        ],
+        queryParams: 'limit=30&page=1',
+        responseBody: `{
+  "success": true,
+  "message": "Conversations retrieved successfully",
+  "data": {
+    "conversations": [
+      {
+        "id": "conv_123",
+        "title": "Code Review Discussion",
+        "created_at": "2026-01-18T10:00:00.000Z",
+        "updated_at": "2026-01-18T15:30:00.000Z",
+        "message_count": 12
+      }
+    ],
+    "account": {
+      "id": "acc_123456",
+      "email": "user@example.com",
+      "provider_id": "DeepSeek"
+    }
+  }
+}`,
+      },
+      {
+        path: '/v1/accounts/:accountId/conversations/:conversationId',
+        method: 'GET',
+        description: 'Get detailed conversation with all messages',
+        params: [
+          {
+            name: 'accountId',
+            type: 'string',
+            required: true,
+            description: 'Account ID from path',
+          },
+          {
+            name: 'conversationId',
+            type: 'string',
+            required: true,
+            description: 'Conversation ID from path',
+          },
+        ],
+        responseBody: `{
+  "success": true,
+  "message": "Conversation details retrieved successfully",
+  "data": {
+    "conversation": {
+      "id": "conv_123",
+      "title": "Code Review Discussion",
+      "messages": [
         {
-          "text": "Generate a React component for a button"
+          "id": "msg_1",
+          "role": "user",
+          "content": "Can you review this code?",
+          "created_at": "2026-01-18T10:00:00.000Z"
+        },
+        {
+          "id": "msg_2",
+          "role": "assistant",
+          "content": "Sure! Let me analyze it...",
+          "created_at": "2026-01-18T10:00:15.000Z"
         }
       ]
     }
-  ],
-  "generationConfig": {
-    "temperature": 0.9,
-    "maxOutputTokens": 2048
   }
 }`,
-    responseExample: `{
-  "candidates": [
-    {
-      "content": {
-        "parts": [
-          {
-            "text": "function Button({ label, onClick }) {\\n  return <button onClick={onClick}>{label}</button>\\n}"
-          }
-        ]
       },
-      "finishReason": "STOP"
-    }
-  ]
-}`,
-  },
-  {
-    path: '/v1/models',
-    method: 'GET',
-    owner: 'OpenAI',
-    usedBy: [
-      'Cursor',
-      'Continue.dev',
-      'Cline',
-      'OpenAI Playground',
-      'Tất cả OpenAI-compatible tools',
     ],
-    description:
-      'List available models. Được gọi khi user chọn model trong IDE. Returns danh sách models với metadata.',
-    requestHeaders: `Authorization: Bearer sk-...`,
-    requestExample: `GET /v1/models`,
-    responseExample: `{
-  "object": "list",
-  "data": [
-    {
-      "id": "gpt-4-turbo",
-      "object": "model",
-      "created": 1677610602,
-      "owned_by": "openai"
-    },
-    {
-      "id": "gpt-3.5-turbo",
-      "object": "model", 
-      "created": 1677649963,
-      "owned_by": "openai"
-    }
-  ]
-}`,
   },
   {
-    path: '/api/generate',
-    method: 'POST',
-    owner: 'Ollama',
-    usedBy: ['Continue.dev (local)', 'Open WebUI', 'Ollama CLI', 'Local coding assistants'],
-    description:
-      'Ollama local generation API. Cho running models locally (Llama, CodeLlama, DeepSeek Coder...). Privacy-first.',
-    requestHeaders: `Content-Type: application/json`,
-    requestExample: `{
-  "model": "codellama:13b",
-  "prompt": "Write a sorting algorithm in Rust",
-  "stream": true
-}`,
-    responseExample: `{
-  "model": "codellama:13b",
-  "created_at": "2024-01-14T10:00:00Z",
-  "response": "fn bubble_sort<T: Ord>(arr: &mut [T]) {...}",
-  "done": false
-}`,
-  },
-  {
-    path: '/v1/engines/:engine/completions',
-    method: 'POST',
-    owner: 'OpenAI (Legacy)',
-    usedBy: ['Old GitHub Copilot', 'Legacy integrations'],
-    description: 'Deprecated OpenAI Engines API. Replaced by /v1/completions.',
-    requestHeaders: `Authorization: Bearer sk-...\nContent-Type: application/json`,
-    requestExample: `{
-  "prompt": "const sum = (a, b) =>",
-  "max_tokens": 50
-}`,
-    responseExample: `{
-  "choices": [
-    {
-      "text": " a + b;",
-      "index": 0,
-      "finish_reason": "stop"
-    }
-  ]
-}`,
-  },
-  {
-    path: '/api/chat',
-    method: 'POST',
-    owner: 'Ollama',
-    usedBy: ['Continue.dev', 'Open WebUI', 'Ollama CLI'],
-    description:
-      'Ollama chat API with conversation history. OpenAI-compatible format cho local models.',
-    requestHeaders: `Content-Type: application/json`,
-    requestExample: `{
-  "model": "deepseek-coder:33b",
+    category: 'Chat & Messaging',
+    endpoints: [
+      {
+        path: '/v1/chat/accounts/:accountId/messages',
+        method: 'POST',
+        description: 'Send a message to a specific account (supports streaming)',
+        params: [
+          {
+            name: 'accountId',
+            type: 'string',
+            required: true,
+            description: 'Account ID from path parameter',
+          },
+        ],
+        requestBody: `{
+  "model": "deepseek-chat",
   "messages": [
     {
       "role": "user",
-      "content": "Explain async/await in JavaScript"
+      "content": "Hello, how are you?"
     }
-  ]
+  ],
+  "conversationId": "conv_123",
+  "stream": true,
+  "search": false,
+  "ref_file_ids": []
 }`,
-    responseExample: `{
-  "model": "deepseek-coder:33b",
-  "created_at": "2024-01-14T10:00:00Z",
+        requestFields: [
+          { name: 'model', type: 'string', required: true, description: 'Model identifier' },
+          {
+            name: 'messages',
+            type: 'array',
+            required: true,
+            description: 'Array of message objects',
+          },
+          {
+            name: 'messages[].role',
+            type: 'string',
+            required: true,
+            description: 'Message role (user/assistant)',
+          },
+          {
+            name: 'messages[].content',
+            type: 'string',
+            required: true,
+            description: 'Message content',
+          },
+          {
+            name: 'conversationId',
+            type: 'string',
+            required: false,
+            description: 'Existing conversation ID',
+          },
+          {
+            name: 'stream',
+            type: 'boolean',
+            required: false,
+            description: 'Enable streaming (default: true)',
+          },
+          { name: 'search', type: 'boolean', required: false, description: 'Enable web search' },
+          {
+            name: 'ref_file_ids',
+            type: 'array',
+            required: false,
+            description: 'Referenced file IDs',
+          },
+        ],
+        responseBody: `// Streaming response (SSE format)
+data: {"content":"Hello"}
+data: {"content":"! I'm"}
+data: {"content":" doing"}
+data: {"content":" well"}
+data: {"meta":{"conversationId":"conv_123"}}
+data: [DONE]
+
+// Non-streaming response
+{
+  "success": true,
   "message": {
     "role": "assistant",
-    "content": "Async/await is syntactic sugar for Promises..."
+    "content": "Hello! I'm doing well."
+  },
+  "metadata": {
+    "conversationId": "conv_123",
+    "model": "deepseek-chat"
   }
 }`,
+      },
+      {
+        path: '/v1/chat/accounts/:accountId/uploads',
+        method: 'POST',
+        description: 'Upload a file for use in chat (multipart/form-data)',
+        params: [
+          {
+            name: 'accountId',
+            type: 'string',
+            required: true,
+            description: 'Account ID from path parameter',
+          },
+        ],
+        requestBody: `// Form data (multipart/form-data)
+Content-Type: multipart/form-data
+
+file: [binary file data]`,
+        responseBody: `{
+  "success": true,
+  "message": "File uploaded successfully",
+  "data": {
+    "file_id": "file_abc123",
+    "filename": "document.pdf",
+    "size": 1024000,
+    "mime_type": "application/pdf",
+    "url": "http://localhost:11434/uploads/file_abc123"
+  }
+}`,
+        responseFields: [
+          { name: 'success', type: 'boolean', description: 'Upload success status' },
+          { name: 'data.file_id', type: 'string', description: 'Unique file identifier' },
+          { name: 'data.filename', type: 'string', description: 'Original filename' },
+          { name: 'data.size', type: 'number', description: 'File size in bytes' },
+          { name: 'data.mime_type', type: 'string', description: 'File MIME type' },
+          { name: 'data.url', type: 'string', description: 'File access URL' },
+        ],
+      },
+    ],
   },
 ];
 
 export default function TutorialPage() {
-  const [activeSection, setActiveSection] = useState<'endpoints' | 'providers' | 'messaging'>(
-    'endpoints',
-  );
+  const [selectedEndpoint, setSelectedEndpoint] = useState<string | null>(null);
 
   return (
     <div className="h-full flex flex-col bg-background p-4 gap-4">
+      {/* Header */}
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Tutorial</h2>
-        <p className="text-muted-foreground">
-          Reference for supported API endpoints and coding tools.
-        </p>
+        <p className="text-muted-foreground">Learn how to use Elara's embedded server APIs</p>
       </div>
 
-      {/* Main Content Area Wrapper */}
-      <div className="flex-1 flex overflow-hidden border border-dashed border-zinc-500/25 rounded-lg relative">
-        {/* Left Sidebar */}
-        <div className="w-64 border-r bg-card p-4 overflow-y-auto hidden md:block space-y-2">
-          <button
-            onClick={() => setActiveSection('endpoints')}
-            className={cn(
-              'w-full p-2 text-left hover:bg-muted/50 rounded-md transition-colors flex items-center gap-2',
-              activeSection === 'endpoints' ? 'bg-muted/50 text-primary' : 'text-muted-foreground',
-            )}
-          >
-            <Book className="w-4 h-4" />
-            <span className="font-medium">Getting Started</span>
-          </button>
+      {/* Main Content Box */}
+      <div className="flex-1 flex overflow-hidden border border-dashed border-zinc-500/25 rounded-lg bg-card">
+        {/* Sidebar - API List */}
+        <div className="w-80 border-r border-border overflow-y-auto">
+          <div className="p-4 border-b border-border bg-muted/30">
+            <div className="flex items-center gap-2 mb-1">
+              <Server className="w-5 h-5 text-primary" />
+              <h3 className="font-semibold text-lg">Embedded Server APIs</h3>
+            </div>
+            <p className="text-xs text-muted-foreground">Available endpoints in the local server</p>
+          </div>
 
-          <button
-            onClick={() => setActiveSection('providers')}
-            className={cn(
-              'w-full p-2 text-left hover:bg-muted/50 rounded-md transition-colors flex items-center gap-2',
-              activeSection === 'providers' ? 'bg-muted/50 text-primary' : 'text-muted-foreground',
-            )}
-          >
-            <Database className="w-4 h-4" />
-            <span className="font-medium">Provider API Reference</span>
-          </button>
-
-          <button
-            onClick={() => setActiveSection('messaging')}
-            className={cn(
-              'w-full p-2 text-left hover:bg-muted/50 rounded-md transition-colors flex items-center gap-2',
-              activeSection === 'messaging' ? 'bg-muted/50 text-primary' : 'text-muted-foreground',
-            )}
-          >
-            <MessageSquare className="w-4 h-4" />
-            <span className="font-medium">Messaging API</span>
-          </button>
+          <div className="p-4 space-y-6">
+            {embeddedAPIs.map((category) => (
+              <div key={category.category}>
+                <h4 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">
+                  {category.category}
+                </h4>
+                <div className="space-y-1">
+                  {category.endpoints.map((endpoint) => (
+                    <button
+                      key={endpoint.path}
+                      onClick={() => setSelectedEndpoint(endpoint.path)}
+                      className={`w-full text-left p-3 rounded-md transition-all hover:bg-muted/50 ${
+                        selectedEndpoint === endpoint.path
+                          ? 'bg-primary/10 border border-primary/20'
+                          : 'border border-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span
+                          className={`px-2 py-0.5 rounded text-xs font-mono font-semibold ${
+                            endpoint.method === 'GET'
+                              ? 'bg-blue-500/20 text-blue-500'
+                              : endpoint.method === 'POST'
+                                ? 'bg-green-500/20 text-green-500'
+                                : endpoint.method === 'DELETE'
+                                  ? 'bg-red-500/20 text-red-500'
+                                  : endpoint.method === 'PUT'
+                                    ? 'bg-yellow-500/20 text-yellow-500'
+                                    : 'bg-purple-500/20 text-purple-500'
+                          }`}
+                        >
+                          {endpoint.method}
+                        </span>
+                        <code className="text-xs font-mono truncate flex-1">{endpoint.path}</code>
+                      </div>
+                      <p className="text-xs text-muted-foreground line-clamp-1">
+                        {endpoint.description}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Center Content + Right Sidebar */}
-        <div className="flex-1 flex overflow-hidden bg-background">
-          {activeSection === 'providers' ? (
-            <div className="flex-1 overflow-y-auto scroll-smooth">
-              <ProviderReference />
-            </div>
-          ) : activeSection === 'messaging' ? (
-            <div className="flex-1 overflow-y-auto scroll-smooth">
-              <MessagingReference />
+        {/* Main Content Area */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {selectedEndpoint ? (
+            <div className="w-full">
+              {/* Selected endpoint details */}
+              {(() => {
+                const endpoint = embeddedAPIs
+                  .flatMap((cat) => cat.endpoints)
+                  .find((ep) => ep.path === selectedEndpoint);
+
+                if (!endpoint) return null;
+
+                return (
+                  <div className="bg-background space-y-6">
+                    {/* Endpoint Header */}
+                    <div>
+                      <div className="flex items-center gap-3 mb-4">
+                        <span
+                          className={`px-3 py-1 rounded text-sm font-mono font-semibold ${
+                            endpoint.method === 'GET'
+                              ? 'bg-blue-500/20 text-blue-500'
+                              : endpoint.method === 'POST'
+                                ? 'bg-green-500/20 text-green-500'
+                                : endpoint.method === 'DELETE'
+                                  ? 'bg-red-500/20 text-red-500'
+                                  : 'bg-yellow-500/20 text-yellow-500'
+                          }`}
+                        >
+                          {endpoint.method}
+                        </span>
+                        <code className="text-xl font-mono">{endpoint.path}</code>
+                      </div>
+                      <p className="text-muted-foreground">{endpoint.description}</p>
+                    </div>
+
+                    {/* Path/Query Parameters */}
+                    {endpoint.params && endpoint.params.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-semibold mb-3">Parameters</h4>
+                        <div className="rounded-lg border border-border overflow-hidden">
+                          <table className="w-full text-sm">
+                            <thead className="bg-muted/50">
+                              <tr>
+                                <th className="text-left p-3 font-semibold">Name</th>
+                                <th className="text-left p-3 font-semibold">Type</th>
+                                <th className="text-left p-3 font-semibold">Required</th>
+                                <th className="text-left p-3 font-semibold">Description</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {endpoint.params.map((param, idx) => (
+                                <tr key={idx} className="border-t border-border">
+                                  <td className="p-3">
+                                    <code className="text-xs bg-muted px-2 py-1 rounded">
+                                      {param.name}
+                                    </code>
+                                  </td>
+                                  <td className="p-3 text-muted-foreground">{param.type}</td>
+                                  <td className="p-3">
+                                    <span
+                                      className={`text-xs px-2 py-1 rounded ${
+                                        param.required
+                                          ? 'bg-red-500/20 text-red-500'
+                                          : 'bg-gray-500/20 text-gray-500'
+                                      }`}
+                                    >
+                                      {param.required ? 'Required' : 'Optional'}
+                                    </span>
+                                  </td>
+                                  <td className="p-3 text-muted-foreground">{param.description}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        {endpoint.queryParams && (
+                          <div className="mt-2">
+                            <p className="text-xs text-muted-foreground mb-1">Example:</p>
+                            <code className="text-sm bg-muted px-3 py-1 rounded">
+                              ?{endpoint.queryParams}
+                            </code>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Request Fields */}
+                    {endpoint.requestFields && endpoint.requestFields.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-semibold mb-3">Request Body Fields</h4>
+                        <div className="rounded-lg border border-border overflow-hidden">
+                          <table className="w-full text-sm">
+                            <thead className="bg-muted/50">
+                              <tr>
+                                <th className="text-left p-3 font-semibold">Field</th>
+                                <th className="text-left p-3 font-semibold">Type</th>
+                                <th className="text-left p-3 font-semibold">Required</th>
+                                <th className="text-left p-3 font-semibold">Description</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {endpoint.requestFields.map((field, idx) => (
+                                <tr key={idx} className="border-t border-border">
+                                  <td className="p-3">
+                                    <code className="text-xs bg-muted px-2 py-1 rounded">
+                                      {field.name}
+                                    </code>
+                                  </td>
+                                  <td className="p-3 text-muted-foreground">{field.type}</td>
+                                  <td className="p-3">
+                                    <span
+                                      className={`text-xs px-2 py-1 rounded ${
+                                        field.required
+                                          ? 'bg-red-500/20 text-red-500'
+                                          : 'bg-gray-500/20 text-gray-500'
+                                      }`}
+                                    >
+                                      {field.required ? 'Required' : 'Optional'}
+                                    </span>
+                                  </td>
+                                  <td className="p-3 text-muted-foreground">{field.description}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Request/Response Bodies */}
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                      {/* Request Body */}
+                      {endpoint.requestBody && (
+                        <div>
+                          <h4 className="text-sm font-semibold mb-2">Request Body Example</h4>
+                          <CodeBlock
+                            code={endpoint.requestBody}
+                            language="json"
+                            maxLines={30}
+                            showLineNumbers={false}
+                            editorOptions={{
+                              guides: {
+                                indentation: false,
+                                bracketPairs: false,
+                                highlightActiveIndentation: false,
+                              },
+                              renderLineHighlight: 'none',
+                              cursorStyle: 'line-thin',
+                              cursorBlinking: 'solid',
+                              domReadOnly: true,
+                              readOnly: true,
+                              selectionHighlight: false,
+                              occurrencesHighlight: false,
+                              hover: { enabled: false },
+                            }}
+                          />
+                        </div>
+                      )}
+
+                      {/* Response Body */}
+                      {endpoint.responseBody && (
+                        <div className={endpoint.requestBody ? '' : 'xl:col-span-2'}>
+                          <h4 className="text-sm font-semibold mb-2">Response Body Example</h4>
+                          <CodeBlock
+                            code={endpoint.responseBody}
+                            language="json"
+                            maxLines={30}
+                            showLineNumbers={false}
+                            editorOptions={{
+                              guides: {
+                                indentation: false,
+                                bracketPairs: false,
+                                highlightActiveIndentation: false,
+                              },
+                              renderLineHighlight: 'none',
+                              cursorStyle: 'line-thin',
+                              cursorBlinking: 'solid',
+                              domReadOnly: true,
+                              readOnly: true,
+                              selectionHighlight: false,
+                              occurrencesHighlight: false,
+                              hover: { enabled: false },
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Response Fields */}
+                    {endpoint.responseFields && endpoint.responseFields.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-semibold mb-3">Response Body Fields</h4>
+                        <div className="rounded-lg border border-border overflow-hidden">
+                          <table className="w-full text-sm">
+                            <thead className="bg-muted/50">
+                              <tr>
+                                <th className="text-left p-3 font-semibold">Field</th>
+                                <th className="text-left p-3 font-semibold">Type</th>
+                                <th className="text-left p-3 font-semibold">Description</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {endpoint.responseFields.map((field, idx) => (
+                                <tr key={idx} className="border-t border-border">
+                                  <td className="p-3">
+                                    <code className="text-xs bg-muted px-2 py-1 rounded">
+                                      {field.name}
+                                    </code>
+                                  </td>
+                                  <td className="p-3 text-muted-foreground">{field.type}</td>
+                                  <td className="p-3 text-muted-foreground">{field.description}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           ) : (
-            <>
-              {/* Scrollable Content */}
-              <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
-                <div className="mb-6">
-                  <h1 className="text-2xl font-bold mb-2">API Endpoints Reference</h1>
-                  <p className="text-muted-foreground">
-                    Danh sách API được sử dụng bởi các coding tools phổ biến
-                  </p>
+            <div className="h-full flex items-center justify-center">
+              <div className="text-center max-w-md">
+                <div className="mb-4 flex justify-center">
+                  <div className="p-4 rounded-full bg-primary/10">
+                    <Zap className="w-12 h-12 text-primary" />
+                  </div>
                 </div>
-
-                {/* API Endpoints List */}
-                <div className="space-y-8">
-                  {apiEndpoints.map((endpoint) => (
-                    <div
-                      key={endpoint.path}
-                      id={endpoint.path}
-                      className="scroll-mt-6 rounded-lg border bg-card p-6"
-                    >
-                      {/* Header */}
-                      <div className="mb-4">
-                        <div className="flex items-center gap-3 mb-3">
-                          <span
-                            className={`px-3 py-1 rounded text-sm font-mono font-semibold ${
-                              endpoint.method === 'POST'
-                                ? 'bg-green-500/20 text-green-500'
-                                : 'bg-blue-500/20 text-blue-500'
-                            }`}
-                          >
-                            {endpoint.method}
-                          </span>
-                          <code className="text-xl font-mono">{endpoint.path}</code>
-                        </div>
-
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <div className="flex items-center gap-2">
-                            <Code className="h-4 w-4" />
-                            <span>Owner: {endpoint.owner}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Description */}
-                      <div className="mb-4">
-                        <p className="text-muted-foreground">{endpoint.description}</p>
-                      </div>
-
-                      {/* Used By */}
-                      <div className="mb-4">
-                        <h4 className="text-sm font-semibold mb-2">Được sử dụng bởi:</h4>
-                        <div className="flex flex-wrap gap-2">
-                          {endpoint.usedBy.map((tool) => (
-                            <span
-                              key={tool}
-                              className="px-2 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium"
-                            >
-                              {tool}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Request & Response Examples - Side by Side */}
-                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                        {/* Request Headers - Full Width on Mobile, Cell on XL */}
-                        <div className="xl:col-span-2">
-                          <h4 className="text-sm font-semibold mb-2">Request Headers</h4>
-                          <CodeBlock
-                            code={endpoint.requestHeaders}
-                            language="yaml"
-                            maxLines={10}
-                            showLineNumbers={false}
-                            editorOptions={{
-                              guides: {
-                                indentation: false,
-                                bracketPairs: false,
-                                highlightActiveIndentation: false,
-                              },
-                              renderLineHighlight: 'none',
-                              cursorStyle: 'line-thin',
-                              cursorBlinking: 'solid',
-                              domReadOnly: true,
-                              selectionHighlight: false,
-                              occurrencesHighlight: false,
-                              hover: { enabled: false },
-                            }}
-                          />
-                        </div>
-
-                        {/* Request */}
-                        <div>
-                          <h4 className="text-sm font-semibold mb-2">Request Body</h4>
-                          <CodeBlock
-                            code={endpoint.requestExample}
-                            language="json"
-                            maxLines={25}
-                            showLineNumbers={false}
-                            editorOptions={{
-                              guides: {
-                                indentation: false,
-                                bracketPairs: false,
-                                highlightActiveIndentation: false,
-                              },
-                              renderLineHighlight: 'none',
-                              cursorStyle: 'line-thin',
-                              cursorBlinking: 'solid',
-                              domReadOnly: true,
-                              selectionHighlight: false,
-                              occurrencesHighlight: false,
-                              hover: { enabled: false },
-                            }}
-                          />
-                        </div>
-
-                        {/* Response */}
-                        <div>
-                          <h4 className="text-sm font-semibold mb-2">Response Example</h4>
-                          <CodeBlock
-                            code={endpoint.responseExample}
-                            language="json"
-                            maxLines={25}
-                            showLineNumbers={false}
-                            editorOptions={{
-                              guides: {
-                                indentation: false,
-                                bracketPairs: false,
-                                highlightActiveIndentation: false,
-                              },
-                              renderLineHighlight: 'none',
-                              cursorStyle: 'line-thin',
-                              cursorBlinking: 'solid',
-                              domReadOnly: true,
-                              selectionHighlight: false,
-                              occurrencesHighlight: false,
-                              hover: { enabled: false },
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Footer Note */}
-                <div className="mt-8 rounded-lg border border-primary/20 bg-primary/5 p-6">
-                  <h4 className="font-semibold mb-2">💡 Elara Integration</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Elara proxy hỗ trợ tất cả các endpoints trên với multi-account load balancing.
-                    Bạn có thể sử dụng các endpoints này với bất kỳ tool nào được liệt kê thông qua
-                    proxy server của Elara.
-                  </p>
-                </div>
+                <h3 className="text-xl font-semibold mb-2">Select an API endpoint</h3>
+                <p className="text-muted-foreground">
+                  Choose an endpoint from the sidebar to view its documentation and usage examples
+                </p>
               </div>
-
-              {/* Right Sidebar (TOC) - Only for Endpoints */}
-              <div className="w-64 border-l bg-card p-4 overflow-y-auto hidden xl:block">
-                <h3 className="font-semibold mb-4 text-sm text-muted-foreground">ON THIS PAGE</h3>
-                <div className="flex flex-col gap-2">
-                  {apiEndpoints.map((endpoint) => (
-                    <a
-                      key={endpoint.path}
-                      href={`#${endpoint.path}`}
-                      className="text-sm text-muted-foreground hover:text-foreground transition-colors truncate block py-1"
-                      title={endpoint.path}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        document
-                          .getElementById(endpoint.path)
-                          ?.scrollIntoView({ behavior: 'smooth' });
-                      }}
-                    >
-                      {endpoint.path}
-                    </a>
-                  ))}
-                </div>
-              </div>
-            </>
+            </div>
           )}
         </div>
       </div>

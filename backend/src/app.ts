@@ -28,6 +28,14 @@ export const createApp = () => {
   app.use('/v0/management', managementRouter);
   app.use('/v1', v1Router);
 
+  // Mock Claude Code telemetry endpoint to prevent 404 spam
+  app.post(
+    ['/api/event_logging/batch', '/v1/api/event_logging/batch'],
+    (req, res) => {
+      res.json({ status: 'ok' });
+    },
+  );
+
   // 404 handler - must be after all routes
   app.use((req, res, next) => {
     res.status(404).json({
