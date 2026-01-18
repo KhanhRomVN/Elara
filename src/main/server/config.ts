@@ -29,7 +29,7 @@ export interface ProxyConfig {
 
 const DEFAULT_CONFIG: ProxyConfig = {
   host: '127.0.0.1',
-  port: 8317,
+  port: 11434,
   tls: {
     enable: false,
     cert: '',
@@ -59,12 +59,25 @@ export class ConfigManager {
     try {
       if (fs.existsSync(CONFIG_FILE)) {
         const data = fs.readFileSync(CONFIG_FILE, 'utf-8');
-        return { ...DEFAULT_CONFIG, ...JSON.parse(data) };
+        const config = { ...DEFAULT_CONFIG, ...JSON.parse(data) };
+
+        // Force port 11434 in development to align with standalone backend (SQLite)
+        if (!app.isPackaged) {
+          config.port = 11434;
+        }
+
+        return config;
       }
     } catch (error) {
       console.error('[Config] Failed to load config:', error);
     }
-    return { ...DEFAULT_CONFIG };
+
+    // Default config
+    const config = { ...DEFAULT_CONFIG };
+    if (!app.isPackaged) {
+      config.port = 11434;
+    }
+    return config;
   }
 
   saveConfig(config: Partial<ProxyConfig>): void {

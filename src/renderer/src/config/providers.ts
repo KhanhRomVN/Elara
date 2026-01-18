@@ -22,6 +22,7 @@ export interface ProviderConfig {
   browserType: 'Electron Window' | 'Real Browser' | 'Auth Server';
   authMethod: 'Basic' | 'OAuth';
   active: boolean;
+  website?: string;
 }
 
 export const providers: ProviderConfig[] = [
@@ -35,6 +36,7 @@ export const providers: ProviderConfig[] = [
     browserType: 'Real Browser',
     authMethod: 'Basic',
     active: true,
+    website: 'https://anthropic.com',
   },
   {
     id: 'DeepSeek',
@@ -46,6 +48,7 @@ export const providers: ProviderConfig[] = [
     browserType: 'Real Browser',
     authMethod: 'Basic',
     active: true,
+    website: 'https://deepseek.com',
   },
   {
     id: 'Mistral',
@@ -57,6 +60,7 @@ export const providers: ProviderConfig[] = [
     browserType: 'Real Browser',
     authMethod: 'Basic',
     active: true,
+    website: 'https://mistral.ai/',
   },
   {
     id: 'Kimi',
@@ -67,7 +71,8 @@ export const providers: ProviderConfig[] = [
     loginMethod: 'Mobile / OTP',
     browserType: 'Real Browser',
     authMethod: 'Basic',
-    active: true,
+    active: false,
+    website: 'https://www.kimi.com/',
   },
   {
     id: 'Qwen',
@@ -79,6 +84,7 @@ export const providers: ProviderConfig[] = [
     browserType: 'Real Browser',
     authMethod: 'Basic',
     active: true,
+    website: 'https://qwenlm.ai/',
   },
   {
     id: 'Cohere',
@@ -90,6 +96,7 @@ export const providers: ProviderConfig[] = [
     browserType: 'Real Browser',
     authMethod: 'Basic',
     active: true,
+    website: 'https://cohere.com',
   },
   {
     id: 'Perplexity',
@@ -101,6 +108,7 @@ export const providers: ProviderConfig[] = [
     browserType: 'Real Browser',
     authMethod: 'Basic',
     active: true,
+    website: 'https://www.perplexity.ai/',
   },
   {
     id: 'Groq',
@@ -112,6 +120,7 @@ export const providers: ProviderConfig[] = [
     browserType: 'Real Browser',
     authMethod: 'Basic',
     active: true,
+    website: 'https://groq.com',
   },
   {
     id: 'Gemini',
@@ -123,6 +132,7 @@ export const providers: ProviderConfig[] = [
     browserType: 'Real Browser',
     authMethod: 'OAuth',
     active: true,
+    website: 'https://ai.google.dev',
   },
   {
     id: 'Antigravity',
@@ -134,6 +144,7 @@ export const providers: ProviderConfig[] = [
     browserType: 'Auth Server',
     authMethod: 'OAuth',
     active: true,
+    website: 'https://deepmind.google/',
   },
   {
     id: 'HuggingChat',
@@ -145,6 +156,7 @@ export const providers: ProviderConfig[] = [
     browserType: 'Real Browser',
     authMethod: 'Basic',
     active: true,
+    website: 'https://huggingface.co/chat/',
   },
   {
     id: 'LMArena',
@@ -156,6 +168,7 @@ export const providers: ProviderConfig[] = [
     browserType: 'Real Browser',
     authMethod: 'Basic',
     active: false,
+    website: 'https://lmarena.ai/',
   },
   {
     id: 'StepFun',
@@ -166,6 +179,7 @@ export const providers: ProviderConfig[] = [
     loginMethod: 'Direct / Google',
     browserType: 'Real Browser',
     authMethod: 'Basic',
-    active: true,
+    active: false,
+    website: 'https://stepfun.ai/',
   },
 ];

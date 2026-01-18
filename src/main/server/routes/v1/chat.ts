@@ -49,7 +49,7 @@ router.post('/completions', async (req, res) => {
       account = accounts.find(
         (a) =>
           a.email.toLowerCase() === emailQuery.toLowerCase() &&
-          a.provider.toLowerCase() === providerQuery.toLowerCase(),
+          a.provider_id.toLowerCase() === providerQuery.toLowerCase(),
       );
     }
 
@@ -82,7 +82,7 @@ router.post('/completions', async (req, res) => {
     if (!account && targetProvider && targetEmail) {
       account = accounts.find(
         (a) =>
-          a.provider.toLowerCase() === targetProvider.toLowerCase() &&
+          a.provider_id.toLowerCase() === targetProvider.toLowerCase() &&
           a.email.toLowerCase() === targetEmail.toLowerCase(),
       );
     }
@@ -117,7 +117,7 @@ router.post('/completions', async (req, res) => {
                             : null;
 
       if (inferredProvider) {
-        account = accounts.find((a) => a.provider === inferredProvider && a.status === 'Active');
+        account = accounts.find((a) => a.provider_id === inferredProvider);
       }
     }
 
@@ -165,7 +165,7 @@ router.post('/completions', async (req, res) => {
       },
     };
 
-    if (account.provider === 'DeepSeek') {
+    if (account.provider_id === 'DeepSeek') {
       await deepseekChat(
         account.credential,
         {
@@ -178,7 +178,7 @@ router.post('/completions', async (req, res) => {
           parent_message_id,
           ref_file_ids,
         },
-        account.userAgent,
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         {
           ...callbacks,
           onRaw: (data) => {
@@ -206,7 +206,7 @@ router.post('/completions', async (req, res) => {
           },
         },
       );
-    } else if (account.provider === 'Claude') {
+    } else if (account.provider_id === 'Claude') {
       await claudeChat(
         account.credential,
         {
@@ -216,10 +216,10 @@ router.post('/completions', async (req, res) => {
           conversation_id,
           parent_message_id,
         },
-        account.userAgent,
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         callbacks,
       );
-    } else if (account.provider === 'Mistral') {
+    } else if (account.provider_id === 'Mistral') {
       await mistralChat(
         account.credential,
         {
@@ -234,17 +234,17 @@ router.post('/completions', async (req, res) => {
           onError: callbacks.onError,
         },
       );
-    } else if (account.provider === 'Kimi') {
+    } else if (account.provider_id === 'Kimi') {
       // await kimiChat(account.credential, model, messages, callbacks.onContent);
       throw new Error('Kimi chat is not yet fully implemented');
       callbacks.onDone();
-    } else if (account.provider === 'Qwen') {
+    } else if (account.provider_id === 'Qwen') {
       await qwenChat(account.credential, model, messages, callbacks.onContent);
       callbacks.onDone();
-    } else if (account.provider === 'Cohere') {
+    } else if (account.provider_id === 'Cohere') {
       await cohereChat(account.credential, model, messages, callbacks.onContent);
       callbacks.onDone();
-    } else if (account.provider === 'Perplexity') {
+    } else if (account.provider_id === 'Perplexity') {
       // Check for Perplexity context in previous messages
       let perplexityContext: any = {};
       if (model.includes('perplexity') || model.includes('pplx')) {
@@ -268,7 +268,7 @@ router.post('/completions', async (req, res) => {
           temperature,
           ...perplexityContext,
         },
-        account.userAgent,
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         {
           onContent: (content) => {
             res.write(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`);
@@ -289,22 +289,22 @@ router.post('/completions', async (req, res) => {
           },
         },
       );
-    } else if (account.provider === 'Groq') {
+    } else if (account.provider_id === 'Groq') {
       await groqChat(req, res, account);
       return;
-    } else if (account.provider === 'Gemini') {
+    } else if (account.provider_id === 'Gemini') {
       await gemini.chatCompletionStream(req, res, account);
       return;
-    } else if (account.provider === 'Antigravity') {
+    } else if (account.provider_id === 'Antigravity') {
       await antigravityChat(req, res, account);
       return;
-    } else if (account.provider === 'HuggingChat') {
+    } else if (account.provider_id === 'HuggingChat') {
       await huggingChatChat(req, res, account);
       return;
-    } else if (account.provider === 'LMArena') {
+    } else if (account.provider_id === 'LMArena') {
       await lmArenaChatCompletionStream(req, res, account);
       return;
-    } else if (account.provider === 'StepFun') {
+    } else if (account.provider_id === 'StepFun') {
       await stepFunChat(req, res, account);
       return;
     } else {

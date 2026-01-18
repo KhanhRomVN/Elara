@@ -1,14 +1,12 @@
 import { Account } from '../ipc/accounts';
-import fs from 'fs';
-import path from 'path';
 import { app } from 'electron';
-
-const DATA_FILE = path.join(app.getPath('userData'), 'accounts.json');
+import { getDb } from '@backend/services/db';
 
 export type SelectionStrategy = 'round-robin' | 'priority' | 'least-used';
 
 export class AccountSelector {
   private roundRobinIndex: Map<string, number> = new Map();
+  private requestCounts: Map<string, number> = new Map();
 
   /**
    * Select an account based on the strategy
@@ -46,19 +44,14 @@ export class AccountSelector {
    */
   getActiveAccounts(provider?: string): Account[] {
     try {
-      if (!fs.existsSync(DATA_FILE)) {
-        return [];
-      }
-
-      const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
-
-      let filtered = accounts;
+      const db = getDb();
+      const accounts = db.prepare('SELECT * FROM accounts').all() as Account[];
 
       if (provider) {
-        filtered = filtered.filter((a) => a.provider_id === provider);
+        return accounts.filter((a) => a.provider_id === provider);
       }
 
-      return filtered;
+      return accounts;
     } catch (error) {
       console.error('[AccountSelector] Failed to get accounts:', error);
       return [];
@@ -70,16 +63,20 @@ export class AccountSelector {
    */
   getAccountById(id: string): Account | null {
     try {
-      if (!fs.existsSync(DATA_FILE)) {
-        return null;
-      }
-
-      const accounts: Account[] = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
-      return accounts.find((a) => a.id === id) || null;
+      const db = getDb();
+      return (db.prepare('SELECT * FROM accounts WHERE id = ?').get(id) as Account) || null;
     } catch (error) {
       console.error('[AccountSelector] Failed to get account by ID:', error);
       return null;
     }
+  }
+
+  getRequestCount(id: string): number {
+    return this.requestCounts.get(id) || 0;
+  }
+
+  resetCounts(): void {
+    this.requestCounts.clear();
   }
 
   /**
@@ -89,6 +86,10 @@ export class AccountSelector {
     const index = this.roundRobinIndex.get(key) || 0;
     const account = accounts[index % accounts.length];
     this.roundRobinIndex.set(key, index + 1);
+
+    // Increment request count
+    const currentCount = this.requestCounts.get(account.id) || 0;
+    this.requestCounts.set(account.id, currentCount + 1);
 
     console.log(
       `[AccountSelector] Round-robin selected: ${account.email} (${account.provider_id})`,
@@ -103,6 +104,11 @@ export class AccountSelector {
     // You could extend Account interface to include priority field
     // For now, just return first account
     const account = accounts[0];
+
+    // Increment request count
+    const currentCount = this.requestCounts.get(account.id) || 0;
+    this.requestCounts.set(account.id, currentCount + 1);
+
     console.log(`[AccountSelector] Priority selected: ${account.email} (${account.provider_id})`);
     return account;
   }

@@ -30,6 +30,7 @@ export class WindowManager {
     });
 
     this.mainWindow.on('ready-to-show', () => {
+      console.log('[Main] Window ready to show');
       this.mainWindow?.maximize();
       this.mainWindow?.show();
     });
@@ -47,12 +48,47 @@ export class WindowManager {
       return { action: 'deny' };
     });
 
+    // Add error handlers and lifecycle tracking
+    this.mainWindow.webContents.on('did-start-loading', () => {
+      console.log('[Main] Window loading started');
+    });
+
+    this.mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+      console.error('[Main] Failed to load renderer:', errorCode, errorDescription);
+    });
+
+    this.mainWindow.webContents.on('dom-ready', () => {
+      console.log('[Main] DOM ready');
+    });
+
+    this.mainWindow.webContents.on('did-finish-load', () => {
+      console.log('[Main] Renderer loaded successfully');
+    });
+
+    // Capture console messages from renderer
+    this.mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+      const levels = ['verbose', 'info', 'warning', 'error'];
+      console.log(`[Renderer ${levels[level]}] ${message} (${sourceId}:${line})`);
+    });
+
+    this.mainWindow.on('closed', () => {
+      console.log('[Main] Window closed');
+      this.mainWindow = null;
+    });
+
     // HMR for renderer base on electron-vite cli.
     // Load the remote URL for development or the local html file for production.
     if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-      this.mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL']);
+      console.log('[Main] Loading renderer URL:', process.env['ELECTRON_RENDERER_URL']);
+      this.mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL']).catch((err) => {
+        console.error('[Main] Error loading renderer URL:', err);
+      });
     } else {
-      this.mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
+      const htmlPath = join(__dirname, '../renderer/index.html');
+      console.log('[Main] Loading renderer file:', htmlPath);
+      this.mainWindow.loadFile(htmlPath).catch((err) => {
+        console.error('[Main] Error loading renderer file:', err);
+      });
     }
   }
 

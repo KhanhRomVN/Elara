@@ -1,16 +1,15 @@
-import fs from 'fs';
-import path from 'path';
-import { app } from 'electron';
 import { Account } from '../../ipc/accounts';
 import express from 'express';
-
-const DATA_FILE = path.join(app.getPath('userData'), 'accounts.json');
+import { getDb } from '@backend/services/db';
 
 export const getAccounts = (): Account[] => {
-  if (!fs.existsSync(DATA_FILE)) {
+  try {
+    const db = getDb();
+    return db.prepare('SELECT * FROM accounts').all() as Account[];
+  } catch (error) {
+    console.error('[AccountUtils] Failed to get accounts from DB:', error);
     return [];
   }
-  return JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
 };
 
 export const findAccount = (
@@ -30,16 +29,19 @@ export const findAccount = (
     account = accounts.find((a) => a.id === token);
   }
 
-  // 2. Try by Email + Provider
+  // 2. Try by Email + Provider (using provider_id)
   if (!account && emailQuery) {
     account = accounts.find(
-      (a) => a.email.toLowerCase() === emailQuery.toLowerCase() && a.provider === provider,
+      (a) =>
+        a.email.toLowerCase() === emailQuery.toLowerCase() &&
+        a.provider_id.toLowerCase() === provider.toLowerCase(),
     );
   }
 
-  // 3. Try generic active account for provider
+  // 3. Try generic account for provider
   if (!account) {
-    account = accounts.find((a) => a.provider === provider && a.status === 'Active');
+    // Backend accounts don't have status, so we assume all valid accounts in DB are capable
+    account = accounts.find((a) => a.provider_id.toLowerCase() === provider.toLowerCase());
   }
 
   return account;

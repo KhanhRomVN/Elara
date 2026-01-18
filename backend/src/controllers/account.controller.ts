@@ -45,97 +45,68 @@ export const importAccounts = async (
     const duplicates: Account[] = [];
     const toInsert: Account[] = [];
 
-    // Check for existing accounts
-    const checkPromises = accounts.map((account) => {
-      return new Promise<void>((resolve) => {
-        db.get(
-          'SELECT * FROM accounts WHERE email = ? AND provider_id = ?',
-          [account.email, account.provider_id],
-          (err: any, row: any) => {
-            if (err) {
-              logger.error('Error checking for duplicate', err);
-              resolve();
-            } else if (row) {
-              duplicates.push(account);
-              resolve();
-            } else {
-              toInsert.push(account);
-              resolve();
-            }
-          },
-        );
-      });
-    });
+    // Check for existing accounts (synchronous)
+    for (const account of accounts) {
+      const row = db
+        .prepare('SELECT * FROM accounts WHERE email = ? AND provider_id = ?')
+        .get(account.email, account.provider_id);
 
-    await Promise.all(checkPromises);
+      if (row) {
+        duplicates.push(account);
+      } else {
+        toInsert.push(account);
+      }
+    }
 
     // Insert non-duplicate accounts
     if (toInsert.length > 0) {
-      db.serialize(() => {
-        db.run('BEGIN TRANSACTION');
+      try {
+        // Use transaction for atomic operation
+        db.prepare('BEGIN IMMEDIATE').run();
 
         const stmt = db.prepare(
           'INSERT INTO accounts (id, provider_id, email, credential) VALUES (?, ?, ?, ?)',
         );
 
-        let errorOccurred = false;
-        toInsert.forEach((account) => {
-          if (errorOccurred) return;
-
+        for (const account of toInsert) {
           stmt.run(
             account.id,
             account.provider_id,
             account.email,
             account.credential,
-            (err: any) => {
-              if (err) {
-                logger.error('Error inserting account', err);
-                errorOccurred = true;
-              }
-            },
           );
-        });
-
-        stmt.finalize();
-
-        if (errorOccurred) {
-          db.run('ROLLBACK');
-          res.status(500).json({
-            success: false,
-            message: 'Failed to import accounts',
-            error: { code: 'DATABASE_ERROR' },
-            meta: { timestamp: new Date().toISOString() },
-          });
-          return;
-        } else {
-          db.run('COMMIT', (err: any) => {
-            if (err) {
-              logger.error('Error committing transaction', err);
-              res.status(500).json({
-                success: false,
-                message: 'Failed to commit transaction',
-                error: { code: 'DATABASE_ERROR' },
-                meta: { timestamp: new Date().toISOString() },
-              });
-              return;
-            } else {
-              res.status(200).json({
-                success: true,
-                message: `Successfully imported ${toInsert.length} account(s)`,
-                data: {
-                  imported: toInsert.length,
-                  skipped: duplicates.length,
-                  duplicates: duplicates.map((d) => ({
-                    email: d.email,
-                    provider_id: d.provider_id,
-                  })),
-                },
-                meta: { timestamp: new Date().toISOString() },
-              });
-            }
-          });
         }
-      });
+
+        db.prepare('COMMIT').run();
+
+        res.status(200).json({
+          success: true,
+          message: `Successfully imported ${toInsert.length} account(s)`,
+          data: {
+            imported: toInsert.length,
+            skipped: duplicates.length,
+            duplicates: duplicates.map((d) => ({
+              email: d.email,
+              provider_id: d.provider_id,
+            })),
+          },
+          meta: { timestamp: new Date().toISOString() },
+        });
+      } catch (err) {
+        // Rollback on error
+        try {
+          db.prepare('ROLLBACK').run();
+        } catch (rollbackErr) {
+          logger.error('Error during rollback', rollbackErr);
+        }
+        logger.error('Error inserting accounts', err);
+        res.status(500).json({
+          success: false,
+          message: 'Failed to import accounts',
+          error: { code: 'DATABASE_ERROR' },
+          meta: { timestamp: new Date().toISOString() },
+        });
+      }
     } else {
       res.status(200).json({
         success: true,
@@ -195,70 +166,56 @@ export const addAccount = async (
 
     const db = getDb();
 
-    // Check for existing account
-    db.get(
-      'SELECT * FROM accounts WHERE (email = ? AND provider_id = ?) OR id = ?',
-      [account.email, account.provider_id, account.id],
-      (err: any, row: any) => {
-        if (err) {
-          logger.error('Error checking for existing account', err);
-          res.status(500).json({
-            success: false,
-            message: 'Database error',
-            error: { code: 'DATABASE_ERROR' },
-            meta: { timestamp: new Date().toISOString() },
-          });
-          return;
-        }
+    // Check for existing account (synchronous)
+    const row = db
+      .prepare(
+        'SELECT * FROM accounts WHERE (email = ? AND provider_id = ?) OR id = ?',
+      )
+      .get(account.email, account.provider_id, account.id) as any;
 
-        const id = row ? row.id : account.id || require('crypto').randomUUID();
-        const action = row ? 'Update' : 'Create';
+    if (row) {
+      // Account already exists - Skip
+      res.status(200).json({
+        success: false,
+        message: 'Account already exists',
+        data: {
+          id: row.id,
+          email: row.email,
+          provider_id: row.provider_id,
+          action: 'skipped',
+        },
+        meta: { timestamp: new Date().toISOString() },
+      });
+      return;
+    }
 
-        if (row) {
-          // Account already exists - Skip
-          res.status(200).json({
-            success: false,
-            message: 'Account already exists',
-            data: {
-              id: row.id,
-              email: row.email,
-              provider_id: row.provider_id,
-              action: 'skipped',
-            },
-            meta: { timestamp: new Date().toISOString() },
-          });
-          return;
-        } else {
-          // Create new
-          db.run(
-            'INSERT INTO accounts (id, provider_id, email, credential) VALUES (?, ?, ?, ?)',
-            [id, account.provider_id, account.email, account.credential],
-            (insertErr: any) => {
-              if (insertErr) {
-                logger.error('Error inserting account', insertErr);
-                res.status(500).json({
-                  success: false,
-                  message: 'Failed to create account',
-                  error: { code: 'DATABASE_ERROR' },
-                });
-                return;
-              }
-              res.status(201).json({
-                success: true,
-                message: 'Account created successfully',
-                data: {
-                  id,
-                  email: account.email,
-                  provider_id: account.provider_id,
-                  action: 'created',
-                },
-                meta: { timestamp: new Date().toISOString() },
-              });
-            },
-          );
-        }
-      },
-    );
+    // Create new account
+    const id = account.id || require('crypto').randomUUID();
+
+    try {
+      db.prepare(
+        'INSERT INTO accounts (id, provider_id, email, credential) VALUES (?, ?, ?, ?)',
+      ).run(id, account.provider_id, account.email, account.credential);
+
+      res.status(201).json({
+        success: true,
+        message: 'Account created successfully',
+        data: {
+          id,
+          email: account.email,
+          provider_id: account.provider_id,
+          action: 'created',
+        },
+        meta: { timestamp: new Date().toISOString() },
+      });
+    } catch (insertErr) {
+      logger.error('Error inserting account', insertErr);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to create account',
+        error: { code: 'DATABASE_ERROR' },
+      });
+    }
   } catch (error) {
     logger.error('Error in addAccount', error);
     res.status(500).json({
@@ -304,54 +261,31 @@ export const getAccounts = async (
       whereClause = 'WHERE ' + conditions.join(' AND ');
     }
 
-    // Count query
+    // Count query (synchronous)
     const countSql = `SELECT COUNT(*) as total FROM accounts ${whereClause}`;
+    const countResult = db.prepare(countSql).get(...params) as {
+      total: number;
+    };
+    const total = countResult.total;
 
-    db.get(countSql, params, (err: any, row: any) => {
-      if (err) {
-        logger.error('Error counting accounts', err);
-        res.status(500).json({
-          success: false,
-          message: 'Failed to count accounts',
-          error: { code: 'DATABASE_ERROR' },
-          meta: { timestamp: new Date().toISOString() },
-        });
-        return;
-      }
+    // Data query (synchronous)
+    const sql = `SELECT * FROM accounts ${whereClause} ORDER BY ${sort_by} ${order} LIMIT ? OFFSET ?`;
+    const queryParams = [...params, limit, offset];
+    const rows = db.prepare(sql).all(...queryParams);
 
-      const total = row.total;
-
-      // Data query
-      const sql = `SELECT * FROM accounts ${whereClause} ORDER BY ${sort_by} ${order} LIMIT ? OFFSET ?`;
-      const queryParams = [...params, limit, offset];
-
-      db.all(sql, queryParams, (err: any, rows: any[]) => {
-        if (err) {
-          logger.error('Error fetching accounts', err);
-          res.status(500).json({
-            success: false,
-            message: 'Failed to fetch accounts',
-            error: { code: 'DATABASE_ERROR' },
-            meta: { timestamp: new Date().toISOString() },
-          });
-          return;
-        }
-
-        res.status(200).json({
-          success: true,
-          message: 'Accounts retrieved successfully',
-          data: {
-            accounts: rows,
-            pagination: {
-              total,
-              page,
-              limit,
-              total_pages: Math.ceil(total / limit),
-            },
-          },
-          meta: { timestamp: new Date().toISOString() },
-        });
-      });
+    res.status(200).json({
+      success: true,
+      message: 'Accounts retrieved successfully',
+      data: {
+        accounts: rows,
+        pagination: {
+          total,
+          page,
+          limit,
+          total_pages: Math.ceil(total / limit),
+        },
+      },
+      meta: { timestamp: new Date().toISOString() },
     });
   } catch (error) {
     logger.error('Error in getAccounts', error);

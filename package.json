@@ -19,10 +19,10 @@
   "main": "./out/main/index.js",
   "author": "KhanhRomVN",
   "scripts": {
-    "dev": "concurrently -k -n \"ELECTRON,SERVER\" -c \"cyan,green\" \"npm run dev:electron\" \"npm run dev:server\"",
+    "dev": "node scripts/dev-setup.js && electron-vite dev",
     "dev:electron": "node scripts/dev-setup.js && electron-vite dev",
-    "dev:server": "cd backend && npm run dev > ../backend.log 2>&1",
-    "watch:server": "touch backend.log && tail -f backend.log",
+    "dev:server": "echo '⚠️  Standalone backend is deprecated. Backend is now embedded in Electron. Use npm run dev instead.' && cd backend && npm run dev > ../backend.log 2>&1",
+    "watch:server": "echo '⚠️  Standalone backend is deprecated. Use Electron DevTools Console to see logs.'",
     "build": "npm run typecheck && electron-vite build && electron-builder --win --linux",
     "preview": "electron-vite preview",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",

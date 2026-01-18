@@ -1,7 +1,16 @@
 import { useEffect, useState, useRef } from 'react';
 import { cn } from '../../shared/lib/utils';
-// Removed unused imports
-import { Copy, Plus, Download, Trash2, Search, AlignEndVertical, Upload } from 'lucide-react';
+import {
+  Copy,
+  Plus,
+  Download,
+  Trash2,
+  Search,
+  AlignEndVertical,
+  Upload,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
 import { AddAccountDialog } from './components/AddAccountDialog';
 import { AccountAvatar } from './components/AccountAvatar';
 import { providers } from '../../config/providers';
@@ -11,30 +20,32 @@ interface Account {
   provider_id: string;
   email: string;
   credential: string;
-  status: 'Active' | 'Rate Limit' | 'Error';
-  // New Stats
-  totalRequests?: number;
-  successfulRequests?: number;
-  totalDuration?: number;
-  tokensToday?: number;
-  statsDate?: string;
-  lastActive?: string;
 }
 
-// Sort logic removed as all sortable columns are deleted
+interface Pagination {
+  total: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+}
 
 export const Accounts = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [, setServerRunning] = useState(false);
+  const [serverPort, setServerPort] = useState<number | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  // Filter & Sort State
-  const [filterProvider, _setFilterProvider] = useState<string>('all');
-  // Sort state removed
+  const [filterProvider, setFilterProvider] = useState<string>('all');
+
+  const [pagination, setPagination] = useState<Pagination>({
+    total: 0,
+    page: 1,
+    limit: 10,
+    total_pages: 1,
+  });
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -46,12 +57,30 @@ export const Accounts = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const fetchAccounts = async () => {
+  const fetchAccounts = async (page = 1, limit = 10) => {
+    if (!serverPort) return;
     setLoading(true);
     try {
-      // @ts-ignore
-      const data = await window.api.accounts.getAll();
-      setAccounts(data);
+      const queryParams = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+      });
+
+      if (searchQuery) queryParams.append('email', searchQuery);
+      if (filterProvider !== 'all') queryParams.append('provider_id', filterProvider);
+
+      const response = await fetch(
+        `http://localhost:${serverPort}/v1/accounts?${queryParams.toString()}`,
+      );
+      const result = await response.json();
+      console.log('[Accounts] Fetched:', result);
+
+      if (result.success) {
+        setAccounts(result.data.accounts);
+        setPagination(result.data.pagination);
+      } else {
+        console.error('Failed to fetch accounts:', result.message);
+      }
     } catch (error) {
       console.error('Failed to fetch accounts:', error);
     } finally {
@@ -60,26 +89,41 @@ export const Accounts = () => {
   };
 
   useEffect(() => {
-    fetchAccounts();
-    // Auto-start server
     const startServer = async () => {
-      // @ts-ignore
-      const res = await window.api.server.start();
-      if (res.success && res.port) {
-        setServerRunning(true);
-      } else {
-        console.error('Failed to auto-start server:', res.error);
+      try {
+        // @ts-ignore
+        const res = await window.api.server.start();
+        console.log('[Accounts] Server started:', res);
+        if (res.success && res.port) {
+          setServerPort(res.port);
+        } else {
+          console.error('Failed to auto-start server:', res.error);
+        }
+      } catch (e) {
+        console.error('Error starting server:', e);
       }
     };
     startServer();
   }, []);
+
+  useEffect(() => {
+    if (serverPort) {
+      fetchAccounts(1, pagination.limit);
+    }
+  }, [serverPort, searchQuery, filterProvider]);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= pagination.total_pages) {
+      fetchAccounts(newPage, pagination.limit);
+    }
+  };
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to remove this account?')) return;
     try {
       // @ts-ignore
       await window.api.accounts.delete(id);
-      fetchAccounts();
+      fetchAccounts(pagination.page, pagination.limit);
     } catch (error) {
       console.error('Failed to delete:', error);
     }
@@ -91,7 +135,7 @@ export const Accounts = () => {
       // @ts-ignore
       const result = await window.api.accounts.import();
       if (result.success) {
-        fetchAccounts();
+        fetchAccounts(pagination.page, pagination.limit);
         alert(`Successfully imported: ${result.added} added, ${result.updated} updated.`);
       } else if (!result.canceled) {
         alert('Import failed: ' + result.error);
@@ -111,29 +155,7 @@ export const Accounts = () => {
     }
   };
 
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    setCurrentPage(1);
-    setSelectedAccounts(new Set());
-  }, [searchQuery, filterProvider]);
-
-  // Sorting Logic Removed
-
-  const filteredAccounts = accounts.filter((acc) => {
-    const matchSearch =
-      acc.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      acc.provider_id.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchProvider =
-      filterProvider === 'all' || acc.provider_id.toLowerCase() === filterProvider.toLowerCase();
-    return matchSearch && matchProvider;
-  });
-
-  const totalPages = Math.ceil(filteredAccounts.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedAccounts = filteredAccounts.slice(startIndex, startIndex + itemsPerPage);
 
   const toggleSelection = (id: string) => {
     const newSelected = new Set(selectedAccounts);
@@ -146,23 +168,20 @@ export const Accounts = () => {
   };
 
   const toggleAll = () => {
-    if (selectedAccounts.size === paginatedAccounts.length && paginatedAccounts.length > 0) {
-      // If all on current page are selected, deselect them
+    if (selectedAccounts.size === accounts.length && accounts.length > 0) {
       const newSelected = new Set(selectedAccounts);
-      paginatedAccounts.forEach((acc) => newSelected.delete(acc.id));
+      accounts.forEach((acc) => newSelected.delete(acc.id));
       setSelectedAccounts(newSelected);
     } else {
-      // Select all on current page
       const newSelected = new Set(selectedAccounts);
-      paginatedAccounts.forEach((acc) => newSelected.add(acc.id));
+      accounts.forEach((acc) => newSelected.add(acc.id));
       setSelectedAccounts(newSelected);
     }
   };
 
-  // Check if all visible items are selected
   const allVisibleSelected =
-    paginatedAccounts.length > 0 && paginatedAccounts.every((acc) => selectedAccounts.has(acc.id));
-  const someVisibleSelected = paginatedAccounts.some((acc) => selectedAccounts.has(acc.id));
+    accounts.length > 0 && accounts.every((acc) => selectedAccounts.has(acc.id));
+  const someVisibleSelected = accounts.some((acc) => selectedAccounts.has(acc.id));
 
   const copyAccountJson = (account: Account) => {
     navigator.clipboard.writeText(JSON.stringify(account, null, 2));
@@ -176,7 +195,6 @@ export const Accounts = () => {
       </div>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-4">
-          {/* Left: Search Bar & Filter Toggle */}
           <div className="flex items-center gap-2 w-full max-w-lg">
             <div className="relative w-full">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -185,12 +203,11 @@ export const Accounts = () => {
                 placeholder="Search accounts..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="flex h-9 w-full rounded-md border border-input bg-background pl-9 pr-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex h-9 w-full rounded-md border border-input bg-background pl-9 pr-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
             </div>
           </div>
 
-          {/* Right: Actions */}
           <div className="flex gap-2 items-center">
             {selectedAccounts.size > 0 && (
               <div className="flex items-center gap-2 mr-2">
@@ -204,7 +221,7 @@ export const Accounts = () => {
                       setSelectedAccounts(new Set());
                     }
                   }}
-                  className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-destructive/10 text-destructive hover:text-destructive h-9 px-3"
+                  className="inline-flex items-center justify-center rounded-md text-sm font-medium hover:bg-destructive/10 text-destructive hover:text-destructive h-9 px-3"
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete
@@ -213,7 +230,7 @@ export const Accounts = () => {
             )}
             <button
               onClick={() => setDialogOpen(true)}
-              className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-3 text-white"
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-3 text-white"
             >
               <Plus className="mr-2 h-4 w-4" />
               Add Account
@@ -222,7 +239,7 @@ export const Accounts = () => {
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setShowDropdown(!showDropdown)}
-                className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 w-9"
+                className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 w-9"
               >
                 <AlignEndVertical className="h-4 w-4" />
               </button>
@@ -232,14 +249,14 @@ export const Accounts = () => {
                   <div className="p-1">
                     <button
                       onClick={handleImport}
-                      className="relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                      className="relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground"
                     >
                       <Upload className="mr-2 h-4 w-4" />
                       Import (JSON)
                     </button>
                     <button
                       onClick={handleExport}
-                      className="relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                      className="relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground"
                     >
                       <Download className="mr-2 h-4 w-4" />
                       Export (JSON)
@@ -260,7 +277,7 @@ export const Accounts = () => {
                 <th className="h-12 px-4 align-middle w-[40px]">
                   <input
                     type="checkbox"
-                    className="appearance-none h-4 w-4 rounded border border-zinc-600 bg-zinc-900/50 checked:bg-blue-600 checked:border-blue-600 indeterminate:bg-blue-600 indeterminate:border-blue-600 cursor-pointer flex items-center justify-center after:text-white after:text-[10px] after:font-bold after:hidden checked:after:content-['✔'] checked:after:block indeterminate:after:content-['−'] indeterminate:after:block transition-all"
+                    className="appearance-none h-4 w-4 rounded border border-zinc-600 bg-zinc-900/50 checked:bg-blue-600 checked:border-blue-600 cursor-pointer flex items-center justify-center after:text-white after:text-[10px] after:font-bold after:hidden checked:after:content-['✔'] checked:after:block transition-all"
                     checked={allVisibleSelected}
                     ref={(input) => {
                       if (input) input.indeterminate = !allVisibleSelected && someVisibleSelected;
@@ -271,14 +288,13 @@ export const Accounts = () => {
                 <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
                   Account
                 </th>
-                {/* Columns Removed: Last Used, Success, Avg Response, Tokens Today, API Endpoint */}
                 <th className="h-12 px-4 align-middle font-medium text-muted-foreground text-right w-[100px]">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody className="[&_tr:last-child]:border-0">
-              {filteredAccounts.length === 0 && !loading && (
+              {accounts.length === 0 && !loading && (
                 <tr>
                   <td colSpan={3} className="h-24 text-center text-muted-foreground">
                     {searchQuery
@@ -287,14 +303,19 @@ export const Accounts = () => {
                   </td>
                 </tr>
               )}
-              {paginatedAccounts.map((account) => {
-                const providerConfig = providers.find((p) => p.id === account.provider_id);
+              {accounts.map((account) => {
+                const providerConfig = providers.find(
+                  (p) => p.id.toLowerCase() === account.provider_id.toLowerCase(),
+                );
+                const isActive = providerConfig?.active ?? true;
+
                 return (
                   <tr
                     key={account.id}
                     className={cn(
                       'border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted',
                       selectedAccounts.has(account.id) && 'bg-muted',
+                      !isActive && 'opacity-50 grayscale',
                     )}
                   >
                     <td className="p-4 align-middle">
@@ -307,44 +328,51 @@ export const Accounts = () => {
                     </td>
                     <td className="p-4 align-middle">
                       <div className="flex items-center gap-3">
-                        <AccountAvatar
-                          email={account.email}
-                          provider={account.provider_id}
-                          className="w-8 h-8 text-[10px]"
-                        />
-                        <div className="flex flex-col gap-1">
-                          <span className="font-medium text-sm">{account.email}</span>
-                          <div
-                            className={cn(
-                              'inline-flex items-center rounded-md border px-2.5 py-0.5 text-[10px] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 w-fit',
-                              providerConfig?.color || 'bg-blue-500/10 text-blue-500',
-                            )}
-                          >
-                            {providerConfig?.icon && (
+                        {/* New Provider Badge */}
+                        <div className="flex items-center gap-2">
+                          <div className="relative w-8 h-8 rounded-full overflow-hidden bg-muted border flex items-center justify-center">
+                            {providerConfig?.website ? (
                               <img
-                                src={providerConfig.icon}
-                                alt={account.provider_id}
-                                className="w-3 h-3 mr-1"
+                                src={`https://www.google.com/s2/favicons?domain=${providerConfig.website}&sz=64`}
+                                alt={providerConfig.name}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  // Fallback to local icon if favicon fails
+                                  (e.target as HTMLImageElement).src = providerConfig.icon;
+                                }}
                               />
+                            ) : (
+                              <span className="text-[10px]">{account.provider_id.slice(0, 2)}</span>
                             )}
-                            {account.provider_id}
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-medium text-sm">{account.email}</span>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="text-xs text-muted-foreground font-medium">
+                                {providerConfig?.name || account.provider_id}
+                              </span>
+                              {!isActive && (
+                                <span className="text-[10px] border px-1 rounded bg-muted text-muted-foreground">
+                                  Disabled
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
                     </td>
-                    {/* Columns Removed: Last Use, Success, Avg Response, Tokens Today, API Endpoint */}
                     <td className="p-4 align-middle text-right">
                       <div className="flex justify-end gap-2">
                         <button
                           onClick={() => copyAccountJson(account)}
-                          className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-8 w-8"
+                          className="inline-flex items-center justify-center rounded-md text-sm font-medium hover:bg-accent hover:text-accent-foreground h-8 w-8"
                           title="Copy JSON"
                         >
                           <Copy className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => handleDelete(account.id)}
-                          className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-destructive/10 text-destructive hover:text-destructive h-8 w-8"
+                          className="inline-flex items-center justify-center rounded-md text-sm font-medium hover:bg-destructive/10 text-destructive hover:text-destructive h-8 w-8"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -357,38 +385,45 @@ export const Accounts = () => {
           </table>
         </div>
 
-        {/* Pagination Footer */}
-        {filteredAccounts.length > 0 && (
+        {/* Server-Side Pagination Footer */}
+        {pagination.total > 0 && (
           <div className="flex items-center justify-between px-4 py-4 border-t">
             <div className="text-sm text-muted-foreground">
-              Showing {startIndex + 1} to{' '}
-              {Math.min(startIndex + itemsPerPage, filteredAccounts.length)} of{' '}
-              {filteredAccounts.length} accounts
+              Showing {(pagination.page - 1) * pagination.limit + 1} to{' '}
+              {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}{' '}
+              accounts
             </div>
             <div className="flex items-center space-x-2">
               <button
-                className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-transparent shadow-sm hover:bg-accent hover:text-accent-foreground h-8 px-4 w-24"
-                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
+                className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-transparent shadow-sm hover:bg-accent hover:text-accent-foreground h-8 px-4 disabled:opacity-50"
+                onClick={() => handlePageChange(pagination.page - 1)}
+                disabled={pagination.page === 1 || loading}
               >
+                <ChevronLeft className="h-4 w-4 mr-1" />
                 Previous
               </button>
               <div className="text-sm font-medium">
-                Page {currentPage} of {totalPages}
+                Page {pagination.page} of {pagination.total_pages}
               </div>
               <button
-                className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-transparent shadow-sm hover:bg-accent hover:text-accent-foreground h-8 px-4 w-24"
-                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
+                className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-transparent shadow-sm hover:bg-accent hover:text-accent-foreground h-8 px-4 disabled:opacity-50"
+                onClick={() => handlePageChange(pagination.page + 1)}
+                disabled={pagination.page === pagination.total_pages || loading}
               >
                 Next
+                <ChevronRight className="h-4 w-4 ml-1" />
               </button>
             </div>
           </div>
         )}
       </div>
 
-      <AddAccountDialog open={dialogOpen} onOpenChange={setDialogOpen} onSuccess={fetchAccounts} />
+      <AddAccountDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onSuccess={() => fetchAccounts(pagination.page, pagination.limit)}
+        serverPort={serverPort}
+      />
     </div>
   );
 };

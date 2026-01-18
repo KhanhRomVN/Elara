@@ -8,9 +8,15 @@ interface AddAccountDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  serverPort: number | null;
 }
 
-export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDialogProps) {
+export function AddAccountDialog({
+  open,
+  onOpenChange,
+  onSuccess,
+  serverPort,
+}: AddAccountDialogProps) {
   const [loading, setLoading] = useState(false);
   const [provider, setProvider] = useState<string>('Claude');
   const [error, setError] = useState('');
@@ -46,6 +52,32 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
       setDeepseekMethod('basic');
     }
   }, [open, provider]);
+
+  const saveToBackend = async (account: any) => {
+    if (!serverPort || !account) return;
+    try {
+      console.log('[AddAccountDialog] Syncing account to backend...', account);
+      const res = await fetch(`http://localhost:${serverPort}/v1/accounts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: account.id,
+          provider_id: account.provider_id,
+          email: account.email,
+          credential: account.credential,
+        }),
+      });
+      const data = await res.json();
+      console.log('[AddAccountDialog] Backend sync result:', data);
+    } catch (e) {
+      console.error('[AddAccountDialog] Failed to sync to backend:', e);
+      // We don't block success here, as local JSON file was updated via IPC.
+      // User might need to refresh or we rely on IPC 'get' if we reverted, but we are using API.
+      // If sync fails, it won't show in table. Error should probably be shown or logged.
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,6 +116,7 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
           setLoading(false);
         } else {
           console.log('[AddAccountDialog] Account added successfully, closing dialog');
+          await saveToBackend(result.account);
           onOpenChange(false);
           onSuccess();
         }
@@ -119,6 +152,7 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
       // @ts-ignore
       const result = await window.api.accounts.antigravity.completeOAuth();
       if (result.success) {
+        await saveToBackend(result.account);
         onOpenChange(false);
         onSuccess();
       } else {
@@ -143,6 +177,7 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
       // @ts-ignore
       const result = await window.api.accounts.antigravity.addByToken(agToken.trim());
       if (result.success) {
+        await saveToBackend(result.account);
         onOpenChange(false);
         onSuccess();
       } else {
@@ -171,6 +206,11 @@ export function AddAccountDialog({ open, onOpenChange, onSuccess }: AddAccountDi
 
       // @ts-ignore
       await window.api.accounts.update(accountId, updates);
+      const updateResult = await window.api.accounts.update(accountId, updates);
+      if (updateResult.success && updateResult.account) {
+        await saveToBackend(updateResult.account);
+      }
+
       setShowEmailInput(false);
       setActualEmail('');
       setActualUsername('');

@@ -1,4 +1,5 @@
 import { ipcMain, dialog, app, session } from 'electron';
+import { getDb } from '@backend/services/db';
 import fs from 'fs';
 import path from 'path';
 
@@ -37,11 +38,10 @@ export interface Account {
 export const setupAccountsHandlers = () => {
   ipcMain.handle('accounts:get-all', async () => {
     try {
-      if (!fs.existsSync(DATA_FILE)) return [];
-      const data = fs.readFileSync(DATA_FILE, 'utf-8');
-      return JSON.parse(data);
+      const db = getDb();
+      return db.prepare('SELECT * FROM accounts').all();
     } catch (error) {
-      console.error('Failed to read accounts:', error);
+      console.error('Failed to read accounts from DB:', error);
       return [];
     }
   });

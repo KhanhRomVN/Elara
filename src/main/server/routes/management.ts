@@ -49,9 +49,7 @@ router.get('/stats', (_req, res) => {
       accounts: activeAccounts.map((acc) => ({
         id: acc.id,
         email: acc.email,
-        provider: acc.provider,
-        status: acc.status,
-        requestCount: selector.getRequestCount(acc.id),
+        provider: acc.provider_id,
       })),
     });
   } catch (error: any) {
@@ -137,8 +135,8 @@ router.get('/accounts', (_req, res) => {
       accounts.map((acc) => ({
         id: acc.id,
         email: acc.email,
-        provider: acc.provider,
-        status: acc.status,
+        provider: acc.provider_id,
+        status: 'Active',
         requestCount: selector.getRequestCount(acc.id),
       })),
     );

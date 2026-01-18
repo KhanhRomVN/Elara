@@ -13,9 +13,9 @@ const main = async (options?: { dbPath?: string }) => {
 
   // We can load environment variables here if needed
 
-  // Initialize database
+  // Initialize database (synchronous)
   try {
-    await initDatabase(options?.dbPath);
+    initDatabase(options?.dbPath);
   } catch (error) {
     logger.error('Failed to initialize database', error);
     if (require.main === module) process.exit(1);
