@@ -302,6 +302,7 @@ export const PlaygroundPage = ({
             streamEnabled={streamEnabled}
             setStreamEnabled={setStreamEnabled}
             supportsSearch={localProvidersConfig.find((p) => p.id === selectedProvider)?.is_search}
+            supportsUpload={localProvidersConfig.find((p) => p.id === selectedProvider)?.is_upload}
           />
         ) : (
           <>
@@ -340,6 +341,9 @@ export const PlaygroundPage = ({
               setStreamEnabled={setStreamEnabled}
               supportsSearch={
                 localProvidersConfig.find((p) => p.id === selectedProvider)?.is_search
+              }
+              supportsUpload={
+                localProvidersConfig.find((p) => p.id === selectedProvider)?.is_upload
               }
             />
           </>

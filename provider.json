@@ -2,7 +2,7 @@
   {
     "provider_id": "antigravity",
     "provider_name": "Antigravity",
-    "is_enabled": true,
+    "is_enabled": false,
     "website": "https://antigravity.google/",
     "is_search": false
   },
@@ -11,40 +11,44 @@
     "provider_name": "Claude",
     "is_enabled": true,
     "website": "https://claude.ai/",
-    "is_search": false
+    "is_search": false,
+    "is_upload": false
   },
   {
     "provider_id": "cohere",
     "provider_name": "Cohere",
-    "is_enabled": true,
+    "is_enabled": false,
     "website": "https://cohere.com",
-    "is_search": false
+    "is_search": false,
+    "is_upload": false
   },
   {
     "provider_id": "deepseek",
     "provider_name": "DeepSeek",
     "is_enabled": true,
     "website": "https://deepseek.com",
-    "is_search": true
+    "is_search": true,
+    "is_upload": true
   },
   {
     "provider_id": "gemini",
     "provider_name": "Gemini",
-    "is_enabled": true,
+    "is_enabled": false,
     "website": "https://gemini.google.com/",
-    "is_search": false
+    "is_search": false,
+    "is_upload": false
   },
   {
     "provider_id": "groq",
     "provider_name": "Groq",
-    "is_enabled": true,
+    "is_enabled": false,
     "website": "https://groq.com",
     "is_search": false
   },
   {
     "provider_id": "hugging-chat",
     "provider_name": "HuggingChat",
-    "is_enabled": true,
+    "is_enabled": false,
     "website": "https://huggingface.co/",
     "is_search": false
   },
@@ -65,21 +69,21 @@
   {
     "provider_id": "mistral",
     "provider_name": "Mistral",
-    "is_enabled": true,
+    "is_enabled": false,
     "website": "https://mistral.ai/",
     "is_search": false
   },
   {
     "provider_id": "perplexity",
     "provider_name": "Perplexity",
-    "is_enabled": true,
+    "is_enabled": false,
     "website": "https://www.perplexity.ai/",
     "is_search": false
   },
   {
     "provider_id": "qwen",
     "provider_name": "Qwen",
-    "is_enabled": true,
+    "is_enabled": false,
     "website": "https://qwenlm.ai/",
     "is_search": false
   },

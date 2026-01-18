@@ -113,69 +113,105 @@ export const usePlaygroundLogic = ({
     }));
 
     setAttachments((prev) => [...prev, ...newAttachments]);
-
-    if (selectedProvider === 'DeepSeek') {
-      try {
-        // @ts-ignore
-        const serverStatus = await window.api.server.start();
-        const port = serverStatus.port;
-        const account = accounts.find((acc) => acc.id === selectedAccount);
-
-        if (account) {
-          newAttachments.forEach(async (att) => {
-            setAttachments((prev) =>
-              prev.map((p) => (p.id === att.id ? { ...p, status: 'uploading' } : p)),
-            );
-
-            try {
-              const uploadUrl = `http://localhost:${port}/v1/deepseek/files`;
-              const base64 = await new Promise<string>((resolve) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result as string);
-                reader.readAsDataURL(att.file);
-              });
-
-              const uploadRes = await fetch(uploadUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  file: base64,
-                  fileName: att.file.name,
-                  email: account.email,
-                }),
-              });
-
-              if (uploadRes.ok) {
-                const data = await uploadRes.json();
-                if (data.id) {
-                  setAttachments((prev) =>
-                    prev.map((p) =>
-                      p.id === att.id ? { ...p, status: 'completed', fileId: data.id } : p,
-                    ),
-                  );
-                } else {
-                  throw new Error('No ID returned');
-                }
-              } else {
-                throw new Error('Upload failed');
-              }
-            } catch (error) {
-              console.error(`Error uploading ${att.file.name}:`, error);
-              setAttachments((prev) =>
-                prev.map((p) => (p.id === att.id ? { ...p, status: 'error' } : p)),
-              );
-            }
-          });
-        }
-      } catch (e) {
-        console.error('Failed to upload file', e);
-      }
-    }
   };
 
   const handleRemoveAttachment = (index: number) => {
     setAttachments((prev) => prev.filter((_, i) => i !== index));
   };
+
+  // Handle File Uploads (Smart Upload Management)
+  useEffect(() => {
+    const uploadPendingFiles = async () => {
+      // Only Smart Upload for DeepSeek currently
+      if (selectedProvider !== 'DeepSeek') return;
+
+      // If no account selected, we wait (files remain in 'pending' state)
+      if (!selectedAccount) return;
+
+      const account = accounts.find((a) => a.id === selectedAccount);
+      if (!account) return;
+
+      // Identify files needing upload:
+      // 1. Newly selected (pending)
+      // 2. Previously uploaded but with different account (re-upload needed for context)
+      const itemsToUpload = attachments.filter(
+        (a) =>
+          a.status === 'pending' ||
+          (a.status === 'completed' && a.accountId !== selectedAccount) ||
+          (a.status === 'error' && a.accountId !== selectedAccount),
+      );
+
+      if (itemsToUpload.length === 0) return;
+
+      console.log(
+        `[Smart Upload] Uploading ${itemsToUpload.length} files for account ${selectedAccount}`,
+      );
+
+      // Mark as uploading immediately to prevent double-triggering
+      setAttachments((prev) =>
+        prev.map((a) =>
+          itemsToUpload.some((i) => i.id === a.id) ? { ...a, status: 'uploading', progress: 0 } : a,
+        ),
+      );
+
+      try {
+        // @ts-ignore
+        const serverStatus = await window.api.server.start();
+        const port = serverStatus.port || 11434;
+
+        // Process uploads in parallel
+        itemsToUpload.forEach(async (att) => {
+          try {
+            const formData = new FormData();
+            formData.append('file', att.file);
+
+            // Backend endpoint: POST /v1/chat/accounts/:accountId/uploads
+            const uploadUrl = `http://localhost:${port}/v1/chat/accounts/${account.id}/uploads`;
+
+            const res = await fetch(uploadUrl, {
+              method: 'POST',
+              body: formData,
+              // Note: No Content-Type header; fetch sets it with boundary for FormData
+            });
+
+            if (res.ok) {
+              const data = await res.json();
+              if (data.success && data.data?.file_id) {
+                console.log(`[Smart Upload] Success: ${att.file.name} -> ${data.data.file_id}`);
+                setAttachments((prev) =>
+                  prev.map((p) =>
+                    p.id === att.id
+                      ? {
+                          ...p,
+                          status: 'completed',
+                          fileId: data.data.file_id,
+                          accountId: account.id, // Bind to this account
+                          progress: 100,
+                        }
+                      : p,
+                  ),
+                );
+              } else {
+                throw new Error(data.error || 'Invalid upload response');
+              }
+            } else {
+              const errText = await res.text();
+              throw new Error(`Upload failed ${res.status}: ${errText}`);
+            }
+          } catch (err) {
+            console.error(`[Smart Upload] Error uploading ${att.file.name}:`, err);
+            setAttachments((prev) =>
+              prev.map((p) => (p.id === att.id ? { ...p, status: 'error' } : p)),
+            );
+          }
+        });
+      } catch (e) {
+        console.error('[Smart Upload] System error:', e);
+      }
+    };
+
+    uploadPendingFiles();
+  }, [attachments, selectedAccount, selectedProvider, accounts]);
 
   const handleStop = useCallback(async () => {
     if (abortController) {
@@ -577,6 +613,8 @@ export const usePlaygroundLogic = ({
           ],
           conversationId: activeChatId && activeChatId !== 'new-session' ? activeChatId : '',
           stream: streamEnabled,
+          search: searchEnabled,
+          ref_file_ids: uploadedFileIds,
         }),
       });
 

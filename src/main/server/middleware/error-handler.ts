@@ -1,6 +1,6 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 
-export const errorHandler = (err: Error, _req: Request, res: Response) => {
+export const errorHandler = (err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error('[ErrorHandler] Error occurred:', err);
 
   // Check if error has statusCode property (custom app errors)

@@ -30,6 +30,7 @@ export interface PendingAttachment {
   fileId?: string; // Server returned ID
   previewUrl: string;
   progress?: number;
+  accountId?: string; // Account ID used for upload
 }
 
 export type Provider =

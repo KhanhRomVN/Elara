@@ -28,6 +28,7 @@ interface InputAreaProps {
   streamEnabled?: boolean;
   setStreamEnabled?: (enabled: boolean) => void;
   supportsSearch?: boolean;
+  supportsUpload?: boolean;
 }
 
 export const InputArea = ({
@@ -54,16 +55,21 @@ export const InputArea = ({
   streamEnabled,
   setStreamEnabled,
   supportsSearch,
+  supportsUpload,
 }: InputAreaProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [previewFile, setPreviewFile] = useState<File | null>(null);
 
+  const canUpload = supportsUpload && selectedAccount;
+
   const handleUploadClick = () => {
+    if (!canUpload) return;
     fileInputRef.current?.click();
   };
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    if (!canUpload) return;
     if (onFileSelect && e.target.files) {
       onFileSelect(e.target.files);
     }
@@ -74,6 +80,7 @@ export const InputArea = ({
   };
 
   const handlePaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (!canUpload) return;
     const items = e.clipboardData.items;
     const pastedFiles: File[] = [];
 
@@ -95,6 +102,7 @@ export const InputArea = ({
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
+    if (!canUpload) return;
     setIsDragging(true);
   };
 
@@ -106,6 +114,8 @@ export const InputArea = ({
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
+
+    if (!canUpload) return;
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       if (onFileSelect) {
@@ -245,13 +255,15 @@ export const InputArea = ({
           {/* Bottom Actions Bar */}
           <div className="flex justify-between items-center px-4 pb-3">
             <div className="flex gap-2 items-center">
-              <button
-                onClick={handleUploadClick}
-                className="p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted/50 transition-colors"
-                title="Upload"
-              >
-                <Upload className="h-5 w-5" />
-              </button>
+              {canUpload && (
+                <button
+                  onClick={handleUploadClick}
+                  className="p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted/50 transition-colors"
+                  title="Upload"
+                >
+                  <Upload className="h-5 w-5" />
+                </button>
+              )}
 
               {setStreamEnabled && (
                 <button

@@ -1,4 +1,5 @@
 import { HttpClient } from '../../utils/http-client';
+import fetch from 'node-fetch';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -134,10 +135,35 @@ let dsHash: DeepSeekHash | null = null;
 // Solves the PoW challenge using WASM
 async function solvePoW(challenge: PoWChallenge): Promise<PoWResponse> {
   if (!dsHash) {
-    const wasmPath = path.resolve(
-      __dirname,
-      '../../utils/sha3_wasm_bg.7b9ca65ddd.wasm',
-    );
+    const possiblePaths = [
+      // 1. Relative path for source (backend/src/services/chat -> ../../utils)
+      path.resolve(__dirname, '../../utils/sha3_wasm_bg.7b9ca65ddd.wasm'),
+      // 2. Dev environment (project root -> backend/src/utils)
+      path.resolve(
+        process.cwd(),
+        'backend/src/utils/sha3_wasm_bg.7b9ca65ddd.wasm',
+      ),
+      // 3. Prod environment (resources path)
+      // path.join(process.resourcesPath, 'utils/sha3_wasm_bg.7b9ca65ddd.wasm')
+    ];
+
+    let wasmPath = '';
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        wasmPath = p;
+        break;
+      }
+    }
+
+    if (!wasmPath) {
+      console.error(
+        '[DeepSeek PoW] WASM file not found. Tried:',
+        possiblePaths,
+      );
+      throw new Error('WASM file not found for DeepSeek PoW');
+    }
+
+    console.log('[DeepSeek PoW] Using WASM at:', wasmPath);
     dsHash = new DeepSeekHash(wasmPath);
     await dsHash.init();
   }
@@ -235,9 +261,7 @@ export interface ChatPayload {
   messages: { role: string; content: string }[];
   stream?: boolean;
   search?: boolean;
-  thinking?: boolean;
   conversation_id?: string;
-  parent_message_id?: string;
   ref_file_ids?: string[];
 }
 
@@ -313,12 +337,10 @@ export async function chatCompletionStream(
       callbacks.onSessionCreated(sessionId);
     }
 
-    // Auto-fetch parent_message_id if not provided
-    let parentMessageId: number | undefined | null = payload.parent_message_id
-      ? Number(payload.parent_message_id)
-      : undefined;
-    if (payload.conversation_id && !parentMessageId) {
-      console.log('[DeepSeek] No parent_message_id provided, auto-fetching...');
+    // Auto-fetch parent_message_id
+    let parentMessageId: number | undefined | null = undefined;
+    if (payload.conversation_id) {
+      console.log('[DeepSeek] Auto-fetching parent_message_id...');
       const fetchedId = await getLastMessageId(client, sessionId);
       parentMessageId = fetchedId;
     }
@@ -368,11 +390,15 @@ export async function chatCompletionStream(
       parent_message_id: parentMessageId || null,
       prompt: payload.messages[payload.messages.length - 1].content,
       ref_file_ids: payload.ref_file_ids || [],
-      thinking_enabled:
-        payload.model === 'deepseek-reasoner' || payload.thinking === true,
+      thinking_enabled: payload.model === 'deepseek-reasoner',
       search_enabled: payload.search || false,
       client_stream_id: clientStreamId,
     };
+
+    console.log(
+      '[DeepSeek] Request Payload:',
+      JSON.stringify(requestPayload, null, 2),
+    );
 
     // 3. Send Completion Request with PoW Header
     const completionClient = new HttpClient({
@@ -393,6 +419,8 @@ export async function chatCompletionStream(
       requestPayload,
     );
 
+    console.log('[DeepSeek] Response Status:', response.status);
+
     if (!response.ok) {
       const errorText = await response.text();
       console.error('[DeepSeek] API Error:', response.status, errorText);
@@ -412,7 +440,7 @@ export async function chatCompletionStream(
 
     for await (const chunk of response.body) {
       const chunkStr = chunk.toString();
-      // console.log('[DeepSeek] Raw chunk:', chunkStr); // Too noisy usually, but enable if needed
+      console.log('[DeepSeek] Chunk:', chunkStr);
       buffer += chunkStr;
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
@@ -454,9 +482,7 @@ export async function chatCompletionStream(
 
               const path = json.p;
               const value = json.v;
-              const thinkingEnabled =
-                payload.model === 'deepseek-reasoner' ||
-                payload.thinking === true;
+              const thinkingEnabled = payload.model === 'deepseek-reasoner';
 
               if (
                 path === 'response/thinking_content' ||
@@ -573,5 +599,163 @@ export async function chatCompletionStream(
   } catch (error: any) {
     console.error('[DeepSeek] Chat error:', error);
     callbacks.onError(error);
+  }
+}
+
+export async function uploadFile(
+  token: string,
+  file: Express.Multer.File,
+  userAgent?: string,
+): Promise<{ id: string; token_usage: number }> {
+  const baseHeaders = {
+    Cookie: `DS-AUTH-TOKEN=${token}`,
+    Authorization: token,
+    'User-Agent':
+      userAgent ||
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+    Origin: 'https://chat.deepseek.com',
+    Referer: 'https://chat.deepseek.com/',
+  };
+
+  const client = new HttpClient({
+    baseURL: 'https://chat.deepseek.com',
+    headers: baseHeaders,
+  });
+
+  try {
+    // 1. Request PoW Challenge
+    const challengeRes = await client.post(
+      '/api/v0/chat/create_pow_challenge',
+      { target_path: '/api/v0/file/upload_file' },
+    );
+
+    let powResponseBase64 = '';
+    if (challengeRes.ok) {
+      const challengeJson = await challengeRes.json();
+      const challengeData = challengeJson?.data?.biz_data?.challenge;
+
+      if (challengeData) {
+        console.log('[DeepSeek Upload] Solving PoW...');
+        const powAnswer = await solvePoW(challengeData);
+        powResponseBase64 = Buffer.from(JSON.stringify(powAnswer)).toString(
+          'base64',
+        );
+      }
+    } else {
+      console.warn(
+        '[DeepSeek Upload] Failed to get PoW challenge, proceeding without it.',
+      );
+    }
+
+    // 2. Construct Multipart Payload
+    const boundary =
+      '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
+    const crlf = '\r\n';
+
+    // Ensure filename is safe (basic sanitization if needed, but originalname usually fine)
+    const header = `--${boundary}${crlf}Content-Disposition: form-data; name="file"; filename="${file.originalname}"${crlf}Content-Type: ${file.mimetype}${crlf}${crlf}`;
+    const footer = `${crlf}--${boundary}--${crlf}`;
+
+    // Combine buffers
+    const payloadBuffer = Buffer.concat([
+      Buffer.from(header),
+      file.buffer,
+      Buffer.from(footer),
+    ]);
+
+    // 3. Send Request
+    // We specify manual headers to override node-fetch/HttpClient behavior for multipart
+    const headers: any = {
+      ...baseHeaders,
+      'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      'x-client-locale': 'en_US',
+      'x-app-version': '20241129.1',
+      'x-client-version': '1.6.1',
+      'x-client-platform': 'web',
+      'x-file-size': file.buffer.length.toString(),
+    };
+
+    if (powResponseBase64) {
+      headers['X-Ds-Pow-Response'] = powResponseBase64;
+    }
+
+    // Direct fetch call since we need raw buffer body support
+    const uploadRes = await fetch(
+      'https://chat.deepseek.com/api/v0/file/upload_file',
+      {
+        method: 'POST',
+        headers,
+        body: payloadBuffer,
+      },
+    );
+
+    if (!uploadRes.ok) {
+      const errorText = await uploadRes.text();
+      throw new Error(
+        `DeepSeek Upload Failed ${uploadRes.status}: ${errorText}`,
+      );
+    }
+
+    const result: any = await uploadRes.json();
+    console.log('[DeepSeek Upload] Result:', JSON.stringify(result, null, 2));
+
+    if (result.code === 0 && result.data?.biz_data?.id) {
+      const fileId = result.data.biz_data.id;
+
+      // Polling for status
+      console.log(`[DeepSeek Upload] Polling status for ${fileId}...`);
+      let attempts = 0;
+      const maxAttempts = 30; // 30 seconds
+
+      while (attempts < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        try {
+          const listRes = await client.get(
+            `/api/v0/file/fetch_files?file_ids=${fileId}`,
+          );
+          if (listRes.ok) {
+            const listData = await listRes.json();
+            // console.log('[DeepSeek Upload] Poll response:', JSON.stringify(listData));
+            const files = listData?.data?.biz_data?.files || [];
+            const targetFile = files.find((f: any) => f.id === fileId);
+
+            if (targetFile) {
+              console.log(
+                `[DeepSeek Upload] File Status: ${targetFile.status}`,
+              );
+              if (
+                targetFile.status === 'SUCCESS' ||
+                targetFile.status === 'READY'
+              ) {
+                return {
+                  id: fileId,
+                  token_usage: targetFile.token_usage || 0,
+                };
+              }
+              if (
+                targetFile.status === 'FAIL' ||
+                targetFile.status === 'ERROR'
+              ) {
+                throw new Error(`File processing failed: ${targetFile.status}`);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[DeepSeek Upload] Polling check failed', e);
+        }
+        attempts++;
+      }
+      // Return anyway if timeout, maybe it will work?
+      console.warn(
+        '[DeepSeek Upload] Timed out waiting for file status, proceeding...',
+      );
+      return { id: fileId, token_usage: 0 };
+    } else {
+      throw new Error(`Upload failed: ${result.msg || 'Unknown error'}`);
+    }
+  } catch (error) {
+    console.error('[DeepSeek Upload] Error:', error);
+    throw error;
   }
 }

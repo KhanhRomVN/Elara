@@ -1,8 +1,11 @@
 import express, { Request, Response } from 'express';
+import multer from 'multer';
 import { getAccounts } from '../../utils/account-utils';
 import { statsManager } from '../../../core/stats';
 import { getDb } from '@backend/services/db';
 import { sendMessage } from '@backend/services/chat.service';
+import { uploadFileController } from '@backend/controllers/upload.controller';
+import { validateProviderCapabilities } from '@backend/utils/chat-validator';
 
 import { chatCompletionStream as deepseekChat } from '../../deepseek';
 import { chatCompletionStream as claudeChat } from '../../claude';
@@ -19,12 +22,19 @@ import { chatCompletionStream as stepFunChat } from '../../stepfun';
 import * as gemini from '../../gemini';
 
 const router = express.Router();
+const upload = multer({ storage: multer.memoryStorage() });
+
+// POST /v1/chat/accounts/:accountId/uploads - Upload file
+router.post('/accounts/:accountId/uploads', upload.single('file'), (req, res) =>
+  uploadFileController(req as any, res as any),
+);
 
 // POST /v1/chat/accounts/:accountId/messages - Send message via unified API
 router.post('/accounts/:accountId/messages', async (req: Request, res: Response) => {
   try {
     const { accountId } = req.params;
-    const { model, messages, conversationId, stream } = req.body;
+    const { model, messages, conversationId, stream, search, ref_file_ids } = req.body;
+    console.log('[API] POST /messages body:', JSON.stringify(req.body, null, 2));
 
     const db = getDb();
     const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(accountId) as any;
@@ -53,6 +63,8 @@ router.post('/accounts/:accountId/messages', async (req: Request, res: Response)
         model,
         messages,
         conversationId,
+        search,
+        ref_file_ids,
         userAgent: req.headers['user-agent'],
         onContent: (content) => {
           if (stream !== false) {
@@ -113,16 +125,7 @@ router.post('/accounts/:accountId/messages', async (req: Request, res: Response)
 
 router.post('/completions', async (req, res) => {
   try {
-    const {
-      model,
-      messages,
-      thinking,
-      search,
-      conversation_id,
-      parent_message_id,
-      temperature,
-      ref_file_ids,
-    } = req.body;
+    const { model, messages, search, conversation_id, ref_file_ids } = req.body;
 
     const authHeader = req.headers.authorization;
     const emailQuery = req.query.email as string;
@@ -221,6 +224,13 @@ router.post('/completions', async (req, res) => {
       return;
     }
 
+    // Validate capabilities
+    const validationError = await validateProviderCapabilities(account.provider_id, { search });
+    if (validationError) {
+      res.status(403).json({ error: validationError });
+      return;
+    }
+
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -265,10 +275,8 @@ router.post('/completions', async (req, res) => {
           model,
           messages,
           stream: true,
-          thinking,
           search,
           conversation_id,
-          parent_message_id,
           ref_file_ids,
         },
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -307,7 +315,6 @@ router.post('/completions', async (req, res) => {
           messages,
           stream: true,
           conversation_id,
-          parent_message_id,
         },
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         callbacks,
@@ -358,7 +365,6 @@ router.post('/completions', async (req, res) => {
         {
           messages,
           model,
-          temperature,
           ...perplexityContext,
         },
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',

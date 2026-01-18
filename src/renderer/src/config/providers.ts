@@ -24,6 +24,7 @@ export interface ProviderConfig {
   active: boolean;
   website?: string;
   is_search?: boolean;
+  is_upload?: boolean;
 }
 
 export const providers: ProviderConfig[] = [
@@ -39,6 +40,7 @@ export const providers: ProviderConfig[] = [
     active: true,
     website: 'https://anthropic.com',
     is_search: false,
+    is_upload: false,
   },
   {
     id: 'DeepSeek',
@@ -52,6 +54,7 @@ export const providers: ProviderConfig[] = [
     active: true,
     website: 'https://deepseek.com',
     is_search: true,
+    is_upload: true,
   },
   {
     id: 'Mistral',
@@ -65,6 +68,7 @@ export const providers: ProviderConfig[] = [
     active: true,
     website: 'https://mistral.ai/',
     is_search: false,
+    is_upload: false,
   },
   {
     id: 'Kimi',
@@ -78,6 +82,7 @@ export const providers: ProviderConfig[] = [
     active: false,
     website: 'https://www.kimi.com/',
     is_search: false,
+    is_upload: false,
   },
   {
     id: 'Qwen',
@@ -91,6 +96,7 @@ export const providers: ProviderConfig[] = [
     active: true,
     website: 'https://qwenlm.ai/',
     is_search: false,
+    is_upload: false,
   },
   {
     id: 'Cohere',
@@ -104,6 +110,7 @@ export const providers: ProviderConfig[] = [
     active: true,
     website: 'https://cohere.com',
     is_search: false,
+    is_upload: false,
   },
   {
     id: 'Perplexity',
@@ -117,6 +124,7 @@ export const providers: ProviderConfig[] = [
     active: true,
     website: 'https://www.perplexity.ai/',
     is_search: false,
+    is_upload: false,
   },
   {
     id: 'Groq',
@@ -130,6 +138,7 @@ export const providers: ProviderConfig[] = [
     active: true,
     website: 'https://groq.com',
     is_search: false,
+    is_upload: false,
   },
   {
     id: 'Gemini',
@@ -143,6 +152,7 @@ export const providers: ProviderConfig[] = [
     active: true,
     website: 'https://ai.google.dev',
     is_search: false,
+    is_upload: false,
   },
   {
     id: 'Antigravity',
@@ -156,6 +166,7 @@ export const providers: ProviderConfig[] = [
     active: true,
     website: 'https://deepmind.google/',
     is_search: false,
+    is_upload: false,
   },
   {
     id: 'HuggingChat',
@@ -169,6 +180,7 @@ export const providers: ProviderConfig[] = [
     active: true,
     website: 'https://huggingface.co/chat/',
     is_search: false,
+    is_upload: false,
   },
   {
     id: 'LMArena',
@@ -182,6 +194,7 @@ export const providers: ProviderConfig[] = [
     active: false,
     website: 'https://lmarena.ai/',
     is_search: false,
+    is_upload: false,
   },
   {
     id: 'StepFun',
@@ -195,5 +208,6 @@ export const providers: ProviderConfig[] = [
     active: false,
     website: 'https://stepfun.ai/',
     is_search: false,
+    is_upload: false,
   },
 ];

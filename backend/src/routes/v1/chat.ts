@@ -1,17 +1,25 @@
 import express from 'express';
+import multer from 'multer';
 import { getAccountSelector } from '../../services/account-selector';
 import {
   sendMessageController,
   getChatHistoryController,
 } from '../../controllers/chat.controller';
+import { uploadFileController } from '../../controllers/upload.controller';
 
 import { chatCompletionStream as deepseekChat } from '../../services/chat/deepseek.service';
 import { chatCompletionStream as claudeChat } from '../../services/chat/claude.service';
 
 const router = express.Router();
+const upload = multer({ storage: multer.memoryStorage() });
 
 router.get('/history/:accountId/:conversationId', getChatHistoryController);
 router.post('/accounts/:accountId/messages', sendMessageController);
+router.post(
+  '/accounts/:accountId/uploads',
+  upload.single('file'),
+  uploadFileController,
+);
 
 router.post('/completions', async (req, res) => {
   try {
