@@ -1,16 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { cn } from '../../shared/lib/utils';
-import {
-  Copy,
-  Plus,
-  Download,
-  Trash2,
-  Search,
-  AlignEndVertical,
-  Upload,
-  ArrowUp,
-  ArrowDown,
-} from 'lucide-react';
+// Removed unused imports
+import { Copy, Plus, Download, Trash2, Search, AlignEndVertical, Upload } from 'lucide-react';
 import { AddAccountDialog } from './components/AddAccountDialog';
 import { AccountAvatar } from './components/AccountAvatar';
 import { providers } from '../../config/providers';
@@ -30,24 +21,20 @@ interface Account {
   lastActive?: string;
 }
 
-type SortKey = 'successRate' | 'avgResponse' | 'tokensToday' | null;
-type SortDirection = 'asc' | 'desc' | null;
+// Sort logic removed as all sortable columns are deleted
 
 export const Accounts = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [, setServerRunning] = useState(false);
-  const [serverPort, setServerPort] = useState<number | null>(null);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   // Filter & Sort State
   const [filterProvider, _setFilterProvider] = useState<string>('all');
-  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({
-    key: null,
-    direction: null,
-  });
+  // Sort state removed
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -80,7 +67,6 @@ export const Accounts = () => {
       const res = await window.api.server.start();
       if (res.success && res.port) {
         setServerRunning(true);
-        setServerPort(res.port);
       } else {
         console.error('Failed to auto-start server:', res.error);
       }
@@ -132,81 +118,18 @@ export const Accounts = () => {
   useEffect(() => {
     setCurrentPage(1);
     setSelectedAccounts(new Set());
-  }, [searchQuery, filterProvider, sortConfig]);
+  }, [searchQuery, filterProvider]);
 
-  // Sorting Logic
-  const handleSort = (key: SortKey) => {
-    setSortConfig((prev) => {
-      if (prev.key !== key) {
-        // New key, start with asc (Green for up/good? Logic request: Green (up), Red (down))
-        // Usually Ascending = Green (Increasing), Descending = Red (Decreasing)
-        // Wait, for SuccessRate: Higher is better. So maybe Descending is Green?
-        // User request: "green (lên) và red (xuống)" -> Green (Up/Asc), Red (Down/Desc).
-        // I will follow the user literally: Asc = Green, Desc = Red.
-        return { key, direction: 'asc' };
-      }
-      // Cycle: asc -> desc -> null
-      if (prev.direction === 'asc') return { key, direction: 'desc' };
-      if (prev.direction === 'desc') return { key: null, direction: null };
-      return { key: null, direction: null };
-    });
-  };
+  // Sorting Logic Removed
 
-  const getSortIcon = (key: SortKey) => {
-    if (sortConfig.key !== key) return null;
-    if (sortConfig.direction === 'asc') return <ArrowUp className="ml-1 h-3 w-3 text-green-500" />;
-    if (sortConfig.direction === 'desc') return <ArrowDown className="ml-1 h-3 w-3 text-red-500" />;
-    return null;
-  };
-
-  const getHeaderClass = (key: SortKey) => {
-    if (sortConfig.key !== key) return 'text-muted-foreground';
-    if (sortConfig.direction === 'asc') return 'text-green-500';
-    if (sortConfig.direction === 'desc') return 'text-red-500';
-    return 'text-muted-foreground';
-  };
-
-  const filteredAccounts = accounts
-    .filter((acc) => {
-      const matchSearch =
-        acc.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        acc.provider_id.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchProvider =
-        filterProvider === 'all' || acc.provider_id.toLowerCase() === filterProvider.toLowerCase();
-      return matchSearch && matchProvider;
-    })
-    .sort((a, b) => {
-      if (!sortConfig.key || !sortConfig.direction) return 0;
-
-      let valA = 0;
-      let valB = 0;
-
-      switch (sortConfig.key) {
-        case 'successRate':
-          valA =
-            a.totalRequests && a.totalRequests > 0
-              ? (a.successfulRequests || 0) / a.totalRequests
-              : 0;
-          valB =
-            b.totalRequests && b.totalRequests > 0
-              ? (b.successfulRequests || 0) / b.totalRequests
-              : 0;
-          break;
-        case 'avgResponse':
-          valA =
-            a.totalRequests && a.totalRequests > 0 ? (a.totalDuration || 0) / a.totalRequests : 0;
-          valB =
-            b.totalRequests && b.totalRequests > 0 ? (b.totalDuration || 0) / b.totalRequests : 0;
-          break;
-        case 'tokensToday':
-          valA = a.tokensToday || 0;
-          valB = b.tokensToday || 0;
-          break;
-      }
-
-      if (sortConfig.direction === 'asc') return valA - valB;
-      return valB - valA;
-    });
+  const filteredAccounts = accounts.filter((acc) => {
+    const matchSearch =
+      acc.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      acc.provider_id.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchProvider =
+      filterProvider === 'all' || acc.provider_id.toLowerCase() === filterProvider.toLowerCase();
+    return matchSearch && matchProvider;
+  });
 
   const totalPages = Math.ceil(filteredAccounts.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -240,12 +163,6 @@ export const Accounts = () => {
   const allVisibleSelected =
     paginatedAccounts.length > 0 && paginatedAccounts.every((acc) => selectedAccounts.has(acc.id));
   const someVisibleSelected = paginatedAccounts.some((acc) => selectedAccounts.has(acc.id));
-
-  const copyApiUrl = (account: Account) => {
-    const port = serverPort || 11434;
-    const url = `http://localhost:${port}/v1/chat/completions?email=${encodeURIComponent(account.email)}&provider=${account.provider_id.toLowerCase()}`;
-    navigator.clipboard.writeText(url);
-  };
 
   const copyAccountJson = (account: Account) => {
     navigator.clipboard.writeText(JSON.stringify(account, null, 2));
@@ -354,39 +271,7 @@ export const Accounts = () => {
                 <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
                   Account
                 </th>
-                <th className="h-12 px-4 align-middle font-medium text-muted-foreground text-nowrap">
-                  Last Used
-                </th>
-                <th
-                  className={cn(
-                    'h-12 px-4 align-middle font-medium text-nowrap cursor-pointer hover:bg-muted/50 select-none',
-                    getHeaderClass('successRate'),
-                  )}
-                  onClick={() => handleSort('successRate')}
-                >
-                  <div className="flex items-center">Success(%) {getSortIcon('successRate')}</div>
-                </th>
-                <th
-                  className={cn(
-                    'h-12 px-4 align-middle font-medium text-nowrap cursor-pointer hover:bg-muted/50 select-none',
-                    getHeaderClass('avgResponse'),
-                  )}
-                  onClick={() => handleSort('avgResponse')}
-                >
-                  <div className="flex items-center">Avg Response {getSortIcon('avgResponse')}</div>
-                </th>
-                <th
-                  className={cn(
-                    'h-12 px-4 align-middle font-medium text-nowrap cursor-pointer hover:bg-muted/50 select-none',
-                    getHeaderClass('tokensToday'),
-                  )}
-                  onClick={() => handleSort('tokensToday')}
-                >
-                  <div className="flex items-center">Tokens Today {getSortIcon('tokensToday')}</div>
-                </th>
-                <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
-                  API Endpoint
-                </th>
+                {/* Columns Removed: Last Used, Success, Avg Response, Tokens Today, API Endpoint */}
                 <th className="h-12 px-4 align-middle font-medium text-muted-foreground text-right w-[100px]">
                   Actions
                 </th>
@@ -395,7 +280,7 @@ export const Accounts = () => {
             <tbody className="[&_tr:last-child]:border-0">
               {filteredAccounts.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={8} className="h-24 text-center text-muted-foreground">
+                  <td colSpan={3} className="h-24 text-center text-muted-foreground">
                     {searchQuery
                       ? 'No accounts match your search.'
                       : 'No accounts found. Add one to get started.'}
@@ -447,33 +332,7 @@ export const Accounts = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="p-4 align-middle text-nowrap text-muted-foreground text-xs">
-                      {account.lastActive ? new Date(account.lastActive).toLocaleString() : 'Never'}
-                    </td>
-                    <td className="p-4 align-middle text-nowrap">
-                      {account.totalRequests && account.totalRequests > 0
-                        ? `${(((account.successfulRequests || 0) / account.totalRequests) * 100).toFixed(1)}%`
-                        : 'N/A'}
-                    </td>
-                    <td className="p-4 align-middle text-nowrap">
-                      {account.totalRequests && account.totalRequests > 0
-                        ? `${((account.totalDuration || 0) / account.totalRequests).toFixed(0)}ms`
-                        : 'N/A'}
-                    </td>
-                    <td className="p-4 align-middle font-mono text-nowrap">
-                      {(account.tokensToday || 0).toLocaleString()}
-                    </td>
-                    <td className="p-4 align-middle group relative">
-                      <code
-                        className={cn(
-                          'relative rounded  font-mono text-xs break-all block cursor-pointer hover:text-primary transition-colors text-muted-foreground',
-                        )}
-                        onClick={() => copyApiUrl(account)}
-                        title={'Click to copy full URL'}
-                      >
-                        {`?email=${encodeURIComponent(account.email)}&provider=${account.provider_id.toLowerCase()}`}
-                      </code>
-                    </td>
+                    {/* Columns Removed: Last Use, Success, Avg Response, Tokens Today, API Endpoint */}
                     <td className="p-4 align-middle text-right">
                       <div className="flex justify-end gap-2">
                         <button
