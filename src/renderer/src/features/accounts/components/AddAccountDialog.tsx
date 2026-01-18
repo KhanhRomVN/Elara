@@ -56,14 +56,18 @@ export function AddAccountDialog({
   const saveToBackend = async (account: any) => {
     if (!serverPort || !account) return;
     try {
-      console.log('[AddAccountDialog] Syncing account to backend...', account);
+      // Ensure we have a UUID
+      const finalId = account.id || crypto.randomUUID();
+
+      console.log('[AddAccountDialog] Syncing account to backend...', { ...account, id: finalId });
+
       const res = await fetch(`http://localhost:${serverPort}/v1/accounts`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          id: account.id,
+          id: finalId,
           provider_id: account.provider_id,
           email: account.email,
           credential: account.credential,
@@ -73,9 +77,6 @@ export function AddAccountDialog({
       console.log('[AddAccountDialog] Backend sync result:', data);
     } catch (e) {
       console.error('[AddAccountDialog] Failed to sync to backend:', e);
-      // We don't block success here, as local JSON file was updated via IPC.
-      // User might need to refresh or we rely on IPC 'get' if we reverted, but we are using API.
-      // If sync fails, it won't show in table. Error should probably be shown or logged.
     }
   };
 

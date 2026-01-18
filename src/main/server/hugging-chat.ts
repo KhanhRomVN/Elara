@@ -190,8 +190,8 @@ export const login = (): Promise<{ cookies: string; email?: string }> => {
 
       let email = capturedLoginEmail || 'huggingchat@user.com';
 
-      if (capturedUserInfo) {
-        email = capturedUserInfo.email || email;
+      if (capturedUserInfo && capturedUserInfo.email) {
+        email = capturedUserInfo.email;
       }
 
       cleanup();
@@ -206,29 +206,27 @@ export const login = (): Promise<{ cookies: string; email?: string }> => {
       if (capturedCookies && capturedUserInfo) {
         console.log('[HuggingChat] All critical data captured! Finalizing...');
         if (finishTimer) clearTimeout(finishTimer);
+        // Wait a tiny bit to ensure events are processed
         finishTimer = setTimeout(finalize, 2000);
       }
     };
 
-    const attemptVerifyCookies = async (cookies: string) => {
-      console.log('[HuggingChat] verifying captured cookies...');
-      // Skip profile fetch, just assume success if cookies are present
-      capturedUserInfo = { email: 'huggingchat@user.com' };
-      checkForCompletion();
-    };
-
     const onCookies = (cookies: string) => {
-      // Avoid spamming verification
       const isNew = !capturedCookies;
       capturedCookies = cookies;
 
-      if (isNew || !capturedUserInfo) {
-        // Debounce slightly to avoid verifying every single request's cookie update
-        // But for now direct call is fine as getProfile is lightweight enough (1 req)
-        attemptVerifyCookies(cookies);
+      if (isNew) {
+        // If we have cookies, wait a bit for user info to arrive from proxy
+        // If it doesn't arrive in time, we might still proceed, but let's give it a chance
+        console.log('[HuggingChat] Cookies captured, waiting for user info...');
+        // Set a "fallback" timer to finish if we never get user info
+        if (!finishTimer) {
+          finishTimer = setTimeout(() => {
+            console.log('[HuggingChat] User info timeout, finalizing with what we have...');
+            finalize();
+          }, 10000);
+        }
       }
-
-      checkForCompletion();
     };
 
     const onUserInfo = (userInfo: any) => {
@@ -240,7 +238,6 @@ export const login = (): Promise<{ cookies: string; email?: string }> => {
     const onLoginData = (email: string) => {
       console.log('[HuggingChat] Login email captured:', email);
       capturedLoginEmail = email;
-      // Note: we don't trigger completion here, we still need cookies/user info validation
     };
 
     proxyEvents.on('hugging-chat-cookies', onCookies);

@@ -913,7 +913,7 @@ export const login = (options?: {
 
       if (finishTimer) clearTimeout(finishTimer);
       // Wait a bit to capture user info if possible
-      finishTimer = setTimeout(finalize, 3000);
+      finishTimer = setTimeout(finalize, 5000);
     };
 
     const onUserInfo = (info: any) => {

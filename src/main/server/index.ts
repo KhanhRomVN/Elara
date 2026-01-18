@@ -12,6 +12,7 @@ import path from 'path';
 import { initDatabase } from '@backend/services/db';
 import { errorHandler } from './middleware/error-handler';
 import { requestLogger } from './middleware/logger';
+import logger from './utils/logger';
 
 export interface ServerStartResult {
   success: boolean;
@@ -63,9 +64,9 @@ export const startServer = async (retryCount = 0, maxRetries = 10): Promise<Serv
         dbPath = path.resolve(process.cwd(), 'backend', 'database.sqlite');
       }
       initDatabase(dbPath);
-      console.log(`[Server] Database initialized successfully at ${dbPath}`);
+      logger.info(`[Server] Database initialized successfully at ${dbPath}`);
     } catch (err) {
-      console.error('[Server] Failed to initialize database:', err);
+      logger.error('[Server] Failed to initialize database:', err);
       return { success: false, error: 'Database initialization failed' };
     }
   }
@@ -97,9 +98,9 @@ export const startServer = async (retryCount = 0, maxRetries = 10): Promise<Serv
 
         server.listen(port, host, () => {
           if (retryCount > 0) {
-            console.log(`[Server] Port ${config.port} was in use, using port ${port} instead`);
+            logger.info(`[Server] Port ${config.port} was in use, using port ${port} instead`);
           }
-          console.log(
+          logger.info(
             `[Server] Server running on ${host}:${port} (${config.tls.enable ? 'HTTPS' : 'HTTP'})`,
           );
           resolve({ success: true, port, https: config.tls.enable });
@@ -110,28 +111,28 @@ export const startServer = async (retryCount = 0, maxRetries = 10): Promise<Serv
             server = null;
 
             if (retryCount < maxRetries) {
-              console.log(`[Server] Port ${port} is already in use, trying port ${port + 1}...`);
+              logger.info(`[Server] Port ${port} is already in use, trying port ${port + 1}...`);
               const result = await startServer(retryCount + 1, maxRetries);
               resolve(result);
             } else {
-              console.error(`[Server] Could not find available port after ${maxRetries} attempts`);
+              logger.error(`[Server] Could not find available port after ${maxRetries} attempts`);
               resolve({
                 success: false,
                 error: `All ports from ${config.port} to ${port} are in use`,
               });
             }
           } else {
-            console.error('[Server] Start Error:', e);
+            logger.error('[Server] Start Error:', e);
             resolve({ success: false, error: e.message });
           }
         });
       } catch (error: any) {
-        console.error('[Server] Failed to start:', error);
+        logger.error('[Server] Failed to start:', error);
         resolve({ success: false, error: error.message });
       }
     });
   } catch (error: any) {
-    console.error('[Server] Configuration error:', error);
+    logger.error('[Server] Configuration error:', error);
     return { success: false, error: error.message };
   }
 };

@@ -297,3 +297,65 @@ export const getAccounts = async (
     });
   }
 };
+
+export const deleteAccount = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      res.status(400).json({
+        success: false,
+        message: 'Account ID is required',
+        error: { code: 'INVALID_INPUT' },
+        meta: { timestamp: new Date().toISOString() },
+      });
+      return;
+    }
+
+    const db = getDb();
+
+    // Check if account exists
+    const account = db.prepare('SELECT id FROM accounts WHERE id = ?').get(id);
+
+    if (!account) {
+      res.status(404).json({
+        success: false,
+        message: 'Account not found',
+        error: { code: 'NOT_FOUND' },
+        meta: { timestamp: new Date().toISOString() },
+      });
+      return;
+    }
+
+    // Delete account
+    try {
+      db.prepare('DELETE FROM accounts WHERE id = ?').run(id);
+
+      res.status(200).json({
+        success: true,
+        message: 'Account deleted successfully',
+        data: { id, action: 'deleted' },
+        meta: { timestamp: new Date().toISOString() },
+      });
+    } catch (dbError) {
+      logger.error('Error deleting account from DB', dbError);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to delete account',
+        error: { code: 'DATABASE_ERROR' },
+        meta: { timestamp: new Date().toISOString() },
+      });
+    }
+  } catch (error) {
+    logger.error('Error in deleteAccount', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: { code: 'INTERNAL_ERROR' },
+      meta: { timestamp: new Date().toISOString() },
+    });
+  }
+};

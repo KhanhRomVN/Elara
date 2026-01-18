@@ -1,5 +1,10 @@
 import { Router } from 'express';
-import { addAccount, getAccounts, importAccounts } from '@backend/controllers/account.controller';
+import {
+  addAccount,
+  getAccounts,
+  importAccounts,
+  deleteAccount,
+} from '@backend/controllers/account.controller';
 
 const router = Router();
 
@@ -11,5 +16,8 @@ router.get('/', (req, res) => getAccounts(req as any, res as any));
 
 // POST /v1/accounts (Create or Update)
 router.post('/', (req, res) => addAccount(req as any, res as any));
+
+// DELETE /v1/accounts/:id
+router.delete('/:id', (req, res) => deleteAccount(req as any, res as any));
 
 export default router;

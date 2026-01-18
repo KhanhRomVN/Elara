@@ -12,7 +12,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { AddAccountDialog } from './components/AddAccountDialog';
-import { AccountAvatar } from './components/AccountAvatar';
+// import { AccountAvatar } from './components/AccountAvatar';
 import { providers } from '../../config/providers';
 
 interface Account {
@@ -38,7 +38,7 @@ export const Accounts = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const [filterProvider, setFilterProvider] = useState<string>('all');
+  const [filterProvider] = useState<string>('all');
 
   const [pagination, setPagination] = useState<Pagination>({
     total: 0,
@@ -121,11 +121,28 @@ export const Accounts = () => {
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to remove this account?')) return;
     try {
-      // @ts-ignore
-      await window.api.accounts.delete(id);
-      fetchAccounts(pagination.page, pagination.limit);
+      if (serverPort) {
+        // Use API
+        const response = await fetch(`http://localhost:${serverPort}/v1/accounts/${id}`, {
+          method: 'DELETE',
+        });
+        const result = await response.json();
+
+        if (result.success) {
+          fetchAccounts(pagination.page, pagination.limit);
+        } else {
+          console.error('Failed to delete:', result.message);
+          alert('Failed to delete account: ' + result.message);
+        }
+      } else {
+        // Fallback or error if server not connected (should not happen if we listed accounts)
+        // @ts-ignore
+        await window.api.accounts.delete(id);
+        fetchAccounts(pagination.page, pagination.limit);
+      }
     } catch (error) {
       console.error('Failed to delete:', error);
+      alert('Failed to delete account');
     }
   };
 

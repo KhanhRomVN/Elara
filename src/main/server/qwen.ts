@@ -75,95 +75,134 @@ export async function login() {
     chromeProcess.stderr.on('data', (data) => console.error(`[Qwen Chrome Err]: ${data}`));
   }
 
-  return new Promise<{ cookies: string; headers: Record<string, string> }>((resolve, reject) => {
-    let resolved = false;
-    let capturedCookies = '';
-    let capturedHeaders: Record<string, string> = {};
+  return new Promise<{ cookies: string; headers: Record<string, string>; email?: string }>(
+    (resolve, reject) => {
+      let resolved = false;
+      let capturedCookies = '';
+      let capturedHeaders: Record<string, string> = {};
 
-    const cleanup = () => {
-      if (!resolved) {
-        resolved = true;
-        chromeProcess.kill();
-        stopProxy();
-        proxyEvents.off('qwen-cookies', onCookies);
-        proxyEvents.off('qwen-headers', onHeaders);
-      }
-    };
-
-    let cookiesFoundTime = 0;
-
-    // ...
-
-    const checkResolved = () => {
-      if (capturedCookies) {
-        if (!cookiesFoundTime) cookiesFoundTime = Date.now();
-
-        // Wait for bx-ua if we don't have it yet, unless it's been too long (30s)
-        const hasBxUa = capturedHeaders['bx-ua'];
-        const timeElapsed = Date.now() - cookiesFoundTime;
-
-        if (hasBxUa || timeElapsed > 30000) {
-          if (!hasBxUa)
-            console.warn(
-              '[Qwen] Warning: Timed out waiting for bx-ua header. Bot detection might be triggered.',
-            );
-          else console.log('[Qwen] Anti-Bot headers captured successfully.');
-
-          // Try to extract x-csrf-token from cookies if missing from headers
-          if (!capturedHeaders['x-csrf-token']) {
-            const csrfMatch = capturedCookies.match(/csrfToken=([^;]+)/);
-            if (csrfMatch) {
-              console.log('[Qwen] Extracted x-csrf-token from cookies');
-              capturedHeaders['x-csrf-token'] = csrfMatch[1];
-            } else {
-              console.warn('[Qwen] Warning: Could not find x-csrf-token in headers or cookies');
-              console.log('[Qwen] Full Cookies:', capturedCookies); // Debug to see what we have
-            }
-          }
-
-          // Delay slightly to ensure persistence
-          setTimeout(() => {
-            cleanup();
-            resolve({ cookies: capturedCookies, headers: capturedHeaders });
-          }, 1000);
-        } else {
-          console.log(
-            `[Qwen] Waiting for Anti-Bot headers... (${Math.round(timeElapsed / 1000)}s)`,
-          );
+      const cleanup = () => {
+        if (!resolved) {
+          resolved = true;
+          chromeProcess.kill();
+          stopProxy();
+          proxyEvents.off('qwen-cookies', onCookies);
+          proxyEvents.off('qwen-headers', onHeaders);
         }
-      }
-    };
+      };
 
-    const onCookies = (cookies: string) => {
-      console.log('[Qwen] Cookies captured!');
-      capturedCookies = cookies;
-      checkResolved();
-    };
+      let cookiesFoundTime = 0;
 
-    const onHeaders = (headers: Record<string, string>) => {
-      console.log('[Qwen] Headers captured:', Object.keys(headers));
-      capturedHeaders = { ...capturedHeaders, ...headers };
-      // If we got bx-ua, check if we can resolve
-      if (headers['bx-ua'] && capturedCookies) {
-        checkResolved();
-      }
-    };
+      // ...
 
-    proxyEvents.on('qwen-cookies', onCookies);
-    proxyEvents.on('qwen-headers', onHeaders);
-
-    chromeProcess.on('close', (code) => {
-      if (!resolved) {
+      const checkResolved = () => {
         if (capturedCookies) {
-          checkResolved();
-        } else {
-          console.log('[Qwen] Chrome closed with code:', code);
-          cleanup();
-          reject(new Error('Chrome user closed the window before login completed'));
+          if (!cookiesFoundTime) cookiesFoundTime = Date.now();
+
+          // Wait for bx-ua if we don't have it yet, unless it's been too long (30s)
+          const hasBxUa = capturedHeaders['bx-ua'];
+          const timeElapsed = Date.now() - cookiesFoundTime;
+
+          if (hasBxUa || timeElapsed > 30000) {
+            if (!hasBxUa)
+              console.warn(
+                '[Qwen] Warning: Timed out waiting for bx-ua header. Bot detection might be triggered.',
+              );
+            else console.log('[Qwen] Anti-Bot headers captured successfully.');
+
+            // Try to extract x-csrf-token from cookies if missing from headers
+            if (!capturedHeaders['x-csrf-token']) {
+              const csrfMatch = capturedCookies.match(/csrfToken=([^;]+)/);
+              if (csrfMatch) {
+                console.log('[Qwen] Extracted x-csrf-token from cookies');
+                capturedHeaders['x-csrf-token'] = csrfMatch[1];
+              } else {
+                console.warn('[Qwen] Warning: Could not find x-csrf-token in headers or cookies');
+              }
+            }
+
+            // Fetch Profile
+            const fetchProfile = () => {
+              const req = net.request({
+                method: 'GET',
+                url: 'https://chat.qwen.ai/api/v1/account', // Hypothesized endpoint from general knowledge of Qwen/Other providers, or use /api/v2/chk_login
+                partition: 'persist:qwen',
+              });
+              req.setHeader('Cookie', capturedCookies);
+              req.setHeader(
+                'User-Agent',
+                capturedHeaders['User-Agent'] ||
+                  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
+              );
+
+              req.on('response', (res) => {
+                let data = '';
+                res.on('data', (chunk) => (data += chunk.toString()));
+                res.on('end', () => {
+                  let email = 'qwen@user.com';
+                  try {
+                    // Try to parse user info
+                    const json = JSON.parse(data);
+                    if (json.data && json.data.email) {
+                      email = json.data.email;
+                    }
+                  } catch (e) {}
+
+                  setTimeout(() => {
+                    cleanup();
+                    resolve({ cookies: capturedCookies, headers: capturedHeaders, email }); // Need to update return type of promise
+                  }, 500);
+                });
+              });
+              req.on('error', () => {
+                setTimeout(() => {
+                  cleanup();
+                  resolve({ cookies: capturedCookies, headers: capturedHeaders });
+                }, 500);
+              });
+              req.end();
+            };
+
+            fetchProfile();
+          } else {
+            console.log(
+              `[Qwen] Waiting for Anti-Bot headers... (${Math.round(timeElapsed / 1000)}s)`,
+            );
+          }
         }
-      }
-    });
-  });
+      };
+
+      const onCookies = (cookies: string) => {
+        console.log('[Qwen] Cookies captured!');
+        capturedCookies = cookies;
+        checkResolved();
+      };
+
+      const onHeaders = (headers: Record<string, string>) => {
+        console.log('[Qwen] Headers captured:', Object.keys(headers));
+        capturedHeaders = { ...capturedHeaders, ...headers };
+        // If we got bx-ua, check if we can resolve
+        if (headers['bx-ua'] && capturedCookies) {
+          checkResolved();
+        }
+      };
+
+      proxyEvents.on('qwen-cookies', onCookies);
+      proxyEvents.on('qwen-headers', onHeaders);
+
+      chromeProcess.on('close', (code) => {
+        if (!resolved) {
+          if (capturedCookies) {
+            checkResolved();
+          } else {
+            console.log('[Qwen] Chrome closed with code:', code);
+            cleanup();
+            reject(new Error('Chrome user closed the window before login completed'));
+          }
+        }
+      });
+    },
+  );
 }
 
 // Helper to create a new chat
