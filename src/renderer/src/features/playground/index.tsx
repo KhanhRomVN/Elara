@@ -301,6 +301,7 @@ export const PlaygroundPage = ({
             onRemoveAttachment={handleRemoveAttachment}
             streamEnabled={streamEnabled}
             setStreamEnabled={setStreamEnabled}
+            supportsSearch={localProvidersConfig.find((p) => p.id === selectedProvider)?.is_search}
           />
         ) : (
           <>
@@ -337,6 +338,9 @@ export const PlaygroundPage = ({
               onRemoveAttachment={handleRemoveAttachment}
               streamEnabled={streamEnabled}
               setStreamEnabled={setStreamEnabled}
+              supportsSearch={
+                localProvidersConfig.find((p) => p.id === selectedProvider)?.is_search
+              }
             />
           </>
         )}

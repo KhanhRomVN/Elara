@@ -27,6 +27,7 @@ interface InputAreaProps {
   onRemoveAttachment?: (index: number) => void;
   streamEnabled?: boolean;
   setStreamEnabled?: (enabled: boolean) => void;
+  supportsSearch?: boolean;
 }
 
 export const InputArea = ({
@@ -52,6 +53,7 @@ export const InputArea = ({
   onRemoveAttachment,
   streamEnabled,
   setStreamEnabled,
+  supportsSearch,
 }: InputAreaProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -266,7 +268,7 @@ export const InputArea = ({
                 </button>
               )}
 
-              {selectedProvider === 'DeepSeek' && (
+              {supportsSearch && (
                 <button
                   onClick={() => setSearchEnabled?.(!searchEnabled)}
                   className={cn(

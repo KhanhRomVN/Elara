@@ -23,6 +23,7 @@ export interface ProviderConfig {
   authMethod: 'Basic' | 'OAuth';
   active: boolean;
   website?: string;
+  is_search?: boolean;
 }
 
 export const providers: ProviderConfig[] = [
@@ -37,6 +38,7 @@ export const providers: ProviderConfig[] = [
     authMethod: 'Basic',
     active: true,
     website: 'https://anthropic.com',
+    is_search: false,
   },
   {
     id: 'DeepSeek',
@@ -49,6 +51,7 @@ export const providers: ProviderConfig[] = [
     authMethod: 'Basic',
     active: true,
     website: 'https://deepseek.com',
+    is_search: true,
   },
   {
     id: 'Mistral',
@@ -61,6 +64,7 @@ export const providers: ProviderConfig[] = [
     authMethod: 'Basic',
     active: true,
     website: 'https://mistral.ai/',
+    is_search: false,
   },
   {
     id: 'Kimi',
@@ -73,6 +77,7 @@ export const providers: ProviderConfig[] = [
     authMethod: 'Basic',
     active: false,
     website: 'https://www.kimi.com/',
+    is_search: false,
   },
   {
     id: 'Qwen',
@@ -85,6 +90,7 @@ export const providers: ProviderConfig[] = [
     authMethod: 'Basic',
     active: true,
     website: 'https://qwenlm.ai/',
+    is_search: false,
   },
   {
     id: 'Cohere',
@@ -97,6 +103,7 @@ export const providers: ProviderConfig[] = [
     authMethod: 'Basic',
     active: true,
     website: 'https://cohere.com',
+    is_search: false,
   },
   {
     id: 'Perplexity',
@@ -109,6 +116,7 @@ export const providers: ProviderConfig[] = [
     authMethod: 'Basic',
     active: true,
     website: 'https://www.perplexity.ai/',
+    is_search: false,
   },
   {
     id: 'Groq',
@@ -121,6 +129,7 @@ export const providers: ProviderConfig[] = [
     authMethod: 'Basic',
     active: true,
     website: 'https://groq.com',
+    is_search: false,
   },
   {
     id: 'Gemini',
@@ -133,6 +142,7 @@ export const providers: ProviderConfig[] = [
     authMethod: 'OAuth',
     active: true,
     website: 'https://ai.google.dev',
+    is_search: false,
   },
   {
     id: 'Antigravity',
@@ -145,6 +155,7 @@ export const providers: ProviderConfig[] = [
     authMethod: 'OAuth',
     active: true,
     website: 'https://deepmind.google/',
+    is_search: false,
   },
   {
     id: 'HuggingChat',
@@ -157,6 +168,7 @@ export const providers: ProviderConfig[] = [
     authMethod: 'Basic',
     active: true,
     website: 'https://huggingface.co/chat/',
+    is_search: false,
   },
   {
     id: 'LMArena',
@@ -169,6 +181,7 @@ export const providers: ProviderConfig[] = [
     authMethod: 'Basic',
     active: false,
     website: 'https://lmarena.ai/',
+    is_search: false,
   },
   {
     id: 'StepFun',
@@ -181,5 +194,6 @@ export const providers: ProviderConfig[] = [
     authMethod: 'Basic',
     active: false,
     website: 'https://stepfun.ai/',
+    is_search: false,
   },
 ];

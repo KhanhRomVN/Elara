@@ -21,6 +21,7 @@ interface WelcomeScreenProps {
   onRemoveAttachment?: (index: number) => void;
   streamEnabled?: boolean;
   setStreamEnabled?: (enabled: boolean) => void;
+  supportsSearch?: boolean;
 }
 
 export const WelcomeScreen = ({
@@ -42,6 +43,7 @@ export const WelcomeScreen = ({
   onRemoveAttachment,
   streamEnabled,
   setStreamEnabled,
+  supportsSearch,
 }: WelcomeScreenProps) => {
   return (
     <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-6 animate-in fade-in zoom-in-95 duration-500">
@@ -75,6 +77,7 @@ export const WelcomeScreen = ({
           onRemoveAttachment={onRemoveAttachment}
           streamEnabled={streamEnabled}
           setStreamEnabled={setStreamEnabled}
+          supportsSearch={supportsSearch}
         />
       </div>
     </div>

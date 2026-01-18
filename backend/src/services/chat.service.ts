@@ -29,6 +29,7 @@ export interface SendMessageOptions {
   model: string;
   messages: any[];
   conversationId?: string;
+  search?: boolean;
   userAgent?: string;
   onContent: (chunk: string) => void;
   onMetadata?: (meta: any) => void;

@@ -7,13 +7,14 @@ export interface Provider {
   id: string;
   name: string;
   is_enabled: boolean;
+  is_search?: boolean;
 }
 
 const PROVIDERS_URL =
   'https://raw.githubusercontent.com/KhanhRomVN/Elara/main/provider.json';
 
 // Cache for remote provider config
-// Structure: [ { provider_id: string, provider_name: string, is_enabled: boolean } ]
+// Structure: [ { provider_id: string, provider_name: string, is_enabled: boolean, is_search?: boolean } ]
 let cachedConfig: any[] | null = null;
 let cacheTime = 0;
 const CACHE_DURATION = 1000 * 60 * 60; // 1 hour
@@ -56,6 +57,7 @@ export const getAllProviders = async (): Promise<Provider[]> => {
     id: c.provider_id,
     name: c.provider_name,
     is_enabled: c.is_enabled,
+    is_search: c.is_search,
   }));
 };
 

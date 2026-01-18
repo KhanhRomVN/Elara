@@ -21,6 +21,27 @@ import { AntigravityAuthServer } from '../server/antigravity';
 import * as StepFunModule from '../server/stepfun';
 import * as DeepSeekModule from '../server/deepseek';
 
+const PROVIDER_URL = 'https://raw.githubusercontent.com/KhanhRomVN/Elara/main/provider.json';
+let cachedProviderIds: string[] = [];
+
+const updateProviderCache = async () => {
+  try {
+    const response = await fetch(PROVIDER_URL);
+    if (response.ok) {
+      const data: any[] = await response.json();
+      if (Array.isArray(data)) {
+        cachedProviderIds = data.map((p) => p.id.toLowerCase());
+        console.log('[Accounts] Fetched valid provider IDs:', cachedProviderIds);
+      }
+    }
+  } catch (error) {
+    console.error('[Accounts] Failed to fetch provider list:', error);
+  }
+};
+
+updateProviderCache();
+setInterval(updateProviderCache, 1000 * 60 * 60); // Refresh every hour
+
 const DATA_FILE = path.join(app.getPath('userData'), 'accounts.json');
 
 // Ensure data file exists
@@ -393,7 +414,7 @@ export const setupAccountsHandlers = () => {
 
             const newAccount: Account = {
               id: crypto.randomUUID(),
-              provider_id: 'DeepSeek',
+              provider_id: 'deepseek',
               email: email || 'deepseek@user.com',
               credential: cookies,
             };
@@ -412,6 +433,14 @@ export const setupAccountsHandlers = () => {
   // Helper to append account
   const saveAccount = (account: Account) => {
     try {
+      account.provider_id = account.provider_id.toLowerCase();
+
+      if (cachedProviderIds.length > 0 && !cachedProviderIds.includes(account.provider_id)) {
+        console.warn(
+          `[Accounts] Warning: Saving account with unknown provider_id: ${account.provider_id}`,
+        );
+      }
+
       let accounts: Account[] = [];
       if (fs.existsSync(DATA_FILE)) {
         accounts = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));

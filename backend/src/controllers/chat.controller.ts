@@ -140,6 +140,8 @@ export const getAccountConversationDetail = async (
   }
 };
 
+import { getAllProviders } from '../services/provider.service';
+
 // POST /v1/accounts/:accountId/messages
 export const sendMessageController = async (
   req: Request,
@@ -147,7 +149,9 @@ export const sendMessageController = async (
 ): Promise<void> => {
   try {
     const { accountId } = req.params;
-    const { model, messages, conversationId, stream } = req.body;
+    const { model, messages, conversationId, stream, is_search, search } =
+      req.body;
+    const useSearch = is_search === true || search === true;
 
     // Get account from database (synchronous)
     const db = getDb();
@@ -158,6 +162,21 @@ export const sendMessageController = async (
     if (!account) {
       res.status(404).json({ error: 'Account not found' });
       return;
+    }
+
+    // Validate search capability
+    if (useSearch) {
+      const providers = await getAllProviders();
+      const providerConfig = providers.find(
+        (p) => p.id.toLowerCase() === account.provider_id.toLowerCase(),
+      );
+
+      if (!providerConfig?.is_search) {
+        res.status(400).json({
+          error: `Provider ${account.provider_id} does not support search`,
+        });
+        return;
+      }
     }
 
     // Set up SSE headers if streaming (default true)
@@ -179,6 +198,7 @@ export const sendMessageController = async (
         model,
         messages,
         conversationId,
+        search: useSearch,
         userAgent: req.headers['user-agent'],
         onContent: (content) => {
           if (stream !== false) {

@@ -1,6 +1,7 @@
 import { HttpClient } from '../../utils/http-client';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 
 // PoW Types
 interface PoWChallenge {
@@ -133,7 +134,10 @@ let dsHash: DeepSeekHash | null = null;
 // Solves the PoW challenge using WASM
 async function solvePoW(challenge: PoWChallenge): Promise<PoWResponse> {
   if (!dsHash) {
-    const wasmPath = path.resolve(__dirname, '../../utils/sha3_wasm_bg.wasm');
+    const wasmPath = path.resolve(
+      __dirname,
+      '../../utils/sha3_wasm_bg.7b9ca65ddd.wasm',
+    );
     dsHash = new DeepSeekHash(wasmPath);
     await dsHash.init();
   }
@@ -354,6 +358,11 @@ export async function chatCompletionStream(
       );
     }
 
+    // Generate client_stream_id
+    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const randomPart = crypto.randomBytes(8).toString('hex');
+    const clientStreamId = `${date}-${randomPart}`;
+
     const requestPayload: any = {
       chat_session_id: sessionId,
       parent_message_id: parentMessageId || null,
@@ -362,6 +371,7 @@ export async function chatCompletionStream(
       thinking_enabled:
         payload.model === 'deepseek-reasoner' || payload.thinking === true,
       search_enabled: payload.search || false,
+      client_stream_id: clientStreamId,
     };
 
     // 3. Send Completion Request with PoW Header

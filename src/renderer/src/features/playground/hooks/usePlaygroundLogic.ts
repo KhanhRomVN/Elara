@@ -525,7 +525,8 @@ export const usePlaygroundLogic = ({
       const account = accounts.find((acc) => acc.id === selectedAccount);
       if (!account) throw new Error('Account not found');
 
-      const url = `http://localhost:${port}/v1/chat/completions?email=${encodeURIComponent(account.email)}&provider=${account.provider_id.toLowerCase()}`;
+      // Use new unified endpoint
+      const url = `http://localhost:${port}/v1/chat/accounts/${account.id}/messages`;
 
       const controller = new AbortController();
       setAbortController(controller);
@@ -541,75 +542,41 @@ export const usePlaygroundLogic = ({
         return cached && cached.length > 0 ? cached[0].id : '';
       };
 
+      // Determine model based on provider
+      const getModelForProvider = () => {
+        const pid = account.provider_id.toLowerCase();
+        switch (pid) {
+          case 'claude':
+            return claudeModel;
+          case 'deepseek':
+            return deepseekModel;
+          case 'groq':
+            return groqModel;
+          case 'antigravity':
+            return antigravityModel;
+          case 'gemini':
+            return geminiModel;
+          case 'huggingchat':
+            return huggingChatModel;
+          case 'lmarena':
+            return groqModel;
+          default:
+            return getProviderModel(account.provider_id);
+        }
+      };
+
       const response = await fetch(url, {
         signal: controller.signal,
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model:
-            account.provider_id === 'Claude'
-              ? claudeModel
-              : account.provider_id === 'Mistral'
-                ? getProviderModel('Mistral')
-                : account.provider_id === 'Kimi'
-                  ? getProviderModel('Kimi')
-                  : account.provider_id === 'Qwen'
-                    ? getProviderModel('Qwen')
-                    : account.provider_id === 'Cohere'
-                      ? getProviderModel('Cohere')
-                      : account.provider_id === 'Groq'
-                        ? groqModel
-                        : account.provider_id === 'Antigravity'
-                          ? antigravityModel
-                          : account.provider_id === 'Gemini'
-                            ? geminiModel
-                            : account.provider_id === 'HuggingChat'
-                              ? huggingChatModel
-                              : account.provider_id === 'LMArena'
-                                ? groqModel
-                                : deepseekModel,
+          model: getModelForProvider(),
           messages: [
             ...messages.map((m) => ({ role: m.role, content: m.content })),
             { role: 'user', content: currentInput },
           ],
+          conversationId: activeChatId && activeChatId !== 'new-session' ? activeChatId : '',
           stream: streamEnabled,
-          thinking:
-            account.provider_id === 'DeepSeek'
-              ? deepseekModel === 'deepseek-reasoner' || thinkingEnabled
-              : undefined,
-          search: account.provider_id === 'DeepSeek' ? searchEnabled : undefined,
-          ref_file_ids: uploadedFileIds.length > 0 ? uploadedFileIds : undefined,
-          conversation_id: activeChatId !== 'new-session' ? activeChatId : undefined,
-          parent_message_id:
-            account.provider_id === 'DeepSeek'
-              ? [...messages].reverse().find((m) => m.role === 'assistant')?.deepseek_message_id
-              : account.provider_id === 'Claude'
-                ? [...messages].reverse().find((m) => m.role === 'assistant')?.claude_message_uuid
-                : messages.length > 0
-                  ? messages[messages.length - 1].id
-                  : undefined,
-          ...(account.provider_id === 'Groq'
-            ? {
-                temperature: groqSettings.temperature,
-                max_completion_tokens: groqSettings.maxTokens,
-                reasoning_effort:
-                  groqSettings.reasoning === 'none' ? undefined : groqSettings.reasoning,
-                response_format: groqSettings.jsonMode ? { type: 'json_object' } : undefined,
-                tools: [
-                  ...(groqSettings.tools.browserSearch ? [{ type: 'browser_search' }] : []),
-                  ...(groqSettings.tools.codeInterpreter ? [{ type: 'code_interpreter' }] : []),
-                  ...groqSettings.customFunctions.map((f) => ({
-                    type: 'function',
-                    function: {
-                      name: f.name,
-                      description: f.description,
-                      parameters: f.parameters ? JSON.parse(f.parameters) : {},
-                    },
-                  })),
-                ],
-                stream: streamEnabled,
-              }
-            : {}),
         }),
       });
 
@@ -625,64 +592,94 @@ export const usePlaygroundLogic = ({
 
       setMessages((prev) => [...prev, assistantMessage]);
       setLoading(false);
-      setIsStreaming(true);
 
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      if (!reader) throw new Error('No response body');
+      if (streamEnabled) {
+        // Handle streaming response
+        setIsStreaming(true);
 
-      const streamHandler = getStreamHandler(account.provider_id as any);
-      let currentSessionId = activeChatId;
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        if (!reader) throw new Error('No response body');
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
 
-        for (const line of lines) {
-          if (line.startsWith('data: ') || line.startsWith('event: ')) {
-            const data = line.startsWith('data: ') ? line.slice(6) : line;
-            if (data === '[DONE]') continue;
-            streamHandler.processLine(
-              data,
-              assistantMessageId,
-              setMessages,
-              (usage) => setAccumulatedUsage((prev) => prev + usage),
-              (sessionId) => {
-                setActiveChatId(sessionId);
-                currentSessionId = sessionId;
-              },
-              (title) => setConversationTitle(title),
-            );
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6).trim();
+              if (data === '[DONE]') continue;
+
+              try {
+                const parsed = JSON.parse(data);
+
+                // Handle content chunk: { content: "..." }
+                if (parsed.content) {
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === assistantMessageId
+                        ? { ...m, content: m.content + parsed.content }
+                        : m,
+                    ),
+                  );
+                }
+
+                // Handle metadata: { meta: { conversation_id, conversation_title } }
+                if (parsed.meta) {
+                  if (parsed.meta.conversation_id) {
+                    setActiveChatId(parsed.meta.conversation_id);
+                  }
+                  if (parsed.meta.conversation_title) {
+                    setConversationTitle(parsed.meta.conversation_title);
+                  }
+                }
+              } catch (e) {
+                // Ignore parse errors
+              }
+            }
+          }
+        }
+        setIsStreaming(false);
+      } else {
+        // Handle non-streaming response
+        const result = await response.json();
+        if (result.success && result.message) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMessageId ? { ...m, content: result.message.content } : m,
+            ),
+          );
+        }
+        if (result.metadata) {
+          if (result.metadata.conversation_id) {
+            setActiveChatId(result.metadata.conversation_id);
+          }
+          if (result.metadata.conversation_title) {
+            setConversationTitle(result.metadata.conversation_title);
           }
         }
       }
-      setIsStreaming(false);
 
+      // Fetch updated title if still "New Chat"
       if (
         !conversationTitle ||
         conversationTitle === 'New Chat' ||
         conversationTitle === 'Untitled'
       ) {
         try {
-          // Use new unified endpoint with accountId
           const endpoint = getHistoryEndpoint(account.provider_id, port || 11434, account.id);
           const historyRes = await fetch(`${endpoint}?page=1&limit=30`);
           if (historyRes.ok) {
-            const result = await historyRes.json();
-            const conversations = result.data?.conversations || result;
+            const resultData = await historyRes.json();
+            const conversations = resultData.data?.conversations || resultData;
             const historyList = parseConversationList(account.provider_id, conversations);
-            let targetChat = currentSessionId
-              ? historyList.find((c) => c.id === currentSessionId)
-              : null;
-            if (
-              !targetChat &&
-              (!activeChatId || activeChatId === 'new-session') &&
-              historyList.length > 0
-            ) {
+            const currentConvId = activeChatId;
+            let targetChat = currentConvId ? historyList.find((c) => c.id === currentConvId) : null;
+            if (!targetChat && historyList.length > 0) {
               targetChat = historyList[0];
             }
             if (targetChat && targetChat.title && targetChat.title !== 'New Chat') {
