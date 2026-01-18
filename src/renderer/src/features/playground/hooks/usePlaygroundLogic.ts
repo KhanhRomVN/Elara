@@ -16,6 +16,8 @@ export const usePlaygroundLogic = ({
   const [messages, setMessages] = useState<Message[]>(() => activeTab?.messages || []);
   const [input, setInput] = useState(() => activeTab?.input || '');
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [providersList, setProvidersList] = useState<any[]>([]);
+  const [streamEnabled, setStreamEnabled] = useState(true);
 
   const [selectedProvider, setSelectedProvider] = useState<
     | 'Claude'
@@ -262,11 +264,19 @@ export const usePlaygroundLogic = ({
   }, [activeTabId, onUpdateTab]);
 
   // Sync title immediately
+  const lastSyncedTitleRef = useRef<string>('');
   useEffect(() => {
-    if (onUpdateTab && activeTabId && conversationTitle) {
+    if (
+      onUpdateTab &&
+      activeTabId &&
+      conversationTitle &&
+      conversationTitle !== lastSyncedTitleRef.current
+    ) {
+      lastSyncedTitleRef.current = conversationTitle;
       onUpdateTab(activeTabId, { conversationTitle });
     }
-  }, [conversationTitle, activeTabId, onUpdateTab]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationTitle, activeTabId]);
 
   // Sync messages on done
   useEffect(() => {
@@ -275,32 +285,67 @@ export const usePlaygroundLogic = ({
     }
   }, [isStreaming, messages, tokenCount, accumulatedUsage, activeTabId, onUpdateTab]);
 
-  // Fetch Accounts
+  // Fetch Providers
   useEffect(() => {
-    const fetchAccounts = async () => {
+    const fetchProviders = async () => {
+      try {
+        const res = await fetch(
+          'https://raw.githubusercontent.com/KhanhRomVN/Elara/main/provider.json',
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setProvidersList(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch providers:', error);
+      }
+    };
+    fetchProviders();
+  }, []);
+
+  // Fetch Accounts when provider changes
+  useEffect(() => {
+    const fetchAccountsByProvider = async () => {
+      if (!selectedProvider) {
+        setAccounts([]);
+        setSelectedAccount('');
+        return;
+      }
+
       try {
         // @ts-ignore
-        const data = await window.api.accounts.getAll();
-        setAccounts(data);
+        const status = await window.api.server.start();
+        const port = status.port || 11434;
 
-        if (data.length > 0) {
-          const deepseekAccount = data.find(
-            (acc: Account) => acc.provider_id === 'DeepSeek' && acc.status === 'Active',
-          );
-          const otherAccount = data.find((acc: Account) => acc.status === 'Active');
-          const target = deepseekAccount || otherAccount || data[0];
+        // Convert provider name to provider_id (lowercase, handle special cases)
+        let providerId = selectedProvider.toLowerCase();
+        // Handle special case: HuggingChat -> hugging-chat
+        if (providerId === 'huggingchat') {
+          providerId = 'hugging-chat';
+        }
 
-          if (target && !selectedProvider) {
-            setSelectedProvider(target.provider_id as any);
-            setSelectedAccount(target.id);
-          }
+        console.log('[Playground] Fetching accounts for provider:', providerId);
+
+        const res = await fetch(
+          `http://localhost:${port}/v1/accounts?page=1&limit=10&provider_id=${encodeURIComponent(providerId)}`,
+        );
+        if (res.ok) {
+          const data = await res.json();
+          console.log('[Playground] Accounts response:', data);
+          const accountsList = data.data?.accounts || [];
+          setAccounts(accountsList);
+          // Reset selected account when provider changes
+          setSelectedAccount('');
+        } else {
+          console.error('[Playground] Failed to fetch accounts, status:', res.status);
         }
       } catch (error) {
         console.error('Failed to fetch accounts:', error);
+        setAccounts([]);
       }
     };
-    fetchAccounts();
-  }, []); // Run once on mount
+    fetchAccountsByProvider();
+  }, [selectedProvider]);
 
   // Fetch Models using cache
   useEffect(() => {
@@ -412,11 +457,14 @@ export const usePlaygroundLogic = ({
         // @ts-ignore
         const status = await window.api.server.start();
         const port = status.port || 11434;
-        const endpoint = getHistoryEndpoint(selectedProvider, port);
-        const response = await fetch(`${endpoint}?email=${encodeURIComponent(acc.email)}`);
+        // Use new unified endpoint with accountId
+        const endpoint = getHistoryEndpoint(selectedProvider, port, acc.id);
+        const response = await fetch(`${endpoint}?page=1&limit=30`);
         if (response.ok) {
-          const data = await response.json();
-          setHistory(parseConversationList(selectedProvider, data));
+          const result = await response.json();
+          // New API returns { data: { conversations: [...] } }
+          const conversations = result.data?.conversations || result;
+          setHistory(parseConversationList(selectedProvider, conversations));
         }
       } catch (error) {
         console.error('History fetch error', error);
@@ -524,7 +572,7 @@ export const usePlaygroundLogic = ({
             ...messages.map((m) => ({ role: m.role, content: m.content })),
             { role: 'user', content: currentInput },
           ],
-          stream: true,
+          stream: streamEnabled,
           thinking:
             account.provider_id === 'DeepSeek'
               ? deepseekModel === 'deepseek-reasoner' || thinkingEnabled
@@ -559,7 +607,7 @@ export const usePlaygroundLogic = ({
                     },
                   })),
                 ],
-                stream: groqSettings.stream,
+                stream: streamEnabled,
               }
             : {}),
         }),
@@ -620,11 +668,13 @@ export const usePlaygroundLogic = ({
         conversationTitle === 'Untitled'
       ) {
         try {
-          const endpoint = getHistoryEndpoint(account.provider_id, port || 11434);
-          const historyRes = await fetch(`${endpoint}?email=${encodeURIComponent(account.email)}`);
+          // Use new unified endpoint with accountId
+          const endpoint = getHistoryEndpoint(account.provider_id, port || 11434, account.id);
+          const historyRes = await fetch(`${endpoint}?page=1&limit=30`);
           if (historyRes.ok) {
-            const historyData = await historyRes.json();
-            const historyList = parseConversationList(account.provider_id, historyData);
+            const result = await historyRes.json();
+            const conversations = result.data?.conversations || result;
+            const historyList = parseConversationList(account.provider_id, conversations);
             let targetChat = currentSessionId
               ? historyList.find((c) => c.id === currentSessionId)
               : null;
@@ -690,7 +740,8 @@ export const usePlaygroundLogic = ({
         endpoint = `http://localhost:${port}/v1/deepseek/sessions/${conversationId}/messages`;
       else endpoint = `http://localhost:${port}/v1/${provider}/conversations/${conversationId}`;
 
-      const response = await fetch(`${endpoint}?email=${encodeURIComponent(account.email)}`);
+      // Requirement: lấy lịch sử chat của conversatiion qua account_id và conversation_id
+      const response = await fetch(`${endpoint}?accountId=${encodeURIComponent(account.id)}`);
       if (response.ok) {
         const data = await response.json();
         // Title extraction logic reduced for brevity, relying on previous logic pattern
@@ -798,6 +849,9 @@ export const usePlaygroundLogic = ({
     setDeepseekModel,
     groqModels,
     groqModelsList,
+    providersList,
+    streamEnabled,
+    setStreamEnabled,
     antigravityModelsList,
     geminiModelsList,
     huggingChatModelsList,

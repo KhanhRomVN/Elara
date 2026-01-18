@@ -1,6 +1,8 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import { getAccounts } from '../../utils/account-utils';
 import { statsManager } from '../../../core/stats';
+import { getDb } from '@backend/services/db';
+import { sendMessage } from '@backend/services/chat.service';
 
 import { chatCompletionStream as deepseekChat } from '../../deepseek';
 import { chatCompletionStream as claudeChat } from '../../claude';
@@ -17,6 +19,97 @@ import { chatCompletionStream as stepFunChat } from '../../stepfun';
 import * as gemini from '../../gemini';
 
 const router = express.Router();
+
+// POST /v1/chat/accounts/:accountId/messages - Send message via unified API
+router.post('/accounts/:accountId/messages', async (req: Request, res: Response) => {
+  try {
+    const { accountId } = req.params;
+    const { model, messages, conversationId, stream } = req.body;
+
+    const db = getDb();
+    const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(accountId) as any;
+
+    if (!account) {
+      res.status(404).json({ error: 'Account not found' });
+      return;
+    }
+
+    // Set up SSE headers if streaming (default true)
+    if (stream !== false) {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      });
+    }
+
+    let accumulatedContent = '';
+    let accumulatedMetadata: any = {};
+
+    try {
+      await sendMessage({
+        credential: account.credential,
+        provider_id: account.provider_id,
+        model,
+        messages,
+        conversationId,
+        userAgent: req.headers['user-agent'],
+        onContent: (content) => {
+          if (stream !== false) {
+            res.write(`data: ${JSON.stringify({ content })}\n\n`);
+          } else {
+            accumulatedContent += content;
+          }
+        },
+        onMetadata: (meta) => {
+          if (stream !== false) {
+            res.write(`data: ${JSON.stringify({ meta })}\n\n`);
+          } else {
+            accumulatedMetadata = { ...accumulatedMetadata, ...meta };
+          }
+        },
+        onDone: () => {
+          if (stream !== false) {
+            res.write('data: [DONE]\n\n');
+            res.end();
+          } else {
+            if (!res.headersSent) {
+              res.status(200).json({
+                success: true,
+                message: {
+                  role: 'assistant',
+                  content: accumulatedContent,
+                },
+                metadata: accumulatedMetadata,
+              });
+            }
+          }
+        },
+        onError: (error) => {
+          console.error('Stream error', error);
+          if (stream !== false) {
+            res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+            res.end();
+          } else {
+            if (!res.headersSent) {
+              res.status(500).json({ error: error.message });
+            }
+          }
+        },
+      });
+    } catch (error: any) {
+      console.error('Error in sendMessage service call', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: error.message });
+      }
+    }
+  } catch (error) {
+    console.error('Error in sendMessageController', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+});
 
 router.post('/completions', async (req, res) => {
   try {

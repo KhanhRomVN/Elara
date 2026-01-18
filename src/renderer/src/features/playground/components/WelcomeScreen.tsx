@@ -19,6 +19,8 @@ interface WelcomeScreenProps {
   onFileSelect?: (files: FileList | File[] | null) => void;
   attachments?: PendingAttachment[];
   onRemoveAttachment?: (index: number) => void;
+  streamEnabled?: boolean;
+  setStreamEnabled?: (enabled: boolean) => void;
 }
 
 export const WelcomeScreen = ({
@@ -38,6 +40,8 @@ export const WelcomeScreen = ({
   onFileSelect,
   attachments,
   onRemoveAttachment,
+  streamEnabled,
+  setStreamEnabled,
 }: WelcomeScreenProps) => {
   return (
     <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-6 animate-in fade-in zoom-in-95 duration-500">
@@ -69,6 +73,8 @@ export const WelcomeScreen = ({
           onFileSelect={onFileSelect}
           attachments={attachments}
           onRemoveAttachment={onRemoveAttachment}
+          streamEnabled={streamEnabled}
+          setStreamEnabled={setStreamEnabled}
         />
       </div>
     </div>

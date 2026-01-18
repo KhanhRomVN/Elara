@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 
-import { providers } from '../../config/providers';
+import { providers as localProvidersConfig } from '../../config/providers';
 
 import { GroqModelSelector } from './components/GroqModelSelector';
 import { AntigravityModelSelector } from './components/AntigravityModelSelector';
@@ -84,6 +84,9 @@ export const PlaygroundPage = ({
     handleKeyDown,
     startNewChat,
     loadConversation,
+    providersList,
+    streamEnabled,
+    setStreamEnabled,
   } = usePlaygroundLogic({ activeTab, activeTabId, onUpdateTab });
 
   // Sidebar Resize State (UI only)
@@ -118,7 +121,7 @@ export const PlaygroundPage = ({
   }, [isResizing]);
 
   const filteredAccounts = selectedProvider
-    ? accounts.filter((acc) => acc.provider_id === selectedProvider)
+    ? accounts.filter((acc) => acc.provider_id.toLowerCase() === selectedProvider.toLowerCase())
     : [];
 
   const account = accounts.find((a) => a.id === selectedAccount);
@@ -174,9 +177,19 @@ export const PlaygroundPage = ({
                       setSelectedAccount('');
                     }
                   }}
-                  options={providers
-                    .filter((p) => p.active)
-                    .map((p) => ({ value: p.id, label: p.name, icon: p.icon }))}
+                  options={providersList.map((p) => {
+                    const localConfig = localProvidersConfig.find(
+                      (lp) =>
+                        lp.id === p.provider_name ||
+                        lp.id.toLowerCase() === p.provider_id.toLowerCase(),
+                    );
+                    return {
+                      value: p.provider_name,
+                      label: p.provider_name,
+                      icon: localConfig?.icon,
+                      disabled: !p.is_enabled,
+                    };
+                  })}
                   placeholder="Select Provider"
                 />
                 {selectedProvider && (
@@ -195,8 +208,8 @@ export const PlaygroundPage = ({
                           />
                         ),
                       }))}
-                      placeholder="Select Account"
-                      disabled={!selectedProvider}
+                      placeholder={filteredAccounts.length === 0 ? 'No account' : 'Select Account'}
+                      disabled={!selectedProvider || filteredAccounts.length === 0}
                     />
                     {selectedProvider === 'Groq' && selectedAccount && (
                       <div className="space-y-4">
@@ -286,6 +299,8 @@ export const PlaygroundPage = ({
             onFileSelect={handleFileSelect}
             attachments={attachments}
             onRemoveAttachment={handleRemoveAttachment}
+            streamEnabled={streamEnabled}
+            setStreamEnabled={setStreamEnabled}
           />
         ) : (
           <>
@@ -320,6 +335,8 @@ export const PlaygroundPage = ({
               onFileSelect={handleFileSelect}
               attachments={attachments}
               onRemoveAttachment={handleRemoveAttachment}
+              streamEnabled={streamEnabled}
+              setStreamEnabled={setStreamEnabled}
             />
           </>
         )}

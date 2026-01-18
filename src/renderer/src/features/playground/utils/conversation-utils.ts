@@ -1,7 +1,19 @@
 import { Provider } from '../types';
 
-export const getHistoryEndpoint = (provider: Provider | string, port: number | string): string => {
+// Now uses unified endpoint for all providers
+export const getHistoryEndpoint = (
+  provider: Provider | string,
+  port: number | string,
+  accountId?: string,
+): string => {
   const baseUrl = `http://localhost:${port}`;
+
+  // Use new unified endpoint if accountId is provided
+  if (accountId) {
+    return `${baseUrl}/v1/accounts/${accountId}/conversations`;
+  }
+
+  // Legacy fallback (should not be used anymore)
   switch (provider) {
     case 'Claude':
       return `${baseUrl}/v1/claude/conversations`;

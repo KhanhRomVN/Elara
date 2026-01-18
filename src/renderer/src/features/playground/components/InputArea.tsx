@@ -1,4 +1,4 @@
-import { Upload, StopCircle, ArrowUpFromDot, Globe, Loader2, X, FileText } from 'lucide-react';
+import { Upload, StopCircle, ArrowUpFromDot, Globe, Loader2, X, FileText, Zap } from 'lucide-react';
 import { ChangeEvent, KeyboardEvent, useRef, useState, ClipboardEvent, DragEvent } from 'react';
 import { PendingAttachment } from '../types';
 import { cn } from '../../../shared/lib/utils';
@@ -25,6 +25,8 @@ interface InputAreaProps {
   onFileSelect?: (files: FileList | File[] | null) => void;
   attachments?: PendingAttachment[];
   onRemoveAttachment?: (index: number) => void;
+  streamEnabled?: boolean;
+  setStreamEnabled?: (enabled: boolean) => void;
 }
 
 export const InputArea = ({
@@ -48,6 +50,8 @@ export const InputArea = ({
   onFileSelect,
   attachments,
   onRemoveAttachment,
+  streamEnabled,
+  setStreamEnabled,
 }: InputAreaProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -246,6 +250,21 @@ export const InputArea = ({
               >
                 <Upload className="h-5 w-5" />
               </button>
+
+              {setStreamEnabled && (
+                <button
+                  onClick={() => setStreamEnabled(!streamEnabled)}
+                  className={cn(
+                    'p-2 rounded-full transition-colors',
+                    streamEnabled
+                      ? 'bg-green-500/10 text-green-500 hover:bg-green-500/20'
+                      : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+                  )}
+                  title={streamEnabled ? 'Streaming On' : 'Streaming Off'}
+                >
+                  <Zap className="h-5 w-5" />
+                </button>
+              )}
 
               {selectedProvider === 'DeepSeek' && (
                 <button

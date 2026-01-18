@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { ConversationTab } from '../types';
 import { createDefaultTab, getTabTitle } from '../utils/tabUtils';
 import PlaygroundPage from '../index';
@@ -64,19 +64,28 @@ export const PlaygroundWithTabs = () => {
     setActiveTabId(tabId);
   };
 
-  const handleUpdateTab = (tabId: string, updates: Partial<ConversationTab>) => {
+  const handleUpdateTab = useCallback((tabId: string, updates: Partial<ConversationTab>) => {
     setTabs((prevTabs) => prevTabs.map((tab) => (tab.id === tabId ? { ...tab, ...updates } : tab)));
-  };
+  }, []);
 
   const activeTab = getActiveTab();
 
-  // Update tab titles
+  // Update tab titles - use ref to prevent infinite loops
+  const lastSyncedTitleRef = useRef<{ id: string; title: string }>({ id: '', title: '' });
   useEffect(() => {
     const newTitle = getTabTitle(activeTab);
-    if (newTitle !== activeTab.title) {
-      updateActiveTab({ title: newTitle });
+    // Only update if actually different AND we haven't just synced this exact combo
+    if (
+      newTitle !== activeTab.title &&
+      (lastSyncedTitleRef.current.id !== activeTabId ||
+        lastSyncedTitleRef.current.title !== newTitle)
+    ) {
+      lastSyncedTitleRef.current = { id: activeTabId, title: newTitle };
+      setTabs((prevTabs) =>
+        prevTabs.map((tab) => (tab.id === activeTabId ? { ...tab, title: newTitle } : tab)),
+      );
     }
-  }, [activeTab.messages, activeTab.conversationTitle, activeTabId]);
+  }, [activeTab.messages.length, activeTab.conversationTitle, activeTabId, activeTab.title]);
 
   return (
     <div className="h-full flex flex-col bg-background p-4 gap-4">

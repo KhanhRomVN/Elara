@@ -10,6 +10,7 @@ interface CustomSelectProps {
     label: string;
     icon?: string | React.ReactNode;
     details?: any;
+    disabled?: boolean;
   }[];
   placeholder?: string;
   disabled?: boolean;
@@ -27,6 +28,7 @@ export const CustomSelect = ({
     value: string;
     label: string;
     details?: any;
+    disabled?: boolean;
   } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -74,14 +76,17 @@ export const CustomSelect = ({
                 <div
                   key={option.value}
                   onClick={() => {
+                    if (option.disabled) return;
                     onChange(option.value);
                     setIsOpen(false);
                   }}
                   onMouseEnter={() => setHoveredOption(option)}
                   onMouseLeave={() => setHoveredOption(null)}
                   className={cn(
-                    'relative flex select-none items-center rounded-sm px-2 py-2 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 cursor-pointer',
+                    'relative flex select-none items-center rounded-sm px-2 py-2 text-sm outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50 cursor-pointer',
+                    !option.disabled && 'hover:bg-accent hover:text-accent-foreground',
                     value === option.value && 'bg-accent text-accent-foreground',
+                    option.disabled && 'opacity-50 cursor-not-allowed',
                   )}
                 >
                   <div className="flex items-center gap-2 truncate">
