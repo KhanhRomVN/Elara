@@ -101,6 +101,15 @@ if (!gotTheLock) {
     // Create system tray
     createSystemTray();
 
+    // Check for provider updates in the background
+    import('./server/dynamic-provider').then(({ DynamicProviderManager }) => {
+      DynamicProviderManager.getInstance()
+        .updateAllProviders()
+        .catch((err) => {
+          console.error('[Main] Failed to update providers:', err);
+        });
+    });
+
     // Create main window
     console.log('[Main] Creating main window...');
     try {

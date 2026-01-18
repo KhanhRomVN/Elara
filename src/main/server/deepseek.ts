@@ -895,6 +895,8 @@ export const login = (options?: {
         proxyEvents.off('deepseek-auth-header', onAuthHeader);
         proxyEvents.off('deepseek-user-info', onUserInfo);
         proxyEvents.off('deepseek-google-email', onGoogleEmail);
+        proxyEvents.off('deepseek-login-email', onLoginEmail);
+        proxyEvents.off('deepseek-login-token', onLoginToken);
       }
     };
 
@@ -908,7 +910,7 @@ export const login = (options?: {
     };
 
     const onAuthHeader = (headerValue: string) => {
-      console.log('[DeepSeek] Captured Auth Header');
+      console.log('[DeepSeek] Captured Auth Header in Listener');
       capturedCookies = headerValue;
 
       if (finishTimer) clearTimeout(finishTimer);
@@ -917,18 +919,46 @@ export const login = (options?: {
     };
 
     const onUserInfo = (info: any) => {
-      console.log('[DeepSeek] Captured User Info:', info);
+      console.log('[DeepSeek] Captured User Info in Listener:', info);
       if (info.email) capturedEmail = info.email;
     };
 
     const onGoogleEmail = (email: string) => {
-      console.log('[DeepSeek] Captured Google Email:', email);
+      console.log('[DeepSeek] Captured Google Email in Listener:', email);
       capturedEmail = email;
     };
 
+    const onLoginEmail = (email: string) => {
+      console.log('[DeepSeek] Captured Login Email in Listener:', email);
+      capturedEmail = email;
+    };
+
+    const onLoginToken = (token: string) => {
+      console.log('[DeepSeek] Captured Login Token in Listener');
+      capturedCookies = `Authorization=${token}`; // Store as "Authorization=token" or just token?
+      // The ipc handler expects "credential" string.
+      // Usually for other providers this is cookie string or session token.
+      // DeepSeek usage in `deepseek.ts` uses `req.setHeader('Authorization', token);`
+      // So we should store just the token, or handle it correctly in `deepseek.ts` makeRequest.
+      // Looking at `makeRequest` in `deepseek.ts`: `req.setHeader('Authorization', token);`
+      // So passing the raw token seems correct, BUT `ipc/accounts.ts` saves it as `credential`.
+      // If we save just the token, make sure `deepseek.ts` uses it correctly.
+      // The `chatCompletionStream` function takes `token` as arg and sets Authorization.
+      // So we should return just the token.
+      // HOWEVER, `capturedCookies` variable name implies cookies. Use it for token.
+      capturedCookies = token;
+
+      // Token implies success, finalize quickly
+      if (finishTimer) clearTimeout(finishTimer);
+      finalize();
+    };
+
+    console.log('[DeepSeek] Setting up proxy event listeners...');
     proxyEvents.on('deepseek-auth-header', onAuthHeader);
     proxyEvents.on('deepseek-user-info', onUserInfo);
     proxyEvents.on('deepseek-google-email', onGoogleEmail);
+    proxyEvents.on('deepseek-login-email', onLoginEmail);
+    proxyEvents.on('deepseek-login-token', onLoginToken);
 
     // Hard limit 5 minutes
     setTimeout(() => {

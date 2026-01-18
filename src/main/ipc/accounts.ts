@@ -5,19 +5,21 @@ import path from 'path';
 
 const crypto = require('crypto');
 
-import { login as loginMistral } from '../server/mistral';
-import { login as loginKimi } from '../server/kimi';
-import { login as loginQwen } from '../server/qwen';
-import { login as loginCohere } from '../server/cohere';
-import { login as loginClaude } from '../server/claude';
-import { login as loginGroq } from '../server/groq';
-import { login as loginGemini } from '../server/gemini';
-import { login as loginPerplexity } from '../server/perplexity';
-import { login as loginHuggingChat } from '../server/hugging-chat';
-import { login as lmArenaLogin } from '../server/lmarena';
+import { DynamicProviderManager } from '../server/dynamic-provider';
+
+import * as MistralModule from '../server/mistral';
+import * as KimiModule from '../server/kimi';
+import * as QwenModule from '../server/qwen';
+import * as CohereModule from '../server/cohere';
+import * as ClaudeModule from '../server/claude';
+import * as GroqModule from '../server/groq';
+import * as GeminiModule from '../server/gemini';
+import * as PerplexityModule from '../server/perplexity';
+import * as HuggingChatModule from '../server/hugging-chat';
+import * as LmArenaModule from '../server/lmarena';
 import { AntigravityAuthServer } from '../server/antigravity';
-import { login as loginStepFun } from '../server/stepfun';
-import { login as loginDeepSeek } from '../server/deepseek';
+import * as StepFunModule from '../server/stepfun';
+import * as DeepSeekModule from '../server/deepseek';
 
 const DATA_FILE = path.join(app.getPath('userData'), 'accounts.json');
 
@@ -115,7 +117,8 @@ export const setupAccountsHandlers = () => {
         if (provider === 'Kimi') {
           try {
             console.log('[Accounts] Starting Kimi login flow (Real Browser)...');
-            const { cookies, email } = await loginKimi();
+            const mod = DynamicProviderManager.getInstance().getProvider('Kimi', KimiModule);
+            const { cookies, email } = await mod.login();
             const finalEmail = email || 'kimi@user.com';
 
             const newAccount: Account = {
@@ -137,7 +140,8 @@ export const setupAccountsHandlers = () => {
         if (provider === 'Mistral') {
           try {
             console.log('[Accounts] Starting Mistral login flow (Real Browser)...');
-            const { cookies, email } = await loginMistral();
+            const mod = DynamicProviderManager.getInstance().getProvider('Mistral', MistralModule);
+            const { cookies, email } = await mod.login();
             const finalEmail = email || 'mistral@user.com';
 
             const newAccount: Account = {
@@ -162,7 +166,8 @@ export const setupAccountsHandlers = () => {
               '[Accounts] Starting Claude login flow (Real Browser)... Options:',
               options,
             );
-            const { cookies, email } = await loginClaude(options);
+            const mod = DynamicProviderManager.getInstance().getProvider('Claude', ClaudeModule);
+            const { cookies, email } = await mod.login(options);
             // try fetching profile to get email if not captured
             let finalEmail = email;
             if (!finalEmail) {
@@ -191,7 +196,8 @@ export const setupAccountsHandlers = () => {
           try {
             console.log('[Accounts] Starting Qwen login flow...');
             // @ts-ignore
-            const { cookies } = await loginQwen();
+            const mod = DynamicProviderManager.getInstance().getProvider('Qwen', QwenModule);
+            const { cookies } = await mod.login();
             console.log('[Accounts] Qwen login success');
             const email = 'qwen@user.com';
 
@@ -213,7 +219,8 @@ export const setupAccountsHandlers = () => {
         if (provider === 'Cohere') {
           try {
             console.log('[Accounts] Starting Cohere login flow (Real Browser)...');
-            const { cookies, email } = await loginCohere();
+            const mod = DynamicProviderManager.getInstance().getProvider('Cohere', CohereModule);
+            const { cookies, email } = await mod.login();
             const finalEmail = email || 'cohere@user.com';
 
             const newAccount: Account = {
@@ -234,7 +241,8 @@ export const setupAccountsHandlers = () => {
         if (provider === 'Groq') {
           try {
             console.log('[Accounts] Starting Groq login flow (Real Browser)...');
-            const { cookies, email } = await loginGroq();
+            const mod = DynamicProviderManager.getInstance().getProvider('Groq', GroqModule);
+            const { cookies, email } = await mod.login();
             const finalEmail = email || 'groq@user.com';
 
             const newAccount: Account = {
@@ -255,7 +263,8 @@ export const setupAccountsHandlers = () => {
         if (provider === 'Gemini') {
           try {
             console.log('[Accounts] Starting Gemini login flow (Real Browser)...');
-            const { cookies, email } = await loginGemini();
+            const mod = DynamicProviderManager.getInstance().getProvider('Gemini', GeminiModule);
+            const { cookies, email } = await mod.login();
             const finalEmail = email || 'gemini@user.com';
 
             const newAccount: Account = {
@@ -277,7 +286,11 @@ export const setupAccountsHandlers = () => {
           try {
             console.log('[Accounts] Starting Perplexity login flow (Real Browser)...');
             // The frontend will detect this specific fallback email and trigger the manual input dialog
-            const { cookies, email } = await loginPerplexity();
+            const mod = DynamicProviderManager.getInstance().getProvider(
+              'Perplexity',
+              PerplexityModule,
+            );
+            const { cookies, email } = await mod.login();
             const finalEmail = email || 'perplexity@user.com';
 
             const newAccount: Account = {
@@ -299,7 +312,11 @@ export const setupAccountsHandlers = () => {
           try {
             console.log('[Accounts] Starting HuggingChat login flow...');
             console.log('[Accounts] HuggingChat login success');
-            const { cookies, email } = await loginHuggingChat();
+            const mod = DynamicProviderManager.getInstance().getProvider(
+              'HuggingChat',
+              HuggingChatModule,
+            );
+            const { cookies, email } = await mod.login();
             const finalEmail = email || 'huggingchat@user.com';
 
             const newAccount: Account = {
@@ -320,7 +337,8 @@ export const setupAccountsHandlers = () => {
         if (provider === 'LMArena') {
           try {
             console.log('[Accounts] Starting LMArena login flow...');
-            const { cookies, email } = await lmArenaLogin();
+            const mod = DynamicProviderManager.getInstance().getProvider('LMArena', LmArenaModule);
+            const { cookies, email } = await mod.login();
             console.log('[Accounts] LMArena login success, email:', email);
 
             const newAccount: Account = {
@@ -341,7 +359,8 @@ export const setupAccountsHandlers = () => {
         if (provider === 'StepFun') {
           try {
             console.log('[Accounts] Starting StepFun login flow (Real Browser)...');
-            const { cookies, email } = await loginStepFun();
+            const mod = DynamicProviderManager.getInstance().getProvider('StepFun', StepFunModule);
+            const { cookies, email } = await mod.login();
             console.log('[Accounts] StepFun login success. Email:', email);
 
             const newAccount: Account = {
@@ -365,7 +384,11 @@ export const setupAccountsHandlers = () => {
               '[Accounts] Starting DeepSeek login flow (Real Browser)... Options:',
               options,
             );
-            const { cookies, email } = await loginDeepSeek(options);
+            const mod = DynamicProviderManager.getInstance().getProvider(
+              'DeepSeek',
+              DeepSeekModule,
+            );
+            const { cookies, email } = await mod.login(options);
             console.log('[Accounts] DeepSeek login success. Email:', email);
 
             const newAccount: Account = {

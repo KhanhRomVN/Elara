@@ -173,10 +173,23 @@ export const startProxy = (): Promise<void> => {
         }
 
         if (host.includes('chat.deepseek.com')) {
+          console.log(`[Proxy] Debug - DeepSeek Request: ${url}`);
           const auth = ctx.clientToProxyRequest.headers['authorization'];
+
+          // Log all headers for debugging (redacted)
+          const headers = ctx.clientToProxyRequest.headers;
+          console.log('[Proxy] Debug - DeepSeek Headers keys:', Object.keys(headers));
+          if (headers['cookie']) {
+            console.log('[Proxy] Debug - DeepSeek Cookie length:', headers['cookie'].length);
+          }
+
           if (auth) {
             console.log('[Proxy] Intercepting DeepSeek request with Authorization header');
+            console.log('[Proxy] Auth Header Length:', auth.length);
             proxyEvents.emit('deepseek-auth-header', auth);
+          } else {
+            console.log('[Proxy] Debug - DeepSeek request missing Authorization header');
+            // Check if it's in a different header case or name?
           }
         }
 
@@ -239,6 +252,39 @@ export const startProxy = (): Promise<void> => {
           }
         }
       }
+
+      // DeepSeek Login Request Capture (Get Email)
+      if (host && host.includes('chat.deepseek.com') && url.includes('/api/v0/users/login')) {
+        const bodyStr = chunk.toString();
+        // console.log('[Proxy] Debug - DeepSeek Login Request Body Chunk:', bodyStr);
+        try {
+          // The body might be a JSON string inside a "request" field string, or direct JSON
+          // User sample: { "request": "{\"email\":\"...\" ...}" }
+          const outerJson = JSON.parse(bodyStr);
+          if (outerJson.request) {
+            const innerJson = JSON.parse(outerJson.request);
+            if (innerJson.email) {
+              console.log('[Proxy] Captured DeepSeek Login Email:', innerJson.email);
+              proxyEvents.emit('deepseek-login-email', innerJson.email);
+            }
+          } else if (outerJson.email) {
+            // Direct JSON case
+            console.log('[Proxy] Captured DeepSeek Login Email (Direct):', outerJson.email);
+            proxyEvents.emit('deepseek-login-email', outerJson.email);
+          }
+        } catch (e) {
+          // Chunking might break JSON parsing, simplistic approach for now
+          // If body is split across chunks, we might miss it.
+          // However, login bodies are usually small enough to fit in one chunk.
+          // Fallback: Regex match
+          const emailMatch = bodyStr.match(/\\?"email\\?":\s*\\?"([^"\\]+)\\?"/);
+          if (emailMatch && emailMatch[1]) {
+            console.log('[Proxy] Captured DeepSeek Login Email (Regex):', emailMatch[1]);
+            proxyEvents.emit('deepseek-login-email', emailMatch[1]);
+          }
+        }
+      }
+
       return callback(null, chunk);
     });
 
@@ -260,7 +306,9 @@ export const startProxy = (): Promise<void> => {
             (ctx.clientToProxyRequest.url.includes('/SignInByEmail') ||
               ctx.clientToProxyRequest.url.includes(
                 '/api/user/proto.api.user.v1.UserService/GetUser',
-              )))
+              ))) ||
+          (host.includes('chat.deepseek.com') &&
+            ctx.clientToProxyRequest.url.includes('/api/v0/users/login'))
         ) {
           const encoding = ctx.serverToProxyResponse.headers['content-encoding'];
           const contentType = ctx.serverToProxyResponse.headers['content-type'];
@@ -536,6 +584,54 @@ export const startProxy = (): Promise<void> => {
                     }
                   } catch (e) {
                     console.error('[Proxy] Failed to parse DeepSeek User Info:', e);
+                  }
+                }
+
+                // Logic for DeepSeek Login Response (Get Token)
+                if (
+                  host.includes('chat.deepseek.com') &&
+                  ctx.clientToProxyRequest.url.includes('/api/v0/users/login')
+                ) {
+                  try {
+                    // Response sample: { "response": "{ \"code\": 0, ... \"data\": { ... \"user\": { \"token\": \"...\" } } }" }
+                    // Note: The sample provided by user has nested JSON string in "response" field if it's wrapped,
+                    // OR it might be direct JSON depending on client version.
+
+                    // First, try simple parsing
+                    const json = JSON.parse(body);
+
+                    let userData;
+
+                    // Check if it's the wrapped format
+                    if (json.response && typeof json.response === 'string') {
+                      const innerResponse = JSON.parse(json.response);
+                      userData = innerResponse?.data?.biz_data?.user;
+                    }
+                    // Check direct format matching the sample (data -> biz_data -> user)
+                    else if (json.data && json.data.biz_data && json.data.biz_data.user) {
+                      userData = json.data.biz_data.user;
+                    }
+                    // Standard DeepSeek API format (code -> data -> ...)
+                    else if (json.code === 0 && json.data) {
+                      userData = json.data; // Usually direct user object or nested? Checking other endpoints..
+                    }
+
+                    if (userData && userData.token) {
+                      console.log('[Proxy] Captured DeepSeek Login Token:', userData.token);
+                      proxyEvents.emit('deepseek-login-token', userData.token);
+
+                      // Also capture email if present in response (as backup)
+                      if (userData.email) {
+                        console.log(
+                          '[Proxy] Captured DeepSeek Login Email from Response:',
+                          userData.email,
+                        );
+                        proxyEvents.emit('deepseek-login-email', userData.email);
+                      }
+                    }
+                  } catch (e) {
+                    console.error('[Proxy] Failed to parse DeepSeek Login Response:', e);
+                    console.log('[Proxy] DeepSeek Login Raw Body:', body.substring(0, 500));
                   }
                 }
               });
