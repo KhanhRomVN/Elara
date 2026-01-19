@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Message, Account, PendingAttachment, ConversationTab, FunctionParams } from '../types';
-import { getStreamHandler } from '../stream-handlers';
 import { getHistoryEndpoint, parseConversationList } from '../utils/conversation-utils';
 import { getCachedModels, fetchAndCacheModels } from '../../../utils/model-cache';
 
@@ -380,8 +379,12 @@ export const usePlaygroundLogic = ({
           console.log('[Playground] Accounts response:', data);
           const accountsList = data.data?.accounts || [];
           setAccounts(accountsList);
-          // Reset selected account when provider changes
-          setSelectedAccount('');
+          // Auto-select first account when provider changes
+          if (accountsList.length > 0) {
+            setSelectedAccount(accountsList[0].id);
+          } else {
+            setSelectedAccount('');
+          }
         } else {
           console.error('[Playground] Failed to fetch accounts, status:', res.status);
         }

@@ -40,7 +40,7 @@ export const InputArea = ({
   loading,
   isStreaming,
   selectedAccount,
-  selectedProvider,
+  selectedProvider: _selectedProvider,
   disabled,
   placeholder = 'Type a message...',
   className,

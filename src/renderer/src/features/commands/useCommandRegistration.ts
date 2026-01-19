@@ -30,27 +30,37 @@ Diff:
           return '⚠️  No staged changes found. Please stage your changes first using `git add`.';
         }
 
-        // 2. Fetch Accounts
-        const accounts = await window.api.accounts.getAll();
-        if (!accounts || accounts.length === 0) {
-          return '⚠️  No accounts found. Please add an account first.';
-        }
-
-        // 3. Select Account (DeepSeek priority)
-        const deepseekAccount = accounts.find(
-          (acc) => acc.provider === 'DeepSeek' && acc.status === 'Active',
-        );
-        const activeAccount = accounts.find((acc) => acc.status === 'Active');
-        const selectedAccount = deepseekAccount || activeAccount || accounts[0];
-
-        // 4. Start Server
+        // 2. Start Server
         const serverStatus = await window.api.server.start();
         if (!serverStatus.success) {
           return '⚠️  Failed to start local server.';
         }
         const port = serverStatus.port;
 
-        // 5. Generate AI Message
+        // 3. Fetch Accounts via API - Prioritize DeepSeek
+        let accountsResponse = await fetch(
+          `http://localhost:${port}/v1/accounts?provider_id=deepseek&limit=1`,
+        );
+        let accountsData = await accountsResponse.json();
+        let accounts = accountsData.data?.accounts || [];
+
+        // 4. Fallback to any account if no DeepSeek found
+        if (accounts.length === 0) {
+          accountsResponse = await fetch(`http://localhost:${port}/v1/accounts?limit=1`);
+          accountsData = await accountsResponse.json();
+          accounts = accountsData.data?.accounts || [];
+        }
+
+        if (accounts.length === 0) {
+          return '⚠️  No accounts found. Please add an account first.';
+        }
+
+        const selectedAccount = accounts[0];
+
+        // 5. Get model ID (simplified - use a default or fetch from provider config)
+        const modelId = 'deepseek-chat'; // Fallback model
+
+        // 6. Generate AI Message
         const diffContent = status.substring(0, 6000); // Limit to 6000 chars
         const promptText = `
 You are an expert developer. Please analyze the following git diff and generate a concise, conventional commit message.
@@ -67,20 +77,15 @@ ${diffContent}
 `;
 
         const response = await fetch(
-          `http://localhost:${port}/v1/chat/completions?email=${encodeURIComponent(
-            selectedAccount.email,
-          )}&provider=${selectedAccount.provider.toLowerCase()}`,
+          `http://localhost:${port}/v1/chat/accounts/${selectedAccount.id}/messages`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              model:
-                selectedAccount.provider === 'Claude'
-                  ? 'claude-3-5-sonnet-20241022'
-                  : 'deepseek-chat',
+              model: modelId,
               messages: [{ role: 'user', content: promptText }],
-              stream: false, // Simple non-streaming request
-              thinking: false, // Disable thinking for commit messages
+              stream: false,
+              thinking: false,
             }),
           },
         );
@@ -89,41 +94,14 @@ ${diffContent}
           return `⚠️  AI API request failed: ${response.status} ${response.statusText}`;
         }
 
-        // Parse SSE stream response
-        const reader = response.body?.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let aiContent = '';
+        // Parse JSON response
+        const data = await response.json();
 
-        if (!reader) {
-          return '⚠️  No response body from AI.';
+        if (!data.success) {
+          return `⚠️  API request failed: ${data.message || 'Unknown error'}`;
         }
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6);
-              if (data === '[DONE]') continue;
-
-              try {
-                const parsed = JSON.parse(data);
-                const content = parsed.choices?.[0]?.delta?.content;
-                if (content) {
-                  aiContent += content;
-                }
-              } catch (e) {
-                // Ignore parse errors for non-JSON lines
-              }
-            }
-          }
-        }
+        const aiContent = data.message?.content || '';
 
         if (!aiContent) {
           return '⚠️  AI returned empty response.';

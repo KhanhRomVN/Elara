@@ -12,12 +12,6 @@ export const PlaygroundWithTabs = () => {
     return tabs.find((t) => t.id === activeTabId) || tabs[0];
   };
 
-  const updateActiveTab = (updates: Partial<ConversationTab>) => {
-    setTabs((prevTabs) =>
-      prevTabs.map((tab) => (tab.id === activeTabId ? { ...tab, ...updates } : tab)),
-    );
-  };
-
   const createNewTab = () => {
     const newTab = createDefaultTab();
     const activeTab = getActiveTab();

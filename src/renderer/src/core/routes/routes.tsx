@@ -1,8 +1,6 @@
 import { RouteObject } from 'react-router-dom';
 import MainLayout from '../layouts/MainLayout';
-import DashboardPage from '../../features/dashboard';
 import AccountsPage from '../../features/accounts';
-import { ModelsPage } from '../../features/models';
 import { PlaygroundWithTabs } from '../../features/playground/components/PlaygroundWithTabs';
 import CommandsPage from '../../features/commands';
 import TutorialPage from '../../features/tutorial';
@@ -14,15 +12,11 @@ export const routes: RouteObject[] = [
     children: [
       {
         path: '',
-        element: <DashboardPage />,
+        element: <AccountsPage />,
       },
       {
         path: 'accounts',
         element: <AccountsPage />,
-      },
-      {
-        path: 'models',
-        element: <ModelsPage />,
       },
       {
         path: 'playground',

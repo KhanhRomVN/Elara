@@ -30,7 +30,9 @@ const updateProviderCache = async () => {
     if (response.ok) {
       const data: any[] = await response.json();
       if (Array.isArray(data)) {
-        cachedProviderIds = data.map((p) => p.id.toLowerCase());
+        cachedProviderIds = data
+          .filter((p) => p && p.provider_id) // Filter out invalid entries
+          .map((p) => p.provider_id.toLowerCase());
         console.log('[Accounts] Fetched valid provider IDs:', cachedProviderIds);
       }
     }

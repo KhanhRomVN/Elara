@@ -40,25 +40,7 @@ Diff:
           return '⚠️  No staged changes found. Please stage your changes first using `git add`.';
         }
 
-        // 2. Fetch Accounts
-        // @ts-ignore
-        const accounts = await window.api.accounts.getAll();
-        if (!accounts || accounts.length === 0) {
-          return '⚠️  No accounts found. Please add an account in the app first.';
-        }
-
-        // 3. Select Account (Prioritize DeepSeek, then Active)
-        const deepseekAccount = accounts.find(
-          (acc: any) => acc.provider === 'DeepSeek' && acc.status === 'Active',
-        );
-        const otherAccount = accounts.find((acc: any) => acc.status === 'Active');
-        const selectedAccount = deepseekAccount || otherAccount || accounts[0];
-
-        if (!selectedAccount) {
-          return '⚠️  No active accounts found. Please check your account status.';
-        }
-
-        // 4. Start Local Server
+        // 2. Start Local Server
         // @ts-ignore
         const serverStatus = await window.api.server.start();
         if (!serverStatus.success) {
@@ -66,21 +48,40 @@ Diff:
         }
         const port = serverStatus.port;
 
-        // 5. Get dynamic model ID from cache
+        // 3. Fetch Accounts via API - Prioritize DeepSeek
+        console.log('[commit-message] Fetching DeepSeek accounts from API...');
+        let accountsResponse = await fetch(
+          `http://localhost:${port}/v1/accounts?provider_id=deepseek&limit=1`,
+        );
+        let accountsData = await accountsResponse.json();
+        let accounts = accountsData.data?.accounts || [];
+
+        // 4. Fallback to any account if no DeepSeek found
+        if (accounts.length === 0) {
+          console.log('[commit-message] No DeepSeek account, fetching any account...');
+          accountsResponse = await fetch(`http://localhost:${port}/v1/accounts?limit=1`);
+          accountsData = await accountsResponse.json();
+          accounts = accountsData.data?.accounts || [];
+        }
+
+        if (accounts.length === 0) {
+          return '⚠️  No accounts found. Please add an account in the app first.';
+        }
+
+        const selectedAccount = accounts[0];
+        console.log('[commit-message] Selected account:', selectedAccount);
+
+        // 5. Get model ID from cache
         const getProviderModel = (providerId: string): string => {
           const cached = getCachedModels(providerId);
           return cached && cached.length > 0 ? cached[0].id : '';
         };
 
-        const modelId =
-          selectedAccount.provider === 'Claude'
-            ? getProviderModel('Claude')
-            : selectedAccount.provider === 'DeepSeek'
-              ? getProviderModel('DeepSeek')
-              : '';
+        const providerId = selectedAccount.provider_id;
+        const modelId = providerId ? getProviderModel(providerId) : '';
 
         if (!modelId) {
-          return `⚠️  No model available for ${selectedAccount.provider}. Please load models first.`;
+          return `⚠️  No model available for ${providerId}. Please load models first.`;
         }
 
         // 6. Generate AI Message
@@ -106,9 +107,7 @@ ${diff}
 `;
 
         const response = await fetch(
-          `http://localhost:${port}/v1/chat/completions?email=${encodeURIComponent(
-            selectedAccount.email,
-          )}&provider=${selectedAccount.provider.toLowerCase()}`,
+          `http://localhost:${port}/v1/chat/accounts/${selectedAccount.id}/messages`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -271,44 +270,62 @@ const CommandsPage = () => {
   }, []); // commands is constant now
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">CLI Commands</h1>
-          <p className="text-muted-foreground mt-1">Manage custom commands for the Elara CLI</p>
-        </div>
+    <div className="h-full flex flex-col bg-background p-4 gap-4">
+      {/* Header */}
+      <div>
+        <h2 className="text-2xl font-bold tracking-tight">CLI Commands</h2>
+        <p className="text-muted-foreground">Manage custom commands for the Elara CLI</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {commands.map((command, index) => (
-          <div
-            key={index}
-            className="group relative bg-card border border-border rounded-lg p-5 hover:border-primary/50 transition-colors"
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="text-2xl">{command.emoji || <Terminal className="w-6 h-6" />}</div>
-                <div>
-                  <h3 className="font-semibold text-foreground">{command.name}</h3>
-                  <code className="text-xs text-primary bg-primary/5 px-1.5 py-0.5 rounded">
+      {/* Main Content Box */}
+      <div className="flex-1 flex overflow-hidden border border-dashed border-zinc-500/25 rounded-lg bg-card">
+        <div className="flex-1 overflow-y-auto p-6">
+          {commands.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {commands.map((command, index) => (
+                <div
+                  key={index}
+                  className="group relative bg-gradient-to-br from-card to-card/50 border border-border rounded-xl p-6 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10 transition-all duration-300 hover:-translate-y-1"
+                >
+                  {/* Emoji/Icon */}
+                  <div className="flex items-center justify-center w-14 h-14 mb-4 rounded-xl bg-primary/10 text-3xl group-hover:scale-110 transition-transform duration-300">
+                    {command.emoji || <Terminal className="w-7 h-7 text-primary" />}
+                  </div>
+
+                  {/* Command Name */}
+                  <h3 className="font-bold text-lg text-foreground mb-2 group-hover:text-primary transition-colors">
+                    {command.name}
+                  </h3>
+
+                  {/* Command Trigger */}
+                  <code className="inline-block text-xs text-primary bg-primary/10 px-2.5 py-1 rounded-md mb-3 font-mono">
                     elara {command.trigger}
                   </code>
+
+                  {/* Description */}
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {command.description}
+                  </p>
+
+                  {/* Decorative gradient overlay */}
+                  <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-primary/0 via-primary/0 to-primary/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
                 </div>
+              ))}
+            </div>
+          ) : (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-center">
+                <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-primary/10 mb-6">
+                  <Terminal className="w-10 h-10 text-primary/50" />
+                </div>
+                <p className="text-lg text-muted-foreground">No commands found.</p>
+                <p className="text-sm text-muted-foreground/60 mt-2">
+                  Commands will appear here once registered.
+                </p>
               </div>
             </div>
-
-            <p className="text-sm text-muted-foreground line-clamp-2 h-10 mb-4">
-              {command.description}
-            </p>
-          </div>
-        ))}
-
-        {commands.length === 0 && (
-          <div className="col-span-full py-12 text-center border border-dashed border-border rounded-lg text-muted-foreground">
-            <Terminal className="w-12 h-12 mx-auto mb-4 opacity-50" />
-            <p>No commands found.</p>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
