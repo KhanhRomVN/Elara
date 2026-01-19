@@ -17,11 +17,13 @@
     "models": [
       {
         "id": "claude-sonnet-4-5-20250929",
-        "name": "Claude Sonnet 4.5"
+        "name": "Claude Sonnet 4.5",
+        "is_thinking": false
       },
       {
         "id": "claude-haiku-4-5-20251001",
-        "name": "Claude Haiku 4.5"
+        "name": "Claude Haiku 4.5",
+        "is_thinking": false
       }
     ]
   },
@@ -43,11 +45,8 @@
     "models": [
       {
         "id": "deepseek-chat",
-        "name": "DeepSeek Chat"
-      },
-      {
-        "id": "deepseek-reasoner",
-        "name": "DeepSeek Reasoner"
+        "name": "DeepSeek Chat",
+        "is_thinking": true
       }
     ]
   },
