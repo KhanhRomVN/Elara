@@ -77,6 +77,48 @@ async function getProviders(): Promise<any[]> {
   }
 }
 
+// GET /v1/models/all - List all models from enabled providers only
+router.get('/all', async (_req, res) => {
+  try {
+    const providers = await getProviders();
+
+    // Filter enabled providers and extract their models
+    const enabledProviders = providers.filter((p) => p.is_enabled === true);
+    const allModels: any[] = [];
+
+    enabledProviders.forEach((provider) => {
+      if (provider.models && Array.isArray(provider.models)) {
+        provider.models.forEach((model: any) => {
+          allModels.push({
+            id: model.id,
+            name: model.name,
+            provider_id: provider.provider_id,
+            provider_name: provider.provider_name,
+          });
+        });
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Models retrieved successfully',
+      data: allModels,
+      meta: {
+        timestamp: new Date().toISOString(),
+        total: allModels.length,
+      },
+    });
+  } catch (error: any) {
+    console.error('[Models] Error fetching all models:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch models',
+      error: { code: 'INTERNAL_ERROR', details: error.message },
+      meta: { timestamp: new Date().toISOString() },
+    });
+  }
+});
+
 // GET /v1/models - List all models from all providers
 router.get('/', async (_req, res) => {
   try {

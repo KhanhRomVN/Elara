@@ -143,27 +143,45 @@ async function solvePoW(challenge: PoWChallenge): Promise<PoWResponse> {
         process.cwd(),
         'backend/src/utils/sha3_wasm_bg.7b9ca65ddd.wasm',
       ),
-      // 3. Prod environment (resources path)
-      // path.join(process.resourcesPath, 'utils/sha3_wasm_bg.7b9ca65ddd.wasm')
+      // 3. Project root resources folder
+      path.resolve(process.cwd(), 'resources/sha3_wasm_bg.7b9ca65ddd.wasm'),
+      // 4. Production environment (if process.resourcesPath is available)
+      ...(typeof (process as any).resourcesPath !== 'undefined'
+        ? [
+            path.join(
+              (process as any).resourcesPath,
+              'resources',
+              'sha3_wasm_bg.7b9ca65ddd.wasm',
+            ),
+            path.join(
+              (process as any).resourcesPath,
+              'app.asar.unpacked',
+              'resources',
+              'sha3_wasm_bg.7b9ca65ddd.wasm',
+            ),
+          ]
+        : []),
     ];
 
     let wasmPath = '';
     for (const p of possiblePaths) {
       if (fs.existsSync(p)) {
         wasmPath = p;
+        console.log('[DeepSeek PoW] Found WASM at:', wasmPath);
         break;
       }
     }
 
     if (!wasmPath) {
       console.error(
-        '[DeepSeek PoW] WASM file not found. Tried:',
+        '[DeepSeek PoW] WASM file not found. Tried paths:',
         possiblePaths,
       );
+      console.error('[DeepSeek PoW] process.cwd():', process.cwd());
+      console.error('[DeepSeek PoW] __dirname:', __dirname);
       throw new Error('WASM file not found for DeepSeek PoW');
     }
 
-    console.log('[DeepSeek PoW] Using WASM at:', wasmPath);
     dsHash = new DeepSeekHash(wasmPath);
     await dsHash.init();
   }

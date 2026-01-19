@@ -13,6 +13,7 @@
   <a href="#installation">Installation</a> •
   <a href="#usage">Usage</a> •
   <a href="#cli">CLI</a> •
+  <a href="#api-documentation">API</a> •
   <a href="#development">Development</a> •
   <a href="#license">License</a>
 </p>
@@ -76,6 +77,31 @@ elara commit-message
 ```
 
 > **Note:** The desktop app must be running for CLI commands to work.
+
+## 📖 API Documentation
+
+Elara provides a powerful embedded server API for programmatic access to AI providers, account management, and messaging capabilities.
+
+**[📚 View Full API Documentation →](API_DOCUMENTATION.md)**
+
+### Quick Example
+
+```bash
+# Get all accounts
+curl "http://localhost:11434/v1/accounts"
+
+# Send a message
+curl -X POST "http://localhost:11434/v1/chat/accounts/ACC_ID/messages" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "deepseek-chat", "messages": [{"role": "user", "content": "Hello!"}]}'
+```
+
+The embedded server runs on `http://localhost:11434` and provides endpoints for:
+
+- 🔐 Account Management
+- 🤖 Model Discovery
+- 💬 Chat & Messaging
+- 📜 Conversation History
 
 ## 🛠️ Development
 

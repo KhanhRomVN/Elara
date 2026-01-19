@@ -206,6 +206,60 @@ const embeddedAPIs: EmbeddedAPI[] = [
           },
         ],
       },
+      {
+        path: '/v1/models/all',
+        method: 'GET',
+        description: 'Get all available models from enabled providers only',
+        responseBody: `{
+  "success": true,
+  "message": "Models retrieved successfully",
+  "data": [
+    {
+      "id": "deepseek-chat",
+      "name": "DeepSeek Chat",
+      "provider_id": "deepseek",
+      "provider_name": "DeepSeek"
+    },
+    {
+      "id": "deepseek-reasoner",
+      "name": "DeepSeek Reasoner",
+      "provider_id": "deepseek",
+      "provider_name": "DeepSeek"
+    },
+    {
+      "id": "claude-sonnet-4-5-20250929",
+      "name": "Claude Sonnet 4.5",
+      "provider_id": "claude",
+      "provider_name": "Claude"
+    },
+    {
+      "id": "claude-haiku-4-5-20251001",
+      "name": "Claude Haiku 4.5",
+      "provider_id": "claude",
+      "provider_name": "Claude"
+    }
+  ],
+  "meta": {
+    "timestamp": "2026-01-19T01:48:00.000Z",
+    "total": 4
+  }
+}`,
+        responseFields: [
+          { name: 'success', type: 'boolean', description: 'Request success status' },
+          { name: 'message', type: 'string', description: 'Human-readable message' },
+          {
+            name: 'data',
+            type: 'array',
+            description: 'Array of model objects from enabled providers',
+          },
+          { name: 'data[].id', type: 'string', description: 'Model identifier' },
+          { name: 'data[].name', type: 'string', description: 'Model display name' },
+          { name: 'data[].provider_id', type: 'string', description: 'Provider identifier' },
+          { name: 'data[].provider_name', type: 'string', description: 'Provider display name' },
+          { name: 'meta.timestamp', type: 'string', description: 'Response timestamp' },
+          { name: 'meta.total', type: 'number', description: 'Total number of models returned' },
+        ],
+      },
     ],
   },
   {

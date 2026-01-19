@@ -1,4 +1,5 @@
 import express from 'express';
+import { getAllModels } from '../../controllers/models.controller';
 
 const router = express.Router();
 
@@ -47,6 +48,9 @@ const MOCK_MODELS = [
     owned_by: 'google',
   },
 ];
+
+// GET /v1/models/all - List all models from enabled providers
+router.get('/all', getAllModels);
 
 // GET /v1/models - List all models
 router.get('/', async (_req, res) => {

@@ -84,3 +84,35 @@ export const isProviderEnabled = async (
   const config = remoteConfig.find((c: any) => c.provider_id === providerId);
   return config ? config.is_enabled : false;
 };
+
+export interface ModelWithProvider {
+  id: string;
+  name: string;
+  provider_id: string;
+  provider_name: string;
+}
+
+export const getAllModelsFromEnabledProviders = async (): Promise<
+  ModelWithProvider[]
+> => {
+  const remoteConfig = await fetchProviderConfig();
+  const enabledProviders = remoteConfig.filter((c: any) => c.is_enabled);
+
+  const allModels: ModelWithProvider[] = [];
+
+  for (const provider of enabledProviders) {
+    // Only include providers that have static models defined
+    if (provider.models && Array.isArray(provider.models)) {
+      for (const model of provider.models) {
+        allModels.push({
+          id: model.id,
+          name: model.name,
+          provider_id: provider.provider_id,
+          provider_name: provider.provider_name,
+        });
+      }
+    }
+  }
+
+  return allModels;
+};

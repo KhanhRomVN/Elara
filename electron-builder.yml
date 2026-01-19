@@ -12,6 +12,11 @@ files:
   - '!{.github,docs,tests,scripts}'
 asarUnpack:
   - resources/**
+extraResources:
+  - from: resources
+    to: resources
+    filter:
+      - '**/*.wasm'
 
 # Windows Configuration
 win:
