@@ -300,6 +300,7 @@ export async function chatCompletionStream(
   userAgent: string | undefined,
   callbacks: {
     onContent: (content: string) => void;
+    onThinking?: (content: string) => void;
     onMetadata?: (metadata: any) => void;
     onRaw?: (data: string) => void;
     onSessionCreated?: (sessionId: string) => void;
@@ -460,10 +461,11 @@ export async function chatCompletionStream(
 
     // Process SSE stream
     let buffer = '';
+    let currentMode: 'THINK' | 'RESPONSE' = 'RESPONSE';
 
     for await (const chunk of response.body) {
       const chunkStr = chunk.toString();
-      console.log('[DeepSeek] Chunk:', chunkStr);
+      // console.log('[DeepSeek] Chunk:', chunkStr);
       buffer += chunkStr;
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
@@ -499,29 +501,52 @@ export async function chatCompletionStream(
 
             // 2. Handle DeepSeek 'v' format (e.g. {"v": "..."} or {"p": "...", "v": "..."})
             if (typeof json.v === 'string') {
-              // Check path or implicitly assume content if path is missing or points to content
-              // Based on log: {"v":" Hello"}, {"p":"response/content","o":"APPEND","v":"Hello"}
-              // And: {"p":"response/thinking_content","v":"..."}
-
               const path = json.p;
               const value = json.v;
-              const thinkingEnabled = payload.model === 'deepseek-reasoner';
 
-              if (
-                path === 'response/thinking_content' ||
-                path?.endsWith('thinking_content')
-              ) {
-                // Only append thinking content if thinking is enabled
-                if (thinkingEnabled && json.v) {
-                  callbacks.onContent(`[Thinking] ${json.v}\n`);
+              if (path?.includes('thinking_content')) {
+                // Explicit thinking content path
+                currentMode = 'THINK';
+                if (callbacks.onThinking) {
+                  callbacks.onThinking(value);
+                } else {
+                  callbacks.onContent(`[Thinking] ${value}\n`);
                 }
               } else if (
-                !path ||
                 path === 'response/content' ||
-                path.endsWith('/content')
+                path?.endsWith('/content')
               ) {
-                // It's main content
-                callbacks.onContent(value);
+                // Content update
+                // If path is EXACTLY 'response/content', it's main content (DeepSeek non-reasoner or standard output)
+                if (path === 'response/content') {
+                  currentMode = 'RESPONSE'; // Force switch to response
+                  callbacks.onContent(value);
+                } else {
+                  // If path is fragment content (e.g. fragments/-1/content), respect currentMode
+                  if (currentMode === 'THINK') {
+                    if (callbacks.onThinking) {
+                      callbacks.onThinking(value);
+                    } else {
+                      callbacks.onContent(`[Thinking] ${value}\n`);
+                    }
+                  } else {
+                    callbacks.onContent(value);
+                  }
+                }
+              } else if (!path) {
+                // Implicit content update
+                // Default to RESPONSE unless clearly in THINK mode from a recent fragment
+                // But for safety against "stuck" think mode, we might want to be careful.
+                // However, without path, we must rely on currentMode.
+                if (currentMode === 'THINK') {
+                  if (callbacks.onThinking) {
+                    callbacks.onThinking(value);
+                  } else {
+                    callbacks.onContent(`[Thinking] ${value}\n`);
+                  }
+                } else {
+                  callbacks.onContent(value);
+                }
               }
             } else if (
               Array.isArray(json.v) &&
@@ -529,11 +554,21 @@ export async function chatCompletionStream(
             ) {
               // Handle fragment arrays involving THINK or RESPONSE
               const fragment = json.v[0];
-              if (fragment && fragment.content) {
+              if (fragment) {
                 if (fragment.type === 'THINK') {
-                  callbacks.onContent(`[Thinking] ${fragment.content}\n`);
-                } else {
-                  callbacks.onContent(fragment.content);
+                  currentMode = 'THINK';
+                  if (fragment.content) {
+                    if (callbacks.onThinking) {
+                      callbacks.onThinking(fragment.content);
+                    } else {
+                      callbacks.onContent(`[Thinking] ${fragment.content}\n`);
+                    }
+                  }
+                } else if (fragment.type === 'RESPONSE') {
+                  currentMode = 'RESPONSE';
+                  if (fragment.content) {
+                    callbacks.onContent(fragment.content);
+                  }
                 }
               }
             } else if (json.o === 'BATCH' && Array.isArray(json.v)) {
@@ -543,12 +578,25 @@ export async function chatCompletionStream(
                 (item: any) => item.p === 'accumulated_token_usage',
               );
               if (usageItem && typeof usageItem.v === 'number') {
-                // console.log('[DeepSeek] Token usage:', usageItem.v);
                 if (callbacks.onMetadata) {
                   callbacks.onMetadata({
                     usage: { total_tokens: usageItem.v },
                   });
                 }
+              }
+            } else if (
+              json.p?.endsWith('/elapsed_secs') ||
+              json.p?.endsWith('thinking_elapsed_secs')
+            ) {
+              // Handle elapsed time for thinking
+              // Log: {"p":"response/fragments/-1/elapsed_secs","o":"SET","v":9.918728716}
+              // This comes AFTER thinking is done (usually).
+              // We should check if currentMode was THINK or if this is relevant to thinking.
+              // Assuming this marks end of thinking or update of thinking time.
+              if (callbacks.onMetadata) {
+                callbacks.onMetadata({
+                  thinking_elapsed: json.v,
+                });
               }
             }
           } catch (e) {

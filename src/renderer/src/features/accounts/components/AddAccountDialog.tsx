@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { AlertCircle, X, Copy, Check, ExternalLink, RefreshCw, Key, Mail } from 'lucide-react';
-
-import { providers as allProviders } from '../../../config/providers';
 import googleIcon from '../../../assets/auth_icons/google.svg';
+
+// Fallback providers just in case API fails
+import { providers as staticProviders } from '../../../config/providers';
 
 interface AddAccountDialogProps {
   open: boolean;
@@ -18,12 +19,16 @@ export function AddAccountDialog({
   serverPort,
 }: AddAccountDialogProps) {
   const [loading, setLoading] = useState(false);
+  const [fetchingProviders, setFetchingProviders] = useState(false);
   const [provider, setProvider] = useState<string>('Claude');
   const [error, setError] = useState('');
   const [showEmailInput, setShowEmailInput] = useState(false);
   const [actualEmail, setActualEmail] = useState('');
   const [actualUsername, setActualUsername] = useState('');
   const [accountId, setAccountId] = useState<string | null>(null);
+
+  // Providers list state
+  const [providers, setProviders] = useState<any[]>([]);
 
   // Antigravity Specific State
   const [agTab, setAgTab] = useState<'oauth' | 'token'>('oauth');
@@ -34,24 +39,54 @@ export function AddAccountDialog({
   // DeepSeek Specific State
   const [deepseekMethod, setDeepseekMethod] = useState<'basic' | 'google'>('basic');
 
-  // StepFun State Removed
-
-  const providers = allProviders.filter((p) => p.active);
-
-  // Reset state when closing/opening
+  // Fetch providers on mount or when dialog opens
   useEffect(() => {
     if (open) {
+      const fetchProviders = async () => {
+        setFetchingProviders(true);
+        try {
+          const port = serverPort || 11434;
+          const res = await fetch(`http://localhost:${port}/v1/providers`);
+          if (res.ok) {
+            const json = await res.json();
+            if (json.success && Array.isArray(json.data)) {
+              // Filter active providers
+              const activeProviders = json.data.filter(
+                (p: { active: boolean }) => p.active !== false,
+              );
+              setProviders(activeProviders);
+              // Set default provider if current selection is not in list
+              if (!activeProviders.find((p: { id: string }) => p.id === provider)) {
+                if (activeProviders.length > 0) {
+                  setProvider(activeProviders[0].id);
+                }
+              }
+              return;
+            }
+          }
+          // Fallback
+          console.warn('[AddAccountDialog] Failed to fetch providers, using static fallback');
+          setProviders(staticProviders.filter((p) => p.active));
+        } catch (e) {
+          console.error('[AddAccountDialog] Error fetching providers:', e);
+          setProviders(staticProviders.filter((p) => p.active));
+        } finally {
+          setFetchingProviders(false);
+        }
+      };
+
+      fetchProviders();
+
+      // Reset other states
       setLoading(false);
       setError('');
       setShowEmailInput(false);
       setAgOAuthUrl('');
       setAgWaiting(false);
-      setAgOAuthUrl('');
-      setAgWaiting(false);
       setAgToken('');
       setDeepseekMethod('basic');
     }
-  }, [open, provider]);
+  }, [open, serverPort]);
 
   const saveToBackend = async (account: any) => {
     if (!serverPort || !account) return;
@@ -483,140 +518,151 @@ export function AddAccountDialog({
               </div>
             )}
 
-            <div className="flex-1 flex gap-4 overflow-hidden">
-              {/* Providers List - Left Side */}
-              <div className="w-1/3 overflow-y-auto pr-2 border-r">
-                <div className="space-y-2">
-                  {providers.map((p) => (
-                    <div
-                      key={p.id}
-                      onClick={() => setProvider(p.id)}
-                      className={`cursor-pointer p-3 transition-all hover:bg-accent hover:text-accent-foreground ${
-                        provider === p.id
-                          ? 'bg-accent/50 border-l-4 border-l-primary rounded-r-lg'
-                          : 'bg-card border rounded-lg'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`p-1.5 rounded-md ${p.color} border bg-background shrink-0`}
-                        >
-                          <img src={p.icon} alt={p.name} className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className="font-medium text-sm">
-                              {p.id === 'DeepSeek' ? 'DeepSeek' : p.name}
-                            </h4>
+            {fetchingProviders ? (
+              <div className="flex-1 flex items-center justify-center">
+                <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+                <span className="ml-2 text-muted-foreground">Loading providers...</span>
+              </div>
+            ) : (
+              <div className="flex-1 flex gap-4 overflow-hidden">
+                {/* Providers List - Left Side */}
+                <div className="w-1/3 overflow-y-auto pr-2 border-r">
+                  <div className="space-y-2">
+                    {providers.map((p) => (
+                      <div
+                        key={p.id}
+                        onClick={() => setProvider(p.id)}
+                        className={`cursor-pointer p-3 transition-all hover:bg-accent hover:text-accent-foreground ${
+                          provider === p.id
+                            ? 'bg-accent/50 border-l-4 border-l-primary rounded-r-lg'
+                            : 'bg-card border rounded-lg'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`p-1.5 rounded-md ${p.color} border bg-background shrink-0`}
+                          >
+                            <img src={p.icon} alt={p.name} className="w-5 h-5" />
                           </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-medium text-sm">
+                                {p.id === 'DeepSeek' ? 'DeepSeek' : p.name}
+                              </h4>
+                            </div>
 
-                          {/* Badges Section */}
-                          <div className="flex items-center gap-1.5 mt-1">
-                            {p.id === 'DeepSeek' ? (
-                              <>
-                                <div
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setProvider(p.id);
-                                    setDeepseekMethod('basic');
-                                  }}
-                                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium cursor-pointer transition-colors ${
-                                    deepseekMethod === 'basic' && provider === 'DeepSeek'
-                                      ? 'bg-primary/20 text-primary border-primary/30'
-                                      : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
-                                  }`}
-                                >
-                                  <Mail className="w-3 h-3" />
-                                  <span>Basic</span>
-                                </div>
-                                <div
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setProvider(p.id);
-                                    setDeepseekMethod('google');
-                                  }}
-                                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium cursor-pointer transition-colors ${
-                                    deepseekMethod === 'google' && provider === 'DeepSeek'
-                                      ? 'bg-blue-500/20 text-blue-500 border-blue-500/30'
-                                      : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
-                                  }`}
-                                >
-                                  <img src={googleIcon} alt="Google" className="w-3 h-3" />
-                                  <span>Google</span>
-                                </div>
-                              </>
-                            ) : (
-                              <>
-                                {/* Show Basic Badge if loginMethod contains keywords or authMethod is Basic (and not just Google) */}
-                                {(/Direct|Email|Basic|Mobile|OTP/i.test(p.loginMethod) ||
-                                  (p.authMethod === 'Basic' &&
-                                    !/Google|OAuth/i.test(p.loginMethod))) && (
-                                  <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium bg-muted/50 text-muted-foreground border-border">
+                            {/* Badges Section */}
+                            <div className="flex items-center gap-1.5 mt-1">
+                              {p.id === 'DeepSeek' ? (
+                                <>
+                                  <div
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setProvider(p.id);
+                                      setDeepseekMethod('basic');
+                                    }}
+                                    className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium cursor-pointer transition-colors ${
+                                      deepseekMethod === 'basic' && provider === 'DeepSeek'
+                                        ? 'bg-primary/20 text-primary border-primary/30'
+                                        : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
+                                    }`}
+                                  >
                                     <Mail className="w-3 h-3" />
-                                    <span>
-                                      {p.loginMethod.includes('Mobile') ? 'Mobile' : 'Basic'}
-                                    </span>
+                                    <span>Basic</span>
                                   </div>
-                                )}
-
-                                {/* Show Google Badge if loginMethod contains keywords or authMethod is OAuth */}
-                                {(/Google|OAuth/i.test(p.loginMethod) ||
-                                  p.authMethod === 'OAuth') && (
-                                  <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium bg-muted/50 text-muted-foreground border-border">
+                                  <div
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setProvider(p.id);
+                                      setDeepseekMethod('google');
+                                    }}
+                                    className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium cursor-pointer transition-colors ${
+                                      deepseekMethod === 'google' && provider === 'DeepSeek'
+                                        ? 'bg-blue-500/20 text-blue-500 border-blue-500/30'
+                                        : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
+                                    }`}
+                                  >
                                     <img src={googleIcon} alt="Google" className="w-3 h-3" />
-                                    <span>
-                                      {p.loginMethod.includes('OAuth') || p.authMethod === 'OAuth'
-                                        ? 'OAuth'
-                                        : 'Google'}
-                                    </span>
+                                    <span>Google</span>
                                   </div>
-                                )}
-                              </>
-                            )}
+                                </>
+                              ) : (
+                                <>
+                                  {/* Show Basic Badge if loginMethod contains keywords or authMethod is Basic (and not just Google) */}
+                                  {(/Direct|Email|Basic|Mobile|OTP/i.test(p.loginMethod) ||
+                                    (p.authMethod === 'Basic' &&
+                                      !/Google|OAuth/i.test(p.loginMethod))) && (
+                                    <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium bg-muted/50 text-muted-foreground border-border">
+                                      <Mail className="w-3 h-3" />
+                                      <span>
+                                        {p.loginMethod.includes('Mobile') ? 'Mobile' : 'Basic'}
+                                      </span>
+                                    </div>
+                                  )}
+
+                                  {/* Show Google Badge if loginMethod contains keywords or authMethod is OAuth */}
+                                  {(/Google|OAuth/i.test(p.loginMethod) ||
+                                    p.authMethod === 'OAuth') && (
+                                    <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium bg-muted/50 text-muted-foreground border-border">
+                                      <img src={googleIcon} alt="Google" className="w-3 h-3" />
+                                      <span>
+                                        {p.loginMethod.includes('OAuth') || p.authMethod === 'OAuth'
+                                          ? 'OAuth'
+                                          : 'Google'}
+                                      </span>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Right Content Area */}
+                <div className="flex-1 pl-2 overflow-y-auto">
+                  {provider === 'Antigravity' ? (
+                    renderAntigravityContent()
+                  ) : (
+                    <div className="flex flex-col h-full items-center justify-center text-center space-y-6">
+                      <div
+                        className={`p-4 rounded-full ${selectedProviderData?.color || 'bg-muted'} bg-opacity-20`}
+                      >
+                        <img
+                          src={selectedProviderData?.icon}
+                          className="w-12 h-12"
+                          alt={provider}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <h3 className="text-lg font-semibold">
+                          Login to {selectedProviderData?.name}
+                        </h3>
+                        <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+                          {provider === 'DeepSeek' && deepseekMethod === 'google'
+                            ? 'We will utilize the Google Login flow for DeepSeek.'
+                            : selectedProviderData?.loginMethod === 'Direct'
+                              ? 'We will attempt to log you in automatically via the browser.'
+                              : 'A secure browser window will open for you to log in.'}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={(e) => handleLogin(e as any)}
+                        disabled={loading}
+                        className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-8 py-2 w-full max-w-xs"
+                      >
+                        {loading ? 'Waiting...' : `Login with ${provider}`}
+                      </button>
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
-
-              {/* Right Content Area */}
-              <div className="flex-1 pl-2 overflow-y-auto">
-                {provider === 'Antigravity' ? (
-                  renderAntigravityContent()
-                ) : (
-                  <div className="flex flex-col h-full items-center justify-center text-center space-y-6">
-                    <div
-                      className={`p-4 rounded-full ${selectedProviderData?.color || 'bg-muted'} bg-opacity-20`}
-                    >
-                      <img src={selectedProviderData?.icon} className="w-12 h-12" alt={provider} />
-                    </div>
-                    <div className="space-y-2">
-                      <h3 className="text-lg font-semibold">
-                        Login to {selectedProviderData?.name}
-                      </h3>
-                      <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-                        {provider === 'DeepSeek' && deepseekMethod === 'google'
-                          ? 'We will utilize the Google Login flow for DeepSeek.'
-                          : selectedProviderData?.loginMethod === 'Direct'
-                            ? 'We will attempt to log you in automatically via the browser.'
-                            : 'A secure browser window will open for you to log in.'}
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={(e) => handleLogin(e as any)}
-                      disabled={loading}
-                      className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-8 py-2 w-full max-w-xs"
-                    >
-                      {loading ? 'Waiting...' : `Login with ${provider}`}
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
+            )}
 
             <div className="flex justify-between items-center pt-4 border-t mt-4">
               <div className="text-xs text-muted-foreground">

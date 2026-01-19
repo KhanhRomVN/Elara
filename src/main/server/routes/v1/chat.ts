@@ -54,6 +54,7 @@ router.post('/accounts/:accountId/messages', async (req: Request, res: Response)
     }
 
     let accumulatedContent = '';
+    let accumulatedThinking = '';
     let accumulatedMetadata: any = {};
 
     try {
@@ -75,6 +76,13 @@ router.post('/accounts/:accountId/messages', async (req: Request, res: Response)
             accumulatedContent += content;
           }
         },
+        onThinking: (chunk) => {
+          if (stream !== false) {
+            res.write(`data: ${JSON.stringify({ thinking: chunk })}\n\n`);
+          } else {
+            accumulatedThinking += chunk;
+          }
+        },
         onMetadata: (meta) => {
           if (stream !== false) {
             res.write(`data: ${JSON.stringify({ meta })}\n\n`);
@@ -88,11 +96,17 @@ router.post('/accounts/:accountId/messages', async (req: Request, res: Response)
             res.end();
           } else {
             if (!res.headersSent) {
+              // If thinking content exists, wrap it and prepend to content
+              let finalContent = accumulatedContent;
+              if (accumulatedThinking) {
+                finalContent = `<thinking>${accumulatedThinking}</thinking>\n\n${accumulatedContent}`;
+              }
+
               res.status(200).json({
                 success: true,
                 message: {
                   role: 'assistant',
-                  content: accumulatedContent,
+                  content: finalContent,
                 },
                 metadata: accumulatedMetadata,
               });

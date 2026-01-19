@@ -334,12 +334,16 @@ export const usePlaygroundLogic = ({
   useEffect(() => {
     const fetchProviders = async () => {
       try {
-        const res = await fetch(
-          'https://raw.githubusercontent.com/KhanhRomVN/Elara/main/provider.json',
-        );
+        // @ts-ignore
+        const serverStatus = await window.api.server.start();
+        const port = serverStatus.port || 11434;
+
+        const res = await fetch(`http://localhost:${port}/v1/providers`);
         if (res.ok) {
-          const data = await res.json();
-          setProvidersList(data);
+          const json = await res.json();
+          if (json.success && Array.isArray(json.data)) {
+            setProvidersList(json.data);
+          }
         }
       } catch (error) {
         console.error('Failed to fetch providers:', error);
@@ -694,13 +698,37 @@ export const usePlaygroundLogic = ({
                   );
                 }
 
-                // Handle metadata: { meta: { conversation_id, conversation_title } }
+                // Handle thinking chunk: { thinking: "..." }
+                if (parsed.thinking) {
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === assistantMessageId
+                        ? {
+                            ...m,
+                            thinking: (m.thinking || '') + parsed.thinking,
+                            _deepseek_mode: 'THINK',
+                          }
+                        : m,
+                    ),
+                  );
+                }
+
+                // Handle metadata: { meta: { conversation_id, conversation_title, thinking_elapsed } }
                 if (parsed.meta) {
                   if (parsed.meta.conversation_id) {
                     setActiveChatId(parsed.meta.conversation_id);
                   }
                   if (parsed.meta.conversation_title) {
                     setConversationTitle(parsed.meta.conversation_title);
+                  }
+                  if (parsed.meta.thinking_elapsed !== undefined) {
+                    setMessages((prev) =>
+                      prev.map((m) =>
+                        m.id === assistantMessageId
+                          ? { ...m, thinking_elapsed: parsed.meta.thinking_elapsed }
+                          : m,
+                      ),
+                    );
                   }
                 }
               } catch (e) {

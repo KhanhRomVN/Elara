@@ -64,6 +64,56 @@ All API responses follow a consistent format:
 
 ---
 
+## Providers API
+
+### Get All Providers
+
+Retrieves a list of all supported providers and their configurations.
+
+- **Endpoint:** `GET /v1/providers`
+- **Response:**
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "id": "Claude",
+        "name": "Claude",
+        "description": "Smartest Model",
+        "icon": "...",
+        "active": true,
+        "models": [...]
+      },
+      ...
+    ]
+  }
+  ```
+
+### Get Provider Models (Unified)
+
+Retrieves available models for a specific provider.
+
+- **Endpoint:** `GET /v1/providers/:providerId/models`
+- **Params:**
+  - `providerId`: The ID of the provider (e.g., `deepseek`, `claude`)
+- **Query Params:**
+  - `email` (optional): Required for some dynamic providers to fetch account-specific models.
+- **Response:**
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "id": "deepseek-chat",
+        "name": "DeepSeek Chat"
+      }
+    ],
+    "source": "static" // or "dynamic"
+  }
+  ```
+
+---
+
 ## Account Management
 
 ### Get All Accounts

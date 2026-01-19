@@ -158,6 +158,31 @@ router.get('/:providerId/models', async (req: Request, res: Response) => {
       error: error.message || 'Internal server error',
     });
   }
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Internal server error',
+    });
+  }
+});
+
+/**
+ * GET /v1/providers
+ * Get all providers from source
+ */
+router.get('/', async (_req: Request, res: Response) => {
+  try {
+    const providers = await getProviders();
+    return res.json({
+      success: true,
+      data: providers,
+    });
+  } catch (error: any) {
+    console.error('[Providers API] Error fetching providers:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch providers',
+    });
+  }
 });
 
 export default router;

@@ -35,6 +35,7 @@ export interface SendMessageOptions {
   stream?: boolean;
   userAgent?: string;
   onContent: (chunk: string) => void;
+  onThinking?: (chunk: string) => void;
   onMetadata?: (meta: any) => void;
   onDone: () => void;
   onError: (err: any) => void;
@@ -1122,6 +1123,7 @@ const sendMessageDeepSeek = async (
     thinking,
     userAgent,
     onContent,
+    onThinking,
     onMetadata,
     onDone,
     onError,
@@ -1141,6 +1143,7 @@ const sendMessageDeepSeek = async (
     userAgent,
     {
       onContent,
+      onThinking,
       onMetadata,
       onDone,
       onError,
