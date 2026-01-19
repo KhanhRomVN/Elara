@@ -1,4 +1,14 @@
-import { Upload, StopCircle, ArrowUpFromDot, Globe, Loader2, X, FileText, Zap } from 'lucide-react';
+import {
+  Upload,
+  StopCircle,
+  ArrowUpFromDot,
+  Globe,
+  Loader2,
+  X,
+  FileText,
+  Zap,
+  Brain,
+} from 'lucide-react';
 import { ChangeEvent, KeyboardEvent, useRef, useState, ClipboardEvent, DragEvent } from 'react';
 import { PendingAttachment } from '../types';
 import { cn } from '../../../shared/lib/utils';
@@ -29,6 +39,7 @@ interface InputAreaProps {
   setStreamEnabled?: (enabled: boolean) => void;
   supportsSearch?: boolean;
   supportsUpload?: boolean;
+  supportsThinking?: boolean;
 }
 
 export const InputArea = ({
@@ -56,6 +67,7 @@ export const InputArea = ({
   setStreamEnabled,
   supportsSearch,
   supportsUpload,
+  supportsThinking,
 }: InputAreaProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -277,6 +289,21 @@ export const InputArea = ({
                   title={streamEnabled ? 'Streaming On' : 'Streaming Off'}
                 >
                   <Zap className="h-5 w-5" />
+                </button>
+              )}
+
+              {supportsThinking && _setThinkingEnabled && (
+                <button
+                  onClick={() => _setThinkingEnabled(!_thinkingEnabled)}
+                  className={cn(
+                    'p-2 rounded-full transition-colors',
+                    _thinkingEnabled
+                      ? 'bg-purple-500/10 text-purple-500 hover:bg-purple-500/20'
+                      : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+                  )}
+                  title={_thinkingEnabled ? 'Thinking Mode On' : 'Thinking Mode Off'}
+                >
+                  <Brain className="h-5 w-5" />
                 </button>
               )}
 

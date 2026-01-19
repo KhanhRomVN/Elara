@@ -33,7 +33,7 @@ router.post('/accounts/:accountId/uploads', upload.single('file'), (req, res) =>
 router.post('/accounts/:accountId/messages', async (req: Request, res: Response) => {
   try {
     const { accountId } = req.params;
-    const { model, messages, conversationId, stream, search, ref_file_ids } = req.body;
+    const { model, messages, conversationId, stream, search, ref_file_ids, thinking } = req.body;
     console.log('[API] POST /messages body:', JSON.stringify(req.body, null, 2));
 
     const db = getDb();
@@ -66,6 +66,7 @@ router.post('/accounts/:accountId/messages', async (req: Request, res: Response)
         stream: stream !== false,
         search: ref_file_ids && ref_file_ids.length > 0 ? false : search,
         ref_file_ids,
+        thinking, // Pass thinking parameter
         userAgent: req.headers['user-agent'],
         onContent: (content) => {
           if (stream !== false) {

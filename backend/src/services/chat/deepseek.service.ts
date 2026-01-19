@@ -416,6 +416,8 @@ export async function chatCompletionStream(
       client_stream_id: clientStreamId,
     };
 
+    console.log('[DeepSeek] Thinking param:', payload.thinking);
+
     console.log(
       '[DeepSeek] Request Payload:',
       JSON.stringify(requestPayload, null, 2),

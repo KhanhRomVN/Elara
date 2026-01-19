@@ -639,6 +639,10 @@ export const usePlaygroundLogic = ({
           stream: streamEnabled,
           search: searchEnabled,
           ref_file_ids: uploadedFileIds,
+          thinking: (() => {
+            console.log('[HandleSend] Sending request with thinkingEnabled:', thinkingEnabled);
+            return thinkingEnabled;
+          })(),
         }),
       });
 

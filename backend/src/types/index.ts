@@ -18,6 +18,7 @@ export interface ChatRequest {
   conversation_id?: string;
   search?: boolean;
   ref_file_ids?: string[];
+  thinking?: boolean;
 }
 
 export interface StreamResponse {

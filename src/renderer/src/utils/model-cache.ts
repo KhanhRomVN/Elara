@@ -131,10 +131,11 @@ async function fetchModelsFromAPI(providerId: string, port: number): Promise<Mod
     const models: Model[] = (data.data || []).map((m: any) => ({
       id: m.id,
       name: m.name || m.id,
+      is_thinking: m.is_thinking,
       ...m,
     }));
 
-    console.log(`[Model Cache] Fetched ${models.length} models for ${providerId}`);
+    console.log(`[Model Cache] Fetched ${models.length} models for ${providerId}`, models);
     return models;
   } catch (error) {
     console.error(`[Model Cache] Error fetching models for ${providerId}:`, error);

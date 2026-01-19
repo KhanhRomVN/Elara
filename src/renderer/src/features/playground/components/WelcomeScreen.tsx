@@ -23,6 +23,7 @@ interface WelcomeScreenProps {
   setStreamEnabled?: (enabled: boolean) => void;
   supportsSearch?: boolean;
   supportsUpload?: boolean;
+  supportsThinking?: boolean;
 }
 
 export const WelcomeScreen = ({
@@ -46,6 +47,7 @@ export const WelcomeScreen = ({
   setStreamEnabled,
   supportsSearch,
   supportsUpload,
+  supportsThinking,
 }: WelcomeScreenProps) => {
   return (
     <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-6 animate-in fade-in zoom-in-95 duration-500">
@@ -81,6 +83,7 @@ export const WelcomeScreen = ({
           setStreamEnabled={setStreamEnabled}
           supportsSearch={supportsSearch}
           supportsUpload={supportsUpload}
+          supportsThinking={supportsThinking}
         />
       </div>
     </div>

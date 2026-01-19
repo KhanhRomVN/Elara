@@ -304,6 +304,29 @@ export const PlaygroundPage = ({
             setStreamEnabled={setStreamEnabled}
             supportsSearch={localProvidersConfig.find((p) => p.id === selectedProvider)?.is_search}
             supportsUpload={localProvidersConfig.find((p) => p.id === selectedProvider)?.is_upload}
+            supportsThinking={(() => {
+              if (selectedProvider === 'DeepSeek') {
+                const model = deepseekModelsList.find((m) => m.id === deepseekModel);
+                console.log(
+                  '[Thinking Debug] DeepSeek model:',
+                  model,
+                  'is_thinking:',
+                  model?.is_thinking,
+                );
+                return model?.is_thinking === true;
+              }
+              if (selectedProvider === 'Claude') {
+                const model = claudeModelsList.find((m) => m.id === claudeModel);
+                console.log(
+                  '[Thinking Debug] Claude model:',
+                  model,
+                  'is_thinking:',
+                  model?.is_thinking,
+                );
+                return model?.is_thinking === true;
+              }
+              return false;
+            })()}
           />
         ) : (
           <>
@@ -346,6 +369,29 @@ export const PlaygroundPage = ({
               supportsUpload={
                 localProvidersConfig.find((p) => p.id === selectedProvider)?.is_upload
               }
+              supportsThinking={(() => {
+                if (selectedProvider === 'DeepSeek') {
+                  const model = deepseekModelsList.find((m) => m.id === deepseekModel);
+                  console.log(
+                    '[Thinking Debug Chat] DeepSeek model:',
+                    model,
+                    'is_thinking:',
+                    model?.is_thinking,
+                  );
+                  return model?.is_thinking === true;
+                }
+                if (selectedProvider === 'Claude') {
+                  const model = claudeModelsList.find((m) => m.id === claudeModel);
+                  console.log(
+                    '[Thinking Debug Chat] Claude model:',
+                    model,
+                    'is_thinking:',
+                    model?.is_thinking,
+                  );
+                  return model?.is_thinking === true;
+                }
+                return false;
+              })()}
             />
           </>
         )}

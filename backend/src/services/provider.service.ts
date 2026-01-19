@@ -90,6 +90,7 @@ export interface ModelWithProvider {
   name: string;
   provider_id: string;
   provider_name: string;
+  is_thinking?: boolean;
 }
 
 export const getAllModelsFromEnabledProviders = async (): Promise<
@@ -109,6 +110,7 @@ export const getAllModelsFromEnabledProviders = async (): Promise<
           name: model.name,
           provider_id: provider.provider_id,
           provider_name: provider.provider_name,
+          is_thinking: model.is_thinking || false,
         });
       }
     }
