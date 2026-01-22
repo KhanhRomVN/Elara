@@ -123,8 +123,11 @@ export const getProviderModels = async (
     context_length?: number | null;
   }[]
 > => {
+  logger.info(`[DEBUG] getProviderModels called for: ${providerId}`);
+
   // Check if provider is enabled first
   const isEnabled = await isProviderEnabled(providerId);
+  logger.info(`[DEBUG] Provider ${providerId} enabled: ${isEnabled}`);
   if (!isEnabled) {
     throw new Error(`Provider ${providerId} is disabled`);
   }
@@ -132,8 +135,15 @@ export const getProviderModels = async (
   // Fetch remote config to get models
   const remoteConfig = await fetchProviderConfig();
   const provider = remoteConfig.find((c: any) => c.provider_id === providerId);
+  logger.info(`[DEBUG] Provider found in config: ${!!provider}`);
+  logger.info(
+    `[DEBUG] Provider has static models: ${!!(provider && provider.models && Array.isArray(provider.models))}`,
+  );
 
   if (provider && provider.models && Array.isArray(provider.models)) {
+    logger.info(
+      `[DEBUG] Returning ${provider.models.length} static models from config`,
+    );
     return provider.models.map((m: any) => ({
       id: m.id,
       name: m.name,
@@ -144,25 +154,41 @@ export const getProviderModels = async (
 
   // Fallback to dynamic provider if available
   const dynamicProvider = providerRegistry.getProvider(providerId);
+  logger.info(
+    `[DEBUG] Dynamic provider found in registry: ${!!dynamicProvider}`,
+  );
+  logger.info(
+    `[DEBUG] Dynamic provider has getModels: ${!!(dynamicProvider && dynamicProvider.getModels)}`,
+  );
+
   if (dynamicProvider && dynamicProvider.getModels) {
-    logger.info(`Fetching dynamic models for ${providerId} from registry...`);
+    logger.info(
+      `[DEBUG] Fetching dynamic models for ${providerId} from registry...`,
+    );
     const db = getDb();
     const account = db
       .prepare('SELECT * FROM accounts WHERE LOWER(provider_id) = ? LIMIT 1')
       .get(providerId.toLowerCase()) as any;
 
+    logger.info(`[DEBUG] Account found for ${providerId}: ${!!account}`);
     if (account) {
+      logger.info(`[DEBUG] Account ID: ${account.id}, Email: ${account.email}`);
       try {
+        logger.info(`[DEBUG] Calling getModels with credential...`);
         const dynamicModels = await dynamicProvider.getModels(
           account.credential,
           account.id,
         );
+        logger.info(
+          `[DEBUG] Dynamic models fetched successfully: ${dynamicModels.length} models`,
+        );
         return dynamicModels;
       } catch (e) {
-        logger.error(`Failed to fetch dynamic models for ${providerId}:`, e);
+        logger.error(
+          `[DEBUG] Failed to fetch dynamic models for ${providerId}:`,
+          e,
+        );
       }
-    } else {
-      logger.warn(`No account found for ${providerId} to fetch models`);
     }
   }
 

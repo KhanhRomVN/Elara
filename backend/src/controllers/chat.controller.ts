@@ -6,8 +6,47 @@ import {
   sendMessage,
 } from '../services/chat.service';
 import { createLogger } from '../utils/logger';
+import crypto from 'crypto';
 
 const logger = createLogger('ChatController');
+
+/**
+ * Updates the average response time for a given model.
+ */
+const updateModelPerformance = async (
+  modelId: string,
+  providerId: string,
+  responseTime: number,
+) => {
+  try {
+    const db = getDb();
+    const record = db
+      .prepare(
+        'SELECT * FROM models_performance WHERE model_id = ? AND provider_id = ?',
+      )
+      .get(modelId, providerId) as any;
+
+    if (!record) {
+      db.prepare(
+        'INSERT INTO models_performance (id, model_id, provider_id, avg_response_time, total_samples) VALUES (?, ?, ?, ?, ?)',
+      ).run(crypto.randomUUID(), modelId, providerId, responseTime, 1);
+    } else {
+      const newTotalSamples = record.total_samples + 1;
+      const newAvgTime =
+        (record.avg_response_time * record.total_samples + responseTime) /
+        newTotalSamples;
+
+      db.prepare(
+        'UPDATE models_performance SET avg_response_time = ?, total_samples = ? WHERE model_id = ? AND provider_id = ?',
+      ).run(newAvgTime, newTotalSamples, modelId, providerId);
+    }
+  } catch (error) {
+    logger.error(
+      `Error updating model performance for ${modelId} (${providerId}):`,
+      error,
+    );
+  }
+};
 
 // GET /v1/accounts/:accountId/conversations
 export const getAccountConversations = async (
@@ -162,7 +201,10 @@ export const getAccountConversationDetail = async (
   }
 };
 
-import { getAllProviders } from '../services/provider.service';
+import {
+  getAllProviders,
+  getProviderModels,
+} from '../services/provider.service';
 import { providerRegistry } from '../provider/registry';
 import { getAccountSelector } from '../services/account-selector';
 
@@ -330,6 +372,21 @@ export const sendMessageController = async (
       return;
     }
 
+    // Validate if the model belongs to this provider
+    const providerModels = await getProviderModels(account.provider_id);
+    const isValidModel = providerModels.some((m: any) => m.id === model);
+
+    if (!isValidModel) {
+      // Check if it's the provider's default model (fallback)
+      const dynamicProvider = providerRegistry.getProvider(account.provider_id);
+      if (dynamicProvider?.defaultModel !== model) {
+        res.status(400).json({
+          error: `Model ${model} is not supported by provider ${account.provider_id}`,
+        });
+        return;
+      }
+    }
+
     // Validate search capability
     if (useSearch) {
       const providers = await getAllProviders();
@@ -359,6 +416,17 @@ export const sendMessageController = async (
     let accumulatedMetadata: any = {};
 
     try {
+      const startTime = Date.now();
+      let firstResponseCaptured = false;
+
+      const captureFirstResponse = () => {
+        if (!firstResponseCaptured) {
+          firstResponseCaptured = true;
+          const duration = Date.now() - startTime;
+          updateModelPerformance(model, account.provider_id, duration);
+        }
+      };
+
       await sendMessage({
         credential: account.credential,
         provider_id: account.provider_id,
@@ -371,6 +439,7 @@ export const sendMessageController = async (
         thinking,
         ref_file_ids,
         onContent: (content) => {
+          captureFirstResponse();
           if (stream !== false) {
             res.write(`data: ${JSON.stringify({ content })}\n\n`);
           } else {
@@ -378,11 +447,21 @@ export const sendMessageController = async (
           }
         },
         onMetadata: (meta) => {
+          captureFirstResponse();
           if (stream !== false) {
             res.write(`data: ${JSON.stringify({ meta })}\n\n`);
           } else {
             accumulatedMetadata = { ...accumulatedMetadata, ...meta };
           }
+        },
+        onThinking: (content) => {
+          captureFirstResponse();
+          if (stream !== false) {
+            res.write(
+              `data: ${JSON.stringify({ content, thinking: true })}\n\n`,
+            );
+          }
+          // Note: added thinking handling for consistency if needed
         },
         onDone: () => {
           if (stream !== false) {

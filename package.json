@@ -19,7 +19,7 @@
   "main": "./out/main/index.js",
   "author": "KhanhRomVN",
   "scripts": {
-    "dev": "node scripts/dev-setup.js && SILENT_SERVER=true electron-vite dev",
+    "dev": "node scripts/dev-setup.js && cross-env SILENT_SERVER=true electron-vite dev",
     "dev:electron": "node scripts/dev-setup.js && electron-vite dev",
     "dev:server": "echo '⚠️  Standalone backend is deprecated. Backend is now embedded in Electron. Use npm run dev instead.' && cd backend && npm run dev > ../backend.log 2>&1",
     "watch:server": "tail -f server.log",
@@ -109,6 +109,7 @@
     "@vitejs/plugin-react": "^4.2.0",
     "autoprefixer": "^10.4.16",
     "concurrently": "^9.2.1",
+    "cross-env": "^7.0.3",
     "electron": "^28.1.0",
     "electron-builder": "^24.9.0",
     "electron-vite": "^2.0.0",

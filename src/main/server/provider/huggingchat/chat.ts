@@ -32,20 +32,6 @@ class HuggingChatStreamParser {
   }
 }
 
-// Get available models
-export const getModels = (cookies: string): Promise<any[]> => {
-  return new Promise(async (resolve, reject) => {
-    try {
-      const json = await fetchJson('https://huggingface.co/chat/api/v2/models', cookies);
-      const models = json.json || json || [];
-      resolve(models);
-    } catch (e) {
-      console.error('[HuggingChat] Error fetching models:', e);
-      reject(e as Error);
-    }
-  });
-};
-
 // Get conversation list
 export const getConversations = (cookies: string, page: number = 0): Promise<any> => {
   return new Promise(async (resolve, reject) => {

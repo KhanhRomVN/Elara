@@ -189,6 +189,61 @@ export class HuggingChatProvider implements Provider {
     };
   }
 
+  async getModels(
+    credential: string,
+    accountId?: string,
+  ): Promise<
+    {
+      id: string;
+      name: string;
+      is_thinking: boolean;
+      context_length: number | null;
+    }[]
+  > {
+    logger.info('[DEBUG] HuggingChat getModels called');
+    try {
+      const client = this.createClient(credential);
+      const res = await client.get('/chat/api/v2/models');
+      const data = await res.json();
+      logger.info(
+        `[DEBUG] Models API response received: ${JSON.stringify(data).substring(0, 200)}...`,
+      );
+
+      // Parse models from API response
+      // HuggingChat API returns: {"json": [models array]}
+      const modelsList = data.json || data.models || data || [];
+      logger.info(
+        `[DEBUG] Models list type: ${Array.isArray(modelsList)}, length: ${modelsList.length}`,
+      );
+
+      const models = modelsList.map((model: any) => {
+        // Extract context_length from providers array if available
+        let contextLength: number | null = null;
+        if (model.providers && Array.isArray(model.providers)) {
+          for (const provider of model.providers) {
+            if (provider.context_length) {
+              contextLength = provider.context_length;
+              break;
+            }
+          }
+        }
+
+        return {
+          id: model.id,
+          name: model.displayName || model.name || model.id,
+          // HuggingChat API doesn't provide thinking mode info, default to false
+          is_thinking: false,
+          context_length: contextLength,
+        };
+      });
+
+      return models;
+    } catch (error) {
+      logger.error('Error fetching models from HuggingChat API:', error);
+      throw error;
+    }
+  }
+
   private createClient(cookie: string) {
     return new HttpClient({
       baseURL: BASE_URL,

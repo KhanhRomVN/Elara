@@ -5,8 +5,9 @@ const path = require('path');
 const os = require('os');
 
 const projectRoot = path.join(__dirname, '..');
+const binDir = path.join(projectRoot, 'bin');
 const localBinDir = path.join(projectRoot, 'node_modules', '.bin');
-const cliSource = path.join(projectRoot, 'bin', 'cli.js');
+const cliSource = path.join(binDir, 'cli.js');
 const localCliLink = path.join(localBinDir, 'elara');
 
 console.log('🔧 Setting up local CLI...');
@@ -21,12 +22,22 @@ try {
 
 // Create symlink in node_modules/.bin (no sudo needed)
 try {
-  // Remove existing symlink if present
+  // Ensure node_modules/.bin exists
+  if (!fs.existsSync(localBinDir)) {
+    fs.mkdirSync(localBinDir, { recursive: true });
+    console.log(`✓ Created missing directory: ${localBinDir}`);
+  }
+
+  // Remove existing file/symlink if present
   if (fs.existsSync(localCliLink)) {
     fs.unlinkSync(localCliLink);
   }
 
-  fs.symlinkSync(cliSource, localCliLink);
+  const isWindows = process.platform === 'win32';
+
+  // On Windows, symlinkSync needs a type argument ('file', 'dir', or 'junction')
+  // 'file' is correct for cli.js
+  fs.symlinkSync(cliSource, localCliLink, isWindows ? 'file' : undefined);
   console.log('✓ Created local CLI symlink in node_modules/.bin/elara');
   console.log('');
   console.log('You can now use CLI in this project:');
@@ -37,6 +48,19 @@ try {
   console.log('Or install globally: sudo npm run install-cli');
 } catch (error) {
   console.error(`✗ Failed to create local symlink: ${error.message}`);
+
+  // Fallback for Windows if symlinking fails due to permissions
+  if (process.platform === 'win32') {
+    try {
+      fs.copyFileSync(cliSource, localCliLink);
+      console.log(
+        '✓ Fallback: Copied CLI script instead of symlinking (preferred for Windows environments with limited symlink permissions)',
+      );
+    } catch (copyError) {
+      console.error(`✗ Fallback copy failed: ${copyError.message}`);
+    }
+  }
+
   console.log('You can still use: node bin/cli.js');
 }
 

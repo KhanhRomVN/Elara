@@ -88,6 +88,33 @@ const createTables = (): void => {
   try {
     db.exec(providersQuery);
     logger.info('Providers table initialized');
+
+    const modelsPerformanceQuery = `
+      CREATE TABLE IF NOT EXISTS models_performance (
+        id TEXT PRIMARY KEY,
+        model_id TEXT NOT NULL,
+        provider_id TEXT NOT NULL,
+        avg_response_time REAL DEFAULT 0,
+        total_samples INTEGER DEFAULT 0,
+        UNIQUE(model_id, provider_id)
+      )
+    `;
+    db.exec(modelsPerformanceQuery);
+
+    // Migration for existing models_performance table
+    const modelPerfInfo = db.pragma('table_info(models_performance)') as any[];
+    const modelPerfColumns = modelPerfInfo.map((c) => c.name);
+    if (!modelPerfColumns.includes('provider_id')) {
+      try {
+        db.exec(
+          'ALTER TABLE models_performance ADD COLUMN provider_id TEXT DEFAULT "unknown"',
+        );
+        logger.info('Added provider_id column to models_performance');
+      } catch (e) {
+        logger.warn('Failed to add provider_id column to models_performance');
+      }
+    }
+    logger.info('Models performance table initialized');
   } catch (err) {
     logger.error('Error creating providers table', err);
     throw err;

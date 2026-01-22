@@ -59,6 +59,15 @@ export const ConversationSchema = z.object({
 });
 export type Conversation = z.infer<typeof ConversationSchema>;
 
+// --- Model Performance ---
+export const ModelPerformanceSchema = z.object({
+  id: z.string(),
+  model_id: z.string(),
+  provider_id: z.string(),
+  avg_response_time: z.number(), // in milliseconds
+});
+export type ModelPerformance = z.infer<typeof ModelPerformanceSchema>;
+
 // --- API Error ---
 export interface ApiError extends Error {
   statusCode?: number;
