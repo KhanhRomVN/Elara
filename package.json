@@ -76,6 +76,7 @@
     "fuse.js": "^7.1.0",
     "helmet": "^8.1.0",
     "http-mitm-proxy": "^1.1.0",
+    "js-tiktoken": "^1.0.21",
     "lucide-react": "^0.294.0",
     "monaco-editor": "^0.55.1",
     "mongoose": "^9.1.4",
