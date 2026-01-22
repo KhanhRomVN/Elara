@@ -1,0 +1,20 @@
+dist
+node_modules
+out
+temp
+backend.log
+server.log
+njsscan.sarif
+.eslintcache
+*.log*
+
+# Environment Variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*
+!.env.example
+temp
+backend/database.sqlite

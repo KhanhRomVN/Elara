@@ -1,0 +1,65 @@
+import { contextBridge } from 'electron';
+import { electronAPI } from '@electron-toolkit/preload';
+import { ipcRenderer } from 'electron';
+import { appAPI } from './api';
+import { accountsAPI } from './api/accounts';
+import { serverAPI } from './api/server';
+import { logsAPI } from './api/logs';
+import { commandsAPI } from './api/commands';
+import { versionAPI } from './api/version';
+
+const api = {
+  app: appAPI,
+  accounts: {
+    ...accountsAPI,
+    login: (provider: string, options?: any) => {
+      ipcRenderer.send('debug:log', `[Preload] invoking accounts:login for ${provider}`);
+      // @ts-ignore
+      return accountsAPI.login(provider, options);
+    },
+  },
+  server: serverAPI,
+  version: versionAPI,
+  logs: logsAPI,
+  commands: commandsAPI,
+  stats: {
+    getStats: (): Promise<any> => ipcRenderer.invoke('stats:get'),
+  },
+  dialog: {
+    openDirectory: () => ipcRenderer.invoke('dialog:open-directory'),
+  },
+  proxy: {
+    getConfig: () => ipcRenderer.invoke('proxy:get-config'),
+    updateConfig: (updates: any) => ipcRenderer.invoke('proxy:update-config', updates),
+    resetConfig: () => ipcRenderer.invoke('proxy:reset-config'),
+    getServerInfo: () => ipcRenderer.invoke('proxy:get-server-info'),
+    getCertificateInfo: () => ipcRenderer.invoke('proxy:get-certificate-info'),
+    exportCertificate: () => ipcRenderer.invoke('proxy:export-certificate'),
+    deleteCertificates: () => ipcRenderer.invoke('proxy:delete-certificates'),
+    regenerateCertificates: () => ipcRenderer.invoke('proxy:regenerate-certificates'),
+  },
+  shell: {
+    execute: (command: string, cwd?: string): Promise<string> =>
+      ipcRenderer.invoke('shell:execute', command, cwd),
+  },
+  on: (channel: string, listener: (event: any, ...args: any[]) => void) => {
+    const subscription = (_event: any, ...args: any[]) => listener(_event, ...args);
+    ipcRenderer.on(channel, subscription);
+    return () => ipcRenderer.removeListener(channel, subscription);
+  },
+  send: (channel: string, ...args: any[]) => ipcRenderer.send(channel, ...args),
+};
+
+if (process.contextIsolated) {
+  try {
+    contextBridge.exposeInMainWorld('electron', electronAPI);
+    contextBridge.exposeInMainWorld('api', api);
+  } catch (error) {
+    console.error(error);
+  }
+} else {
+  // @ts-expect-error (define in d.ts)
+  window.electron = electronAPI;
+  // @ts-expect-error (api is defined in d.ts)
+  window.api = api;
+}

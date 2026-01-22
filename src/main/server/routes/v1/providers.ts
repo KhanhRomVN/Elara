@@ -1,0 +1,282 @@
+import express, { Request, Response } from 'express';
+import { getDb } from '@backend/services/db';
+import { getProviders, getProviderById, Provider } from '../../provider-registry';
+
+const router = express.Router();
+
+// Helper to find account by provider ID (case insensitive)
+const findAccount = (req: Request, providerId: string) => {
+  const db = getDb();
+  // Check for email query param first
+  const email = req.query.email as string;
+  const normalizedId = providerId.toLowerCase();
+
+  let query = 'SELECT * FROM accounts WHERE LOWER(provider_id) = ?';
+  const params: any[] = [normalizedId];
+
+  if (email) {
+    query += ' AND email = ?';
+    params.push(email);
+  } else {
+    // If no email, prefer Active status or just first one
+  }
+  query += ' LIMIT 1';
+
+  return db.prepare(query).get(...params) as any;
+};
+
+// Dynamic Provider Module Loader (Reused from accounts.ts logic)
+// Use Vite's import.meta.glob to bundle all provider modules
+// @ts-ignore
+const providerModules = import.meta.glob('../../provider/*/index.ts', { eager: true });
+console.log(
+  '[ProviderRegistry] Loaded embedded provider modules keys:',
+  Object.keys(providerModules),
+);
+
+const providerModuleCache: Map<string, any> = new Map();
+
+async function loadProviderModule(providerId: string): Promise<any | null> {
+  const normalizedId = providerId.toLowerCase();
+  if (providerModuleCache.has(normalizedId)) return providerModuleCache.get(normalizedId);
+
+  const possibleNames = [
+    normalizedId,
+    normalizedId.replace('-', ''),
+    normalizedId.replace('huggingchat', 'hugging-chat'),
+  ];
+
+  for (const name of possibleNames) {
+    const match = Object.keys(providerModules).find((key) =>
+      key.includes(`/provider/${name}/index.ts`),
+    );
+
+    if (match) {
+      const module: any = providerModules[match];
+      // Get the default export which is the provider instance
+      const provider = module.default || module;
+      providerModuleCache.set(normalizedId, provider);
+      return provider;
+    }
+  }
+
+  console.error(
+    `[Providers Router] No module found for ${providerId}. Available keys:`,
+    Object.keys(providerModules),
+  );
+  return null;
+}
+
+/**
+ * GET /v1/providers
+ * Get all providers
+ */
+router.get('/', async (_req: Request, res: Response) => {
+  try {
+    const providers = await getProviders();
+    return res.json({ success: true, data: providers });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * GET /v1/providers/:providerId
+ * Get single provider info
+ */
+router.get('/:providerId', async (req: Request, res: Response) => {
+  try {
+    const { providerId } = req.params;
+    const provider = await getProviderById(providerId);
+    if (!provider) {
+      return res.status(404).json({ success: false, error: `Unknown provider: ${providerId}` });
+    }
+    return res.json({
+      success: true,
+      data: { ...provider, id: provider.provider_id, name: provider.provider_name },
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.all(/^\/([^/]+)(?:\/(.*))?$/, async (req: Request, res: Response) => {
+  try {
+    const providerId = (req.params as any)[0];
+    const fullPath = (req.params as any)[1] || '';
+
+    // Parse action and subPath manually
+    const parts = fullPath.split('/');
+    const action = parts[0];
+    const subPath = parts.length > 1 ? '/' + parts.slice(1).join('/') : '';
+
+    // Load Provider Module
+    const module = await loadProviderModule(providerId);
+    if (!module) {
+      console.error(`[Providers Router] Module load failed for: ${providerId}`);
+      return res.status(404).json({ error: `Provider module not found: ${providerId}` });
+    }
+
+    // Get Account
+    const account = findAccount(req, providerId);
+    if (!account) {
+      return res.status(401).json({ error: `No valid account found for ${providerId}` });
+    }
+
+    // MAP ACTIONS TO FUNCTIONS
+
+    // 1. Models (GET /models)
+    if (action === 'models' && req.method === 'GET') {
+      const providerInfo = await getProviderById(providerId);
+      if (providerInfo?.models && Array.isArray(providerInfo.models)) {
+        return res.json({ success: true, data: providerInfo.models, source: 'static' });
+      }
+
+      if (module.getModels) {
+        let result;
+        if (providerId.toLowerCase() === 'lmarena') {
+          result = await module.getModels(account);
+        } else {
+          // Default assume credential/cookies
+          result = await module.getModels(account.credential);
+        }
+        return res.json({ success: true, data: result, source: 'dynamic' });
+      }
+      return res.status(404).json({ error: 'Models not supported' });
+    }
+
+    // 2. Chat Sessions / Conversations (GET /sessions or /conversations)
+    if ((action === 'sessions' || action === 'conversations') && req.method === 'GET') {
+      if (!subPath || subPath === '/') {
+        // List
+        const page = parseInt(req.query.page as string) || 0;
+        const pinned = req.query.pinned === 'true';
+        const limit = parseInt(req.query.limit as string) || 30; // for Claude
+
+        let result;
+        if (module.getChatSessions) {
+          result = await module.getChatSessions(account.credential, account.userAgent, pinned);
+        } else if (module.getConversations) {
+          if (providerId.toLowerCase() === 'lmarena') {
+            result = await module.getConversations(account);
+          } else if (module.getConversations.length === 3) {
+            // Check signature? Or just pass extra args.
+            // Claude: (credential, userAgent, limit)
+            result = await module.getConversations(account.credential, account.userAgent, limit);
+          } else {
+            // HuggingChat: (cookies, page)
+            result = await module.getConversations(account.credential, page);
+          }
+        } else {
+          return res.status(501).json({ error: 'Not implemented' });
+        }
+        return res.json(result);
+      }
+
+      // Detail: /conversations/:id
+      const id = subPath.replace('/', '');
+
+      // Special case: /conversations/:id/messages
+      if (id.endsWith('/messages')) {
+        const realId = id.replace('/messages', '');
+        if (module.getChatHistory) {
+          const result = await module.getChatHistory(account.credential, realId, account.userAgent);
+          return res.json(result);
+        }
+      }
+
+      // Detail Lookup Priority
+      if (module.getConversation) {
+        const result = await module.getConversation(account.credential, id);
+        return res.json(result);
+      } else if (module.getConversationDetail) {
+        // LMArena: (id, account)
+        // Claude: (credential, id, userAgent)
+        if (providerId.toLowerCase() === 'lmarena') {
+          const result = await module.getConversationDetail(id, account);
+          return res.json(result);
+        } else {
+          const result = await module.getConversationDetail(
+            account.credential,
+            id,
+            account.userAgent,
+          );
+          return res.json(result);
+        }
+      } else if (module.getChatHistory) {
+        const result = await module.getChatHistory(account.credential, id, account.userAgent);
+        return res.json(result);
+      }
+
+      return res.status(404).json({ error: 'Conversation detail not supported' });
+    }
+
+    // 3. Files (POST /files)
+    if (action === 'files' && req.method === 'POST') {
+      if (module.uploadFile) {
+        const { file, fileName } = req.body;
+        const result = await module.uploadFile(
+          account.credential,
+          file,
+          fileName,
+          account.userAgent,
+        );
+        return res.json({ id: result });
+      }
+      return res.status(501).json({ error: 'Upload not supported' });
+    }
+
+    // 4. Summarize (POST /conversations/:id/summarize)
+    if ((action === 'sessions' || action === 'conversations') && req.method === 'POST') {
+      // subPath: /:id/summarize
+      if (subPath.endsWith('/summarize')) {
+        const id = subPath.split('/')[1];
+        if (module.summarizeConversation) {
+          const title = await module.summarizeConversation(account.credential, id);
+          return res.json({ title });
+        }
+      }
+    }
+
+    // 5. Stop Stream (POST /sessions/:id/stop)
+    if ((action === 'sessions' || action === 'conversations') && req.method === 'POST') {
+      if (subPath.endsWith('/stop')) {
+        const id = subPath.split('/')[1];
+        const { messageId } = req.body;
+
+        if (module.stopStream) {
+          await module.stopStream(account.credential, id, messageId, account.userAgent);
+          return res.json({ success: true });
+        } else if (module.stopResponse) {
+          await module.stopResponse(account.credential, id, account.userAgent);
+          return res.json({ success: true });
+        }
+      }
+    }
+
+    // 6. Delete Conversation (DELETE /conversations/:id)
+    if ((action === 'sessions' || action === 'conversations') && req.method === 'DELETE') {
+      const id = subPath.replace('/', '');
+      if (module.deleteConversation) {
+        await module.deleteConversation(account.credential, id, account.userAgent);
+        return res.json({ success: true });
+      }
+    }
+
+    // 7. Chat Completions
+    if (action === 'chat' && subPath === '/completions' && req.method === 'POST') {
+      if (module.chatCompletionStream) {
+        if (providerId.toLowerCase() === 'lmarena') {
+          return module.chatCompletionStream(req, res, account);
+        }
+      }
+    }
+
+    return res.status(404).json({ error: 'Unknown action' });
+  } catch (error: any) {
+    console.error(`[Providers API] Error handling ${req.method} ${req.url}:`, error);
+    return res.status(500).json({ error: error.message || 'Internal logic error' });
+  }
+});
+
+export default router;

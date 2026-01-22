@@ -1,0 +1,507 @@
+import { Request, Response } from 'express';
+import { getDb } from '../services/db';
+import {
+  getConversations,
+  getConversationDetail,
+  sendMessage,
+} from '../services/chat.service';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('ChatController');
+
+// GET /v1/accounts/:accountId/conversations
+export const getAccountConversations = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { accountId } = req.params;
+    const limit = parseInt(req.query.limit as string) || 30;
+    const page = parseInt(req.query.page as string) || 1;
+
+    // Get account from database (synchronous)
+    const db = getDb();
+    const account = db
+      .prepare('SELECT * FROM accounts WHERE id = ?')
+      .get(accountId) as any;
+
+    if (!account) {
+      res.status(404).json({
+        success: false,
+        message: 'Account not found',
+        error: { code: 'NOT_FOUND' },
+        meta: { timestamp: new Date().toISOString() },
+      });
+      return;
+    }
+
+    try {
+      // Fetch conversations from provider
+      const rawConversations = await getConversations({
+        credential: account.credential,
+        provider_id: account.provider_id,
+        limit,
+        page,
+      });
+
+      // Filter and normalize conversation fields
+      const conversations = rawConversations.map((conv: any) => {
+        const title = conv.title || conv.name || conv.summary || 'Untitled';
+        const id = conv.id || conv.uuid || conv.conversationId || conv._id;
+
+        // Normalize updated_at to seconds (number)
+        let updatedAt =
+          conv.updated_at || conv.updatedAt || conv.created_at || Date.now();
+
+        // If it's a date string, convert to seconds
+        if (typeof updatedAt === 'string') {
+          updatedAt = Math.floor(new Date(updatedAt).getTime() / 1000);
+        } else if (updatedAt > 1000000000000) {
+          // If it's milliseconds (longer than 10^12), convert to seconds
+          updatedAt = Math.floor(updatedAt / 1000);
+        }
+
+        return {
+          id,
+          title,
+          updated_at: updatedAt,
+        };
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Conversations retrieved successfully',
+        data: {
+          conversations,
+          account: {
+            id: account.id,
+            email: account.email,
+            provider_id: account.provider_id,
+          },
+        },
+        meta: { timestamp: new Date().toISOString() },
+      });
+    } catch (providerError: any) {
+      logger.error('Error fetching conversations from provider', providerError);
+      res.status(500).json({
+        success: false,
+        message: `Failed to fetch conversations: ${providerError.message}`,
+        error: { code: 'PROVIDER_ERROR' },
+        meta: { timestamp: new Date().toISOString() },
+      });
+    }
+  } catch (error) {
+    logger.error('Error in getAccountConversations', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: { code: 'INTERNAL_ERROR' },
+      meta: { timestamp: new Date().toISOString() },
+    });
+  }
+};
+
+// GET /v1/accounts/:accountId/conversations/:conversationId
+export const getAccountConversationDetail = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { accountId, conversationId } = req.params;
+
+    // Get account from database (synchronous)
+    const db = getDb();
+    const account = db
+      .prepare('SELECT * FROM accounts WHERE id = ?')
+      .get(accountId) as any;
+
+    if (!account) {
+      res.status(404).json({
+        success: false,
+        message: 'Account not found',
+        error: { code: 'NOT_FOUND' },
+        meta: { timestamp: new Date().toISOString() },
+      });
+      return;
+    }
+
+    try {
+      // Fetch conversation detail from provider
+      const conversation = await getConversationDetail({
+        credential: account.credential,
+        provider_id: account.provider_id,
+        conversationId: conversationId,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Conversation details retrieved successfully',
+        data: conversation,
+        meta: { timestamp: new Date().toISOString() },
+      });
+    } catch (providerError: any) {
+      logger.error(
+        'Error fetching conversation detail from provider',
+        providerError,
+      );
+      res.status(500).json({
+        success: false,
+        message: `Failed to fetch conversation: ${providerError.message}`,
+        error: { code: 'PROVIDER_ERROR' },
+        meta: { timestamp: new Date().toISOString() },
+      });
+    }
+  } catch (error) {
+    logger.error('Error in getAccountConversationDetail', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: { code: 'INTERNAL_ERROR' },
+      meta: { timestamp: new Date().toISOString() },
+    });
+  }
+};
+
+import { getAllProviders } from '../services/provider.service';
+import { providerRegistry } from '../provider/registry';
+import { getAccountSelector } from '../services/account-selector';
+
+// POST /v1/chat/completions (Legacy/Generic endpoint)
+export const completionController = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const {
+      model,
+      messages,
+      thinking,
+      search,
+      conversation_id,
+      ref_file_ids,
+      temperature,
+    } = req.body;
+
+    const authHeader = req.headers.authorization;
+    const emailQuery = req.query.email as string;
+    const providerQuery = req.query.provider as string;
+
+    const selector = getAccountSelector();
+    const accounts = selector.getActiveAccounts();
+    let account: any | undefined;
+
+    // Strategy 1: Find by Token (ID)
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      account = accounts.find((a) => a.id === token);
+    }
+
+    // Strategy 2: Find by explicit Provider + Email
+    if (!account && providerQuery && emailQuery) {
+      account = accounts.find(
+        (a) =>
+          a.email.toLowerCase() === emailQuery.toLowerCase() &&
+          a.provider_id.toLowerCase() === providerQuery.toLowerCase(),
+      );
+    }
+
+    // Strategy 3: Dynamic Inference via Registry
+    if (!account) {
+      let targetProviderId = providerQuery;
+
+      // Try to infer from model if no specific provider requested
+      if (!targetProviderId && model) {
+        const provider = providerRegistry.getProviderForModel(model);
+        if (provider) {
+          targetProviderId = provider.name;
+        }
+      }
+
+      if (targetProviderId) {
+        // Find account for this provider
+        account = accounts.find(
+          (a) =>
+            a.provider_id.toLowerCase() === targetProviderId!.toLowerCase(),
+        );
+
+        // If explicit email provided, refine search
+        if (account && emailQuery) {
+          const strictAccount = accounts.find(
+            (a) =>
+              a.provider_id.toLowerCase() === targetProviderId!.toLowerCase() &&
+              a.email.toLowerCase() === emailQuery.toLowerCase(),
+          );
+          if (strictAccount) account = strictAccount;
+        }
+      }
+    }
+
+    if (!account) {
+      res
+        .status(401)
+        .json({ error: 'No valid account found for this request' });
+      return;
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    await sendMessage({
+      credential: account.credential,
+      provider_id: account.provider_id,
+      model:
+        model ||
+        providerRegistry.getProvider(account.provider_id)?.defaultModel,
+      messages,
+      stream: true,
+      thinking,
+      search,
+      conversationId: conversation_id,
+      ref_file_ids,
+      temperature,
+      onContent: (content) => {
+        res.write(
+          `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`,
+        );
+      },
+      onMetadata: (metadata) => {
+        res.write(
+          `data: ${JSON.stringify({ choices: [{ delta: metadata }] })}\n\n`,
+        );
+      },
+      onThinking: (content) => {
+        res.write(
+          `data: ${JSON.stringify({ choices: [{ delta: { content, thinking: true } }] })}\n\n`,
+        );
+      },
+      onDone: () => {
+        res.write('data: [DONE]\n\n');
+        res.end();
+      },
+      onError: (err) => {
+        if (!res.headersSent) {
+          res.write(
+            `data: ${JSON.stringify({ error: { message: err.message } })}\n\n`,
+          );
+          res.end();
+        }
+      },
+      onSessionCreated: (sessionId) => {
+        res.write(`event: session_created\ndata: ${sessionId}\n\n`);
+      },
+    });
+  } catch (error: any) {
+    logger.error('Error in completionController', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+};
+
+// POST /v1/accounts/:accountId/messages
+export const sendMessageController = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { accountId } = req.params;
+    const {
+      model,
+      messages,
+      conversationId,
+      stream,
+      is_search,
+      search,
+      temperature,
+      thinking,
+      ref_file_ids,
+    } = req.body;
+    const useSearch = is_search === true || search === true;
+
+    // Get account from database (synchronous)
+    const db = getDb();
+    const account = db
+      .prepare('SELECT * FROM accounts WHERE id = ?')
+      .get(accountId) as any;
+
+    if (!account) {
+      res.status(404).json({ error: 'Account not found' });
+      return;
+    }
+
+    // Validate search capability
+    if (useSearch) {
+      const providers = await getAllProviders();
+      const providerConfig = providers.find(
+        (p) =>
+          p.provider_id.toLowerCase() === account.provider_id.toLowerCase(),
+      );
+
+      if (!providerConfig?.is_search) {
+        res.status(400).json({
+          error: `Provider ${account.provider_id} does not support search`,
+        });
+        return;
+      }
+    }
+
+    // Set up SSE headers if streaming (default true)
+    if (stream !== false) {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      });
+    }
+
+    let accumulatedContent = '';
+    let accumulatedMetadata: any = {};
+
+    try {
+      await sendMessage({
+        credential: account.credential,
+        provider_id: account.provider_id,
+        accountId: account.id,
+        model,
+        messages,
+        conversationId,
+        search: useSearch,
+        temperature,
+        thinking,
+        ref_file_ids,
+        onContent: (content) => {
+          if (stream !== false) {
+            res.write(`data: ${JSON.stringify({ content })}\n\n`);
+          } else {
+            accumulatedContent += content;
+          }
+        },
+        onMetadata: (meta) => {
+          if (stream !== false) {
+            res.write(`data: ${JSON.stringify({ meta })}\n\n`);
+          } else {
+            accumulatedMetadata = { ...accumulatedMetadata, ...meta };
+          }
+        },
+        onDone: () => {
+          if (stream !== false) {
+            res.write('data: [DONE]\n\n');
+            res.end();
+          } else {
+            if (!res.headersSent) {
+              res.status(200).json({
+                success: true,
+                message: {
+                  role: 'assistant',
+                  content: accumulatedContent,
+                },
+                metadata: accumulatedMetadata,
+              });
+            }
+          }
+        },
+        onSessionCreated: (sessionId) => {
+          if (stream !== false) {
+            res.write(`event: session_created\ndata: ${sessionId}\n\n`);
+          } else {
+            accumulatedMetadata.conversation_id = sessionId;
+          }
+        },
+        onError: (error) => {
+          logger.error('Stream error', error);
+          if (stream !== false) {
+            res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+            res.end();
+          } else {
+            if (!res.headersSent) {
+              res.status(500).json({ error: error.message });
+            }
+          }
+        },
+      });
+    } catch (error: any) {
+      logger.error('Error in sendMessage service call', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: error.message });
+      }
+    }
+  } catch (error) {
+    logger.error('Error in sendMessageController', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+};
+
+// GET /v1/chat/history/:accountId/:conversationId
+export const getChatHistoryController = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { account_id, conversation_id } = req.params;
+
+    if (!account_id || !conversation_id) {
+      res.status(400).json({
+        success: false,
+        message: 'Missing required parameters: account_id, conversation_id',
+        error: { code: 'INVALID_INPUT' },
+        meta: { timestamp: new Date().toISOString() },
+      });
+      return;
+    }
+
+    // Get account from database (synchronous)
+    const db = getDb();
+    const account = db
+      .prepare('SELECT * FROM accounts WHERE id = ?')
+      .get(account_id) as any;
+
+    if (!account) {
+      res.status(404).json({
+        success: false,
+        message: 'Account not found',
+        error: { code: 'NOT_FOUND' },
+        meta: { timestamp: new Date().toISOString() },
+      });
+      return;
+    }
+
+    try {
+      // Fetch conversation detail from provider
+      const conversation = await getConversationDetail({
+        credential: account.credential,
+        provider_id: account.provider_id,
+        conversationId: conversation_id,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Conversation details retrieved successfully',
+        data: conversation,
+
+        meta: { timestamp: new Date().toISOString() },
+      });
+    } catch (providerError: any) {
+      logger.error(
+        'Error fetching conversation detail from provider',
+        providerError,
+      );
+      res.status(500).json({
+        success: false,
+        message: `Failed to fetch conversation: ${providerError.message}`,
+        error: { code: 'PROVIDER_ERROR' },
+        meta: { timestamp: new Date().toISOString() },
+      });
+    }
+  } catch (error) {
+    logger.error('Error in getChatHistoryController', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: { code: 'INTERNAL_ERROR' },
+      meta: { timestamp: new Date().toISOString() },
+    });
+  }
+};

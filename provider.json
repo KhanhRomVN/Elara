@@ -1,0 +1,220 @@
+[
+  {
+    "provider_id": "antigravity",
+    "provider_name": "Antigravity",
+    "is_enabled": true,
+    "website": "https://antigravity.google/",
+    "is_search": false,
+    "is_upload": false,
+    "auth_method": ["google"],
+    "is_temperature": false
+  },
+  {
+    "provider_id": "claude",
+    "provider_name": "Claude",
+    "is_enabled": true,
+    "website": "https://claude.ai/",
+    "is_search": false,
+    "is_upload": true,
+    "auth_method": ["basic", "google"],
+    "is_temperature": false,
+    "models": [
+      {
+        "id": "claude-sonnet-4-5-20250929",
+        "name": "Claude Sonnet 4.5",
+        "is_thinking": false,
+        "context_length": null
+      },
+      {
+        "id": "claude-haiku-4-5-20251001",
+        "name": "Claude Haiku 4.5",
+        "is_thinking": false,
+        "context_length": null
+      }
+    ]
+  },
+  {
+    "provider_id": "cohere",
+    "provider_name": "Cohere",
+    "is_enabled": true,
+    "website": "https://cohere.com",
+    "is_search": false,
+    "is_upload": false,
+    "auth_method": ["basic"],
+    "is_temperature": true
+  },
+  {
+    "provider_id": "deepseek",
+    "provider_name": "DeepSeek",
+    "is_enabled": true,
+    "website": "https://deepseek.com",
+    "is_search": true,
+    "is_upload": true,
+    "auth_method": ["basic", "google"],
+    "is_temperature": false,
+    "models": [
+      {
+        "id": "deepseek-chat",
+        "name": "DeepSeek Chat",
+        "is_thinking": true,
+        "context_length": null
+      }
+    ]
+  },
+  {
+    "provider_id": "gemini",
+    "provider_name": "Gemini",
+    "is_enabled": true,
+    "website": "https://gemini.google.com/",
+    "is_search": false,
+    "is_upload": false,
+    "auth_method": ["google"],
+    "is_temperature": false,
+    "models": [
+      {
+        "id": "0",
+        "name": "Gemini 3.0 Flash",
+        "is_thinking": false,
+        "context_length": null
+      },
+      {
+        "id": "1",
+        "name": "Gemini 3.0 Flash Thinking",
+        "is_thinking": true,
+        "context_length": null
+      },
+      {
+        "id": "2",
+        "name": "Gemini 3.0 Pro",
+        "is_thinking": false,
+        "context_length": null
+      }
+    ]
+  },
+  {
+    "provider_id": "groq",
+    "provider_name": "Groq",
+    "is_enabled": false,
+    "website": "https://groq.com",
+    "is_search": false,
+    "is_upload": false,
+    "auth_method": ["basic"],
+    "is_temperature": false
+  },
+  {
+    "provider_id": "huggingchat",
+    "provider_name": "HuggingChat",
+    "is_enabled": true,
+    "website": "https://huggingface.co/",
+    "is_search": false,
+    "is_upload": false,
+    "auth_method": ["basic"],
+    "is_temperature": false,
+    "models": [
+      {
+        "id": "omni",
+        "name": "Omni (Default)",
+        "is_thinking": false,
+        "context_length": null
+      },
+      {
+        "id": "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+        "name": "Qwen3 Coder 30B",
+        "is_thinking": false,
+        "context_length": null
+      },
+      {
+        "id": "meta-llama/Llama-3.1-8B-Instruct",
+        "name": "Llama 3.1 8B",
+        "is_thinking": false,
+        "context_length": null
+      },
+      {
+        "id": "Qwen/Qwen2.5-Coder-32B-Instruct",
+        "name": "Qwen 2.5 Coder 32B",
+        "is_thinking": false,
+        "context_length": null
+      }
+    ]
+  },
+  {
+    "provider_id": "kimi",
+    "provider_name": "Kimi",
+    "is_enabled": false,
+    "website": "https://www.kimi.com/",
+    "is_search": false,
+    "is_upload": false,
+    "auth_method": ["basic"],
+    "is_temperature": false
+  },
+  {
+    "provider_id": "lmarena",
+    "provider_name": "LMArena",
+    "is_enabled": false,
+    "website": "https://lmarena.ai/",
+    "is_search": false,
+    "is_upload": false,
+    "auth_method": ["basic"],
+    "is_temperature": false
+  },
+  {
+    "provider_id": "mistral",
+    "provider_name": "Mistral",
+    "is_enabled": false,
+    "website": "https://mistral.ai/",
+    "is_search": false,
+    "is_upload": false,
+    "auth_method": ["basic"],
+    "is_temperature": false
+  },
+  {
+    "provider_id": "perplexity",
+    "provider_name": "Perplexity",
+    "is_enabled": false,
+    "website": "https://www.perplexity.ai/",
+    "is_search": false,
+    "is_upload": false,
+    "auth_method": ["basic"],
+    "is_temperature": false
+  },
+  {
+    "provider_id": "qwen",
+    "provider_name": "Qwen",
+    "is_enabled": false,
+    "website": "https://qwenlm.ai/",
+    "is_search": false,
+    "is_upload": false,
+    "auth_method": ["basic"],
+    "is_temperature": false
+  },
+  {
+    "provider_id": "stepfun",
+    "provider_name": "StepFun",
+    "is_enabled": false,
+    "website": "https://stepfun.ai/",
+    "is_search": false,
+    "is_upload": false,
+    "auth_method": ["basic"],
+    "is_temperature": false
+  },
+  {
+    "provider_id": "cerebras",
+    "provider_name": "Cerebras",
+    "is_enabled": false,
+    "website": "https://cerebras.ai/",
+    "is_search": false,
+    "is_upload": false,
+    "auth_method": ["basic", "google"],
+    "is_temperature": true
+  },
+  {
+    "provider_id": "googlestudio",
+    "provider_name": "Google Studio",
+    "is_enabled": false,
+    "website": "https://aistudio.google.com/",
+    "is_search": false,
+    "is_upload": true,
+    "auth_method": ["google"],
+    "is_temperature": true
+  }
+]
