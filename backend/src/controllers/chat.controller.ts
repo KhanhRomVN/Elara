@@ -313,9 +313,7 @@ export const completionController = async (
         );
       },
       onThinking: (content) => {
-        res.write(
-          `data: ${JSON.stringify({ choices: [{ delta: { content, thinking: true } }] })}\n\n`,
-        );
+        res.write(`data: ${JSON.stringify({ thinking: content })}\n\n`);
       },
       onDone: () => {
         res.write('data: [DONE]\n\n');
@@ -457,9 +455,7 @@ export const sendMessageController = async (
         onThinking: (content) => {
           captureFirstResponse();
           if (stream !== false) {
-            res.write(
-              `data: ${JSON.stringify({ content, thinking: true })}\n\n`,
-            );
+            res.write(`data: ${JSON.stringify({ thinking: content })}\n\n`);
           }
           // Note: added thinking handling for consistency if needed
         },

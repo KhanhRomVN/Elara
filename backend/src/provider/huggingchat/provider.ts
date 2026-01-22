@@ -5,7 +5,7 @@ import { HttpClient } from '../../utils/http-client';
 import * as crypto from 'crypto';
 import { findAccount } from '../../services/account-selector';
 import { createLogger } from '../../utils/logger';
-import { countTokens, countMessagesTokens } from './tokenizer';
+import { countTokens, countMessagesTokens } from '../../utils/tokenizer';
 
 const logger = createLogger('HuggingChatProvider');
 
@@ -21,6 +21,7 @@ export class HuggingChatProvider implements Provider {
       messages,
       model,
       onContent,
+      onThinking,
       onMetadata,
       onDone,
       onError,
@@ -111,6 +112,9 @@ export class HuggingChatProvider implements Provider {
       if (!response.body) throw new Error('No response body');
 
       let buffer = '';
+      let isThinking = false;
+      let fullContentBuffer = '';
+
       for await (const chunk of response.body as any) {
         const chunkStr = chunk.toString().replace(/\\u0000/g, '');
         buffer += chunkStr;
@@ -124,7 +128,64 @@ export class HuggingChatProvider implements Provider {
             if (json.type === 'stream' && json.token) {
               const token = json.token;
               completionTokens += countTokens(token);
-              onContent(token);
+              fullContentBuffer += token;
+
+              // Check for thinking tags
+              let processToken = token;
+
+              // Simple state machine for thinking tags
+              if (
+                !isThinking &&
+                fullContentBuffer.includes('<think>') &&
+                !fullContentBuffer.includes('</think>')
+              ) {
+                isThinking = true;
+                // Find where <think> starts in the current token if possible, or just switch mode
+                // For simplicity, if we just switched to thinking, subsequent tokens are thinking
+              }
+
+              // More robust parsing:
+              // Since tokens are small, we can check the full accumulated content to decide mode
+              // and extract only the new parts.
+
+              if (
+                fullContentBuffer.includes('<think>') &&
+                !fullContentBuffer.includes('</think>')
+              ) {
+                isThinking = true;
+                if (onThinking) {
+                  // Extract only the part after <think> if <think> was just added
+                  const thinkStartIdx = fullContentBuffer.indexOf('<think>');
+                  const thinkingContent = fullContentBuffer.substring(
+                    thinkStartIdx + 7,
+                  );
+                  // Since we want to stream, we need to know what was already sent.
+                  // This is getting complex for a simple loop.
+                  // Let's use a simpler approach: check if the current token contains the tags.
+                }
+              }
+
+              // RE-SIMPLIFIED LOGIC:
+              if (token.includes('<think>')) {
+                isThinking = true;
+                const [before, after] = token.split('<think>');
+                if (before) onContent(before);
+                if (after && onThinking) onThinking(after);
+                else if (after) onContent(after); // Fallback
+              } else if (token.includes('</think>')) {
+                isThinking = false;
+                const [before, after] = token.split('</think>');
+                if (before && onThinking) onThinking(before);
+                else if (before) onContent(before);
+                if (after) onContent(after);
+              } else {
+                if (isThinking && onThinking) {
+                  onThinking(token);
+                } else {
+                  onContent(token);
+                }
+              }
+
               if (onMetadata) {
                 onMetadata({ total_token: promptTokens + completionTokens });
               }

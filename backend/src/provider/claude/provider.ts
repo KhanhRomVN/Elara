@@ -5,7 +5,7 @@ import * as crypto from 'crypto';
 import fetch from 'node-fetch';
 import { findAccount } from '../../services/account-selector';
 import { createLogger } from '../../utils/logger';
-import { countTokens, countMessagesTokens } from './tokenizer';
+import { countTokens, countMessagesTokens } from '../../utils/tokenizer';
 
 const logger = createLogger('ClaudeProvider');
 

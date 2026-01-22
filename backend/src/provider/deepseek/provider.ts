@@ -9,7 +9,7 @@ import { findAccount } from '../../services/account-selector';
 import { createLogger } from '../../utils/logger';
 import { ChatPayload, PoWChallenge, PoWResponse } from './types';
 import { DeepSeekHash } from './hash';
-import { countTokens, countMessagesTokens } from './tokenizer';
+import { countTokens, countMessagesTokens } from '../../utils/tokenizer';
 
 const logger = createLogger('DeepSeekProvider');
 

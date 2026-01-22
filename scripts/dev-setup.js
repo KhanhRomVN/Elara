@@ -29,8 +29,13 @@ try {
   }
 
   // Remove existing file/symlink if present
-  if (fs.existsSync(localCliLink)) {
-    fs.unlinkSync(localCliLink);
+  try {
+    const stats = fs.lstatSync(localCliLink);
+    if (stats.isSymbolicLink() || stats.isFile() || stats.isDirectory()) {
+      fs.rmSync(localCliLink, { recursive: true, force: true });
+    }
+  } catch (err) {
+    // If it doesn't exist, lstatSync will throw - we can ignore this
   }
 
   const isWindows = process.platform === 'win32';

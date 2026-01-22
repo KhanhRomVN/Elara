@@ -38,6 +38,7 @@
     "node-fetch": "^2.7.0",
     "save-dev": "^0.0.1-security",
     "sqlite3": "^5.1.7",
+    "tiktoken": "^1.0.22",
     "ts-node": "^10.9.2",
     "winston": "^3.17.0"
   },
