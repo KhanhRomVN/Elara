@@ -115,8 +115,68 @@ const createTables = (): void => {
       }
     }
     logger.info('Models performance table initialized');
+
+    const accountsStatsQuery = `
+      CREATE TABLE IF NOT EXISTS accounts_stats (
+        account_id TEXT PRIMARY KEY,
+        total_tokens INTEGER DEFAULT 0,
+        year_tokens INTEGER DEFAULT 0,
+        month_tokens INTEGER DEFAULT 0,
+        week_tokens INTEGER DEFAULT 0,
+        day_tokens INTEGER DEFAULT 0,
+        total_requests INTEGER DEFAULT 0,
+        year_requests INTEGER DEFAULT 0,
+        month_requests INTEGER DEFAULT 0,
+        week_requests INTEGER DEFAULT 0,
+        day_requests INTEGER DEFAULT 0,
+        successful_requests INTEGER DEFAULT 0,
+        last_reset_year INTEGER DEFAULT 0,
+        last_reset_month INTEGER DEFAULT 0,
+        last_reset_week INTEGER DEFAULT 0,
+        last_reset_day INTEGER DEFAULT 0,
+        FOREIGN KEY(account_id) REFERENCES accounts(id)
+      )
+    `;
+    db.exec(accountsStatsQuery);
+    logger.info('Accounts stats table initialized');
+
+    const providersStatsQuery = `
+      CREATE TABLE IF NOT EXISTS providers_stats (
+        provider_id TEXT PRIMARY KEY,
+        total_tokens INTEGER DEFAULT 0,
+        year_tokens INTEGER DEFAULT 0,
+        month_tokens INTEGER DEFAULT 0,
+        week_tokens INTEGER DEFAULT 0,
+        day_tokens INTEGER DEFAULT 0,
+        total_requests INTEGER DEFAULT 0,
+        year_requests INTEGER DEFAULT 0,
+        month_requests INTEGER DEFAULT 0,
+        week_requests INTEGER DEFAULT 0,
+        day_requests INTEGER DEFAULT 0,
+        successful_requests INTEGER DEFAULT 0,
+        last_reset_year INTEGER DEFAULT 0,
+        last_reset_month INTEGER DEFAULT 0,
+        last_reset_week INTEGER DEFAULT 0,
+        last_reset_day INTEGER DEFAULT 0,
+        FOREIGN KEY(provider_id) REFERENCES providers(id)
+      )
+    `;
+    db.exec(providersStatsQuery);
+    logger.info('Providers stats table initialized');
+
+    const configQuery = `
+      CREATE TABLE IF NOT EXISTS config (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      )
+    `;
+    db.exec(configQuery);
+    db.prepare(
+      "INSERT OR IGNORE INTO config (key, value) VALUES ('enable_stats_collection', 'true')",
+    ).run();
+    logger.info('Config table initialized');
   } catch (err) {
-    logger.error('Error creating providers table', err);
+    logger.error('Error creating statistics tables', err);
     throw err;
   }
 };

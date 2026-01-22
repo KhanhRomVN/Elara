@@ -1,4 +1,4 @@
-import { get_encoding, TiktokenEncoding } from 'tiktoken';
+import { getEncoding, TiktokenEncoding } from 'js-tiktoken';
 import { createLogger } from './logger';
 
 const logger = createLogger('Tokenizer');
@@ -8,10 +8,13 @@ const ENCODING_NAME: TiktokenEncoding = 'cl100k_base';
 let encoding: any = null;
 
 try {
-  encoding = get_encoding(ENCODING_NAME);
-  logger.info(`Initialized tiktoken with ${ENCODING_NAME} encoding`);
+  encoding = getEncoding(ENCODING_NAME);
+  logger.info(`Initialized js-tiktoken with ${ENCODING_NAME} encoding`);
 } catch (error) {
-  logger.error(`Failed to initialize tiktoken with ${ENCODING_NAME}:`, error);
+  logger.error(
+    `Failed to initialize js-tiktoken with ${ENCODING_NAME}:`,
+    error,
+  );
 }
 
 /**
@@ -50,9 +53,7 @@ export function countMessagesTokens(messages: any[]): number {
   return totalTokens;
 }
 
-// Ensure resources are cleaned up (though in a long-running server it might not be necessary)
+// Note: js-tiktoken does not require explicit free() as it's pure JS
 process.on('SIGINT', () => {
-  if (encoding) {
-    encoding.free();
-  }
+  // encoding cleanup if needed
 });

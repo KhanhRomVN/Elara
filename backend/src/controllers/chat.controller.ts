@@ -7,6 +7,7 @@ import {
 } from '../services/chat.service';
 import { createLogger } from '../utils/logger';
 import crypto from 'crypto';
+import { recordRequest, recordSuccess } from '../services/stats.service';
 
 const logger = createLogger('ChatController');
 
@@ -285,9 +286,14 @@ export const completionController = async (
       return;
     }
 
+    // Record request start
+    recordRequest(account.id, account.provider_id);
+
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+
+    let accumulatedMetadata: any = {};
 
     await sendMessage({
       credential: account.credential,
@@ -308,6 +314,7 @@ export const completionController = async (
         );
       },
       onMetadata: (metadata) => {
+        accumulatedMetadata = { ...accumulatedMetadata, ...metadata };
         res.write(
           `data: ${JSON.stringify({ choices: [{ delta: metadata }] })}\n\n`,
         );
@@ -316,6 +323,10 @@ export const completionController = async (
         res.write(`data: ${JSON.stringify({ thinking: content })}\n\n`);
       },
       onDone: () => {
+        // Record success
+        const tokens = accumulatedMetadata.total_token || 0;
+        recordSuccess(account.id, account.provider_id, tokens);
+
         res.write('data: [DONE]\n\n');
         res.end();
       },
@@ -369,6 +380,9 @@ export const sendMessageController = async (
       res.status(404).json({ error: 'Account not found' });
       return;
     }
+
+    // Record request start
+    recordRequest(account.id, account.provider_id);
 
     // Validate if the model belongs to this provider
     const providerModels = await getProviderModels(account.provider_id);
@@ -460,6 +474,10 @@ export const sendMessageController = async (
           // Note: added thinking handling for consistency if needed
         },
         onDone: () => {
+          // Record success
+          const tokens = (accumulatedMetadata as any).total_token || 0;
+          recordSuccess(account.id, account.provider_id, tokens);
+
           if (stream !== false) {
             res.write('data: [DONE]\n\n');
             res.end();
