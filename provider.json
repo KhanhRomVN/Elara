@@ -109,33 +109,7 @@
     "is_search": false,
     "is_upload": false,
     "auth_method": ["basic"],
-    "is_temperature": false,
-    "models": [
-      {
-        "id": "omni",
-        "name": "Omni (Default)",
-        "is_thinking": false,
-        "context_length": null
-      },
-      {
-        "id": "Qwen/Qwen3-Coder-30B-A3B-Instruct",
-        "name": "Qwen3 Coder 30B",
-        "is_thinking": false,
-        "context_length": null
-      },
-      {
-        "id": "meta-llama/Llama-3.1-8B-Instruct",
-        "name": "Llama 3.1 8B",
-        "is_thinking": false,
-        "context_length": null
-      },
-      {
-        "id": "Qwen/Qwen2.5-Coder-32B-Instruct",
-        "name": "Qwen 2.5 Coder 32B",
-        "is_thinking": false,
-        "context_length": null
-      }
-    ]
+    "is_temperature": false
   },
   {
     "provider_id": "kimi",
