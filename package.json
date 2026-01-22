@@ -133,19 +133,24 @@
   },
   "lint-staged": {
     "*.{ts,tsx}": [
+      "bash -c 'echo \"🔍 Running ESLint...\"'",
       "eslint --fix",
+      "bash -c 'echo \"✨ Running Prettier...\"'",
       "prettier --write",
+      "bash -c 'echo \"🔧 Running TypeScript compiler check...\"'",
       "bash -c 'tsc --noEmit -p tsconfig.json'",
-      "bash -c '/home/khanhromvn/.local/bin/njsscan --sarif --output njsscan.sarif . || true'"
+      "bash -c 'echo \"🛡️  Running njsscan security scan...\" && /home/khanhromvn/.local/bin/njsscan --sarif --output njsscan.sarif . || true'"
     ],
     "*.{json,css,md}": [
+      "bash -c 'echo \"✨ Running Prettier...\"'",
       "prettier --write"
     ],
     "*": [
+      "bash -c 'echo \"🔐 Running secretlint...\"'",
       "secretlint --maskSecrets",
-      "bash -c '/home/khanhromvn/.local/bin/ggshield secret scan staged --recursive --yes --exit-zero || true'",
-      "bash -c '/home/khanhromvn/.local/bin/gitleaks protect --staged --redact --verbose || true'",
-      "bash -c '/home/khanhromvn/.local/bin/talisman --pattern staged || true'"
+      "bash -c 'echo \"🛡️  Running GitGuardian (ggshield)...\" && /home/khanhromvn/.local/bin/ggshield secret scan pre-commit --exit-zero || true'",
+      "bash -c 'echo \"🔍 Running Gitleaks...\" && /home/khanhromvn/.local/bin/gitleaks protect --staged --redact --verbose || true'",
+      "bash -c 'echo \"🔒 Running Talisman...\" && /home/khanhromvn/.local/bin/talisman --pattern staged || true'"
     ]
   }
 }
