@@ -4,11 +4,10 @@
  * Fetches provider data from backend API.
  */
 
-import path from 'path';
-import fs from 'fs';
-import { getProxyConfig } from './config';
-import { getDb } from '@backend/services/db';
 import { app } from 'electron';
+import fs from 'fs';
+import path from 'path';
+import { getProxyConfig } from './config';
 
 export interface ProviderModel {
   id: string;
@@ -83,29 +82,12 @@ export async function getProviders(): Promise<Provider[]> {
       console.log('[ProviderRegistry] Skipping self-fetch to avoid infinite loop');
     } else {
       const providers = await fetchProvidersFromApi();
-      const db = getDb();
-
-      // Get account counts directly from accounts table for maximum reliability
-      const accountCounts = db
-        .prepare('SELECT provider_id, COUNT(*) as count FROM accounts GROUP BY provider_id')
-        .all() as {
-        provider_id: string;
-        count: number;
-      }[];
-
-      const countsMap = new Map(accountCounts.map((a) => [a.provider_id.toLowerCase(), a.count]));
-
-      const providersWithCounts = providers.map((p: any) => ({
-        ...p,
-        total_accounts: countsMap.get(p.provider_id.toLowerCase()) || 0,
-      }));
-
-      cachedProviders = providersWithCounts;
+      cachedProviders = providers;
       lastFetchTime = now;
       console.log(
-        `[ProviderRegistry] Loaded ${providersWithCounts.length} providers from backend API (${baseUrl})`,
+        `[ProviderRegistry] Loaded ${providers.length} providers from backend API (${baseUrl})`,
       );
-      return providersWithCounts;
+      return providers;
     }
   } catch (error) {
     console.warn('[ProviderRegistry] Failed to fetch from backend API, trying local file');
@@ -123,33 +105,14 @@ export async function getProviders(): Promise<Provider[]> {
       const response = await fetch(GITHUB_PROVIDER_URL);
       if (response.ok) {
         const remoteData = await response.json();
-        const db = getDb();
-
-        // Get account counts directly from accounts table
-        const accountCounts = db
-          .prepare('SELECT provider_id, COUNT(*) as count FROM accounts GROUP BY provider_id')
-          .all() as {
-          provider_id: string;
-          count: number;
-        }[];
-
-        const countsMap = new Map(accountCounts.map((a) => [a.provider_id.toLowerCase(), a.count]));
-
-        const providersWithCounts = (
-          Array.isArray(remoteData) ? remoteData : remoteData.data || []
-        ).map((p: any) => ({
-          ...p,
-          total_accounts: countsMap.get(p.provider_id.toLowerCase()) || 0,
-        }));
-
         // Update local cache
-        fs.writeFileSync(cachePath, JSON.stringify(providersWithCounts, null, 2));
-        cachedProviders = providersWithCounts;
+        fs.writeFileSync(cachePath, JSON.stringify(remoteData, null, 2));
+        cachedProviders = remoteData;
         lastFetchTime = now;
         console.log(
-          `[ProviderRegistry] Successfully updated providers from remote. Items: ${providersWithCounts.length}`,
+          `[ProviderRegistry] Successfully updated providers from remote. Items: ${remoteData.length}`,
         );
-        return providersWithCounts;
+        return remoteData;
       }
     } catch (e) {
       console.warn('[ProviderRegistry] Remote fetch failed, looking for cache/local');
