@@ -1,8 +1,8 @@
 import express from 'express';
-import { messagesController } from '../../controllers/messages.controller';
+import { claudeMessagesController } from '../../controllers/chat.controller';
 
 const router = express.Router();
 
-router.post('/', messagesController);
+router.post('/', claudeMessagesController);
 
 export default router;

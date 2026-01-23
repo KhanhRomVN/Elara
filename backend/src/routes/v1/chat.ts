@@ -5,6 +5,7 @@ import {
   sendMessageController,
   getChatHistoryController,
   completionController,
+  claudeMessagesController,
 } from '../../controllers/chat.controller';
 import { uploadFileController } from '../../controllers/upload.controller';
 

@@ -598,3 +598,141 @@ export const getChatHistoryController = async (
     });
   }
 };
+
+// POST /v1/chat/messages (Anthropic Mock API using Gemini-3-Flash)
+export const claudeMessagesController = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { model, messages, stream, max_tokens, temperature } = req.body;
+
+    // We only support gemini-3-flash as requested
+    const targetModel = 'gemini-3-flash';
+
+    // Find any antigravity account
+    const selector = getAccountSelector();
+    const accounts = selector.getActiveAccounts();
+    const account = accounts.find((a) => a.provider_id === 'antigravity');
+
+    if (!account) {
+      res.status(500).json({
+        error: {
+          type: 'not_found_error',
+          message: 'Antigravity account (Gemini) not found in Elara.',
+        },
+      });
+      return;
+    }
+
+    // Convert Anthropic messages to Elara format
+    const elaraMessages = messages.map((m: any) => ({
+      role: m.role,
+      content: Array.isArray(m.content)
+        ? m.content
+            .map((c: any) => (c.type === 'text' ? c.text : ''))
+            .join('\n')
+        : m.content,
+    }));
+
+    if (stream) {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      });
+
+      // Anthropic format: message_start
+      res.write(
+        `data: ${JSON.stringify({
+          type: 'message_start',
+          message: {
+            id: `msg_${crypto.randomUUID()}`,
+            type: 'message',
+            role: 'assistant',
+            content: [],
+            model: targetModel,
+            stop_reason: null,
+            stop_sequence: null,
+            usage: { input_tokens: 0, output_tokens: 0 },
+          },
+        })}\n\n`,
+      );
+
+      await sendMessage({
+        credential: account.credential,
+        provider_id: account.provider_id,
+        accountId: account.id,
+        model: targetModel,
+        messages: elaraMessages,
+        temperature,
+        onContent: (content) => {
+          res.write(
+            `data: ${JSON.stringify({
+              type: 'content_block_delta',
+              index: 0,
+              delta: { type: 'text_delta', text: content },
+            })}\n\n`,
+          );
+        },
+        onDone: () => {
+          res.write(
+            `data: ${JSON.stringify({
+              type: 'message_delta',
+              delta: { stop_reason: 'end_turn', stop_sequence: null },
+              usage: { output_tokens: 0 },
+            })}\n\n`,
+          );
+          res.write(`data: ${JSON.stringify({ type: 'message_stop' })}\n\n`);
+          res.end();
+        },
+        onError: (err) => {
+          res.write(
+            `data: ${JSON.stringify({
+              type: 'error',
+              error: { type: 'api_error', message: err.message },
+            })}\n\n`,
+          );
+          res.end();
+        },
+      });
+    } else {
+      let accumulatedContent = '';
+      await sendMessage({
+        credential: account.credential,
+        provider_id: account.provider_id,
+        accountId: account.id,
+        model: targetModel,
+        messages: elaraMessages,
+        temperature,
+        onContent: (content) => {
+          accumulatedContent += content;
+        },
+        onDone: () => {
+          res.status(200).json({
+            id: `msg_${crypto.randomUUID()}`,
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'text', text: accumulatedContent }],
+            model: targetModel,
+            stop_reason: 'end_turn',
+            stop_sequence: null,
+            usage: { input_tokens: 0, output_tokens: 0 },
+          });
+        },
+        onError: (err) => {
+          res
+            .status(500)
+            .json({ error: { type: 'api_error', message: err.message } });
+        },
+      });
+    }
+  } catch (error: any) {
+    logger.error('Error in claudeMessagesController', error);
+    if (!res.headersSent) {
+      res
+        .status(500)
+        .json({ error: { type: 'api_error', message: error.message } });
+    }
+  }
+};
