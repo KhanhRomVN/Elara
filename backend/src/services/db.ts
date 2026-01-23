@@ -81,13 +81,50 @@ const createTables = (): void => {
   const providersQuery = `
     CREATE TABLE IF NOT EXISTS providers (
       id TEXT PRIMARY KEY,
-      name TEXT NOT NULL
+      name TEXT NOT NULL,
+      total_accounts INTEGER DEFAULT 0
     )
   `;
 
   try {
     db.exec(providersQuery);
     logger.info('Providers table initialized');
+
+    // Migration: Add total_accounts column if it doesn't exist
+    const providersInfo = db.pragma('table_info(providers)') as any[];
+    const providersColumns = providersInfo.map((c) => c.name);
+    if (!providersColumns.includes('total_accounts')) {
+      try {
+        db.exec(
+          'ALTER TABLE providers ADD COLUMN total_accounts INTEGER DEFAULT 0',
+        );
+        logger.info('Added total_accounts column to providers');
+
+        // Ensure all providers that have accounts exist in the providers table
+        try {
+          db.exec(`
+        INSERT OR IGNORE INTO providers (id, name)
+        SELECT DISTINCT provider_id, provider_id FROM accounts
+      `);
+          logger.info('Initialized missing providers in providers table');
+
+          // Update total_accounts for ALL providers from accounts table
+          db.exec(`
+        UPDATE providers 
+        SET total_accounts = (
+          SELECT COUNT(*) 
+          FROM accounts 
+          WHERE accounts.provider_id = providers.id
+        )
+      `);
+          logger.info('Synchronized total_accounts for all providers');
+        } catch (e) {
+          logger.warn('Failed to synchronize provider counts', e);
+        }
+      } catch (e) {
+        logger.warn('Failed to add total_accounts column or update counts');
+      }
+    }
 
     const modelsPerformanceQuery = `
       CREATE TABLE IF NOT EXISTS models_performance (
@@ -176,7 +213,32 @@ const createTables = (): void => {
     ).run();
     logger.info('Config table initialized');
 
-    logger.info('Config table initialized');
+    // Table to cache provider models
+    const providerModelsQuery = `
+      CREATE TABLE IF NOT EXISTS provider_models (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        provider_id TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        model_name TEXT NOT NULL,
+        is_thinking INTEGER DEFAULT 0,
+        context_length INTEGER,
+        updated_at INTEGER NOT NULL,
+        UNIQUE(provider_id, model_id)
+      )
+    `;
+    db.exec(providerModelsQuery);
+    logger.info('Provider models table initialized');
+
+    // Table to track last sync time for dynamic providers
+    const providerModelsSyncQuery = `
+      CREATE TABLE IF NOT EXISTS provider_models_sync (
+        provider_id TEXT PRIMARY KEY,
+        last_sync_at INTEGER NOT NULL,
+        is_dynamic INTEGER DEFAULT 0
+      )
+    `;
+    db.exec(providerModelsSyncQuery);
+    logger.info('Provider models sync table initialized');
   } catch (err) {
     logger.error('Error creating statistics tables', err);
     throw err;

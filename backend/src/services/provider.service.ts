@@ -2,6 +2,11 @@ import fetch from 'node-fetch';
 import { createLogger } from '../utils/logger';
 import { providerRegistry } from '../provider/registry';
 import { getDb } from './db';
+import {
+  getCachedModels,
+  getModelsForProvider,
+  isDynamicProvider,
+} from './models-sync.service';
 
 const logger = createLogger('ProviderService');
 
@@ -14,6 +19,7 @@ export interface Provider {
   is_upload?: boolean;
   is_temperature?: boolean;
   auth_method?: string[];
+  total_accounts?: number;
   models?: {
     id: string;
     name: string;
@@ -110,7 +116,52 @@ const fetchProviderConfig = async (forceRefresh = false): Promise<any[]> => {
 };
 
 export const getAllProviders = async (): Promise<Provider[]> => {
-  return await fetchProviderConfig();
+  const config = await fetchProviderConfig();
+  const db = getDb();
+
+  // Get account counts from DB
+  const dbProviders = db
+    .prepare('SELECT id, total_accounts FROM providers')
+    .all() as {
+    id: string;
+    total_accounts: number;
+  }[];
+
+  const countsMap = new Map(dbProviders.map((p) => [p.id, p.total_accounts]));
+
+  // Build providers with models
+  const providersWithModels: Provider[] = [];
+
+  for (const p of config) {
+    let models = p.models;
+
+    // If no static models in config, try to get from cache or dynamic fetch
+    if (!models || !Array.isArray(models) || models.length === 0) {
+      // First check cache
+      const cachedModels = getCachedModels(p.provider_id);
+      if (cachedModels.length > 0) {
+        models = cachedModels;
+      } else if (isDynamicProvider(p.provider_id)) {
+        // Try to fetch dynamically (but don't block too long)
+        try {
+          const dynamicModels = await getModelsForProvider(p.provider_id);
+          if (dynamicModels.length > 0) {
+            models = dynamicModels;
+          }
+        } catch (e) {
+          logger.warn(`Failed to get dynamic models for ${p.provider_id}:`, e);
+        }
+      }
+    }
+
+    providersWithModels.push({
+      ...p,
+      total_accounts: countsMap.get(p.provider_id) || 0,
+      models: models || undefined,
+    });
+  }
+
+  return providersWithModels;
 };
 
 export const getProviderModels = async (
@@ -140,6 +191,7 @@ export const getProviderModels = async (
     `[DEBUG] Provider has static models: ${!!(provider && provider.models && Array.isArray(provider.models))}`,
   );
 
+  // 1. Return static models from config if available
   if (provider && provider.models && Array.isArray(provider.models)) {
     logger.info(
       `[DEBUG] Returning ${provider.models.length} static models from config`,
@@ -152,7 +204,24 @@ export const getProviderModels = async (
     }));
   }
 
-  // Fallback to dynamic provider if available
+  // 2. Check if this is a dynamic provider and use cache/sync service
+  if (isDynamicProvider(providerId)) {
+    logger.info(`[DEBUG] Using models sync service for ${providerId}`);
+    try {
+      const models = await getModelsForProvider(providerId);
+      if (models.length > 0) {
+        logger.info(`[DEBUG] Got ${models.length} models from sync service`);
+        return models;
+      }
+    } catch (e) {
+      logger.warn(
+        `Failed to get models from sync service for ${providerId}:`,
+        e,
+      );
+    }
+  }
+
+  // 3. Fallback to direct provider registry call
   const dynamicProvider = providerRegistry.getProvider(providerId);
   logger.info(
     `[DEBUG] Dynamic provider found in registry: ${!!dynamicProvider}`,

@@ -79,6 +79,14 @@ export const importAccounts = async (
 
         db.prepare('COMMIT').run();
 
+        // Update provider counts
+        const providerIds = [...new Set(toInsert.map((a) => a.provider_id))];
+        for (const pid of providerIds) {
+          db.prepare(
+            'UPDATE providers SET total_accounts = (SELECT COUNT(*) FROM accounts WHERE provider_id = ?) WHERE id = ?',
+          ).run(pid, pid);
+        }
+
         res.status(200).json({
           success: true,
           message: `Successfully imported ${toInsert.length} account(s)`,
@@ -196,6 +204,11 @@ export const addAccount = async (
       db.prepare(
         'INSERT INTO accounts (id, provider_id, email, credential) VALUES (?, ?, ?, ?)',
       ).run(id, account.provider_id, account.email, account.credential);
+
+      // Increment total_accounts in providers table
+      db.prepare(
+        'UPDATE providers SET total_accounts = total_accounts + 1 WHERE id = ?',
+      ).run(account.provider_id);
 
       res.status(201).json({
         success: true,
@@ -318,7 +331,9 @@ export const deleteAccount = async (
     const db = getDb();
 
     // Check if account exists
-    const account = db.prepare('SELECT id FROM accounts WHERE id = ?').get(id);
+    const account = db
+      .prepare('SELECT id, provider_id FROM accounts WHERE id = ?')
+      .get(id);
 
     if (!account) {
       res.status(404).json({
@@ -332,7 +347,17 @@ export const deleteAccount = async (
 
     // Delete account
     try {
+      const { provider_id } = account as any;
       db.prepare('DELETE FROM accounts WHERE id = ?').run(id);
+
+      // Decrement total_accounts in providers table
+      db.prepare(
+        'UPDATE providers SET total_accounts = total_accounts - 1 WHERE id = ?, total_accounts > 0',
+      );
+      // Correction: Standard SQL update or cautious update
+      db.prepare(
+        'UPDATE providers SET total_accounts = MAX(0, total_accounts - 1) WHERE id = ?',
+      ).run(provider_id);
 
       res.status(200).json({
         success: true,

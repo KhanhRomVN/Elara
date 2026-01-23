@@ -12,6 +12,7 @@ import {
   PROVIDER_GITHUB_BASE,
   TEMP_STORAGE_DIR,
 } from '../config/constants';
+import { syncAllDynamicProviders } from './models-sync.service';
 
 const logger = createLogger('ProviderSync');
 
@@ -195,6 +196,15 @@ class ProviderSyncService {
     logger.info('Initializing provider sync service...');
     await this.syncProviders();
 
+    // Sync dynamic provider models on startup
+    logger.info('Syncing dynamic provider models...');
+    try {
+      await syncAllDynamicProviders();
+      logger.info('Dynamic provider models sync completed');
+    } catch (error) {
+      logger.error('Failed to sync dynamic provider models on startup:', error);
+    }
+
     // Set up periodic sync (check version regularly)
     // This will respect the VERSION_CHECK_INTERVAL from version-manager
     setInterval(
@@ -205,6 +215,16 @@ class ProviderSyncService {
       },
       60 * 60 * 1000,
     ); // Check every hour
+
+    // Set up periodic models sync (every 24 hours)
+    setInterval(
+      () => {
+        syncAllDynamicProviders().catch((error) => {
+          logger.error('Periodic models sync failed:', error);
+        });
+      },
+      24 * 60 * 60 * 1000,
+    ); // Check every 24 hours
   }
 
   /**
