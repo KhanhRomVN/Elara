@@ -279,43 +279,40 @@ export const ClaudeCodePanel = () => {
 
       <div className="pt-6 border-t border-zinc-800 flex flex-col gap-4">
         <div className="flex justify-between items-center">
-          <div className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-zinc-400">Connection Status</span>
-            {isClaudeInstalled ? (
-              <div className="flex items-center gap-2 text-green-500 text-xs">
-                <ShieldCheck className="w-4 h-4" /> System Ready
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 text-red-500 text-xs">
-                <ShieldAlert className="w-4 h-4" /> System Offline
-              </div>
-            )}
-          </div>
-
           {activeMode === 'elara' && (
             <button
-              onClick={handleSave}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-2.5 rounded-lg text-sm font-semibold transition-all shadow-[0_4px_20px_rgba(var(--primary),0.3)] active:scale-95"
+              onClick={async () => {
+                await handleSave();
+                await handleSaveToSystem();
+              }}
+              disabled={savingToSystem}
+              className={cn(
+                'flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-2.5 rounded-lg text-sm font-semibold transition-all shadow-[0_4px_20px_rgba(var(--primary),0.3)] active:scale-95',
+                savingToSystem && 'opacity-50 cursor-not-allowed',
+              )}
             >
-              Save Configuration
+              <Download className="w-4 h-4" />
+              {savingToSystem ? 'Saving...' : 'Save & Apply to System'}
             </button>
           )}
         </div>
 
-        {/* System Actions */}
+        {/* System Actions - Only show Apply button in Normal mode */}
         <div className="flex gap-3">
-          <button
-            onClick={handleSaveToSystem}
-            disabled={savingToSystem}
-            className={cn(
-              'flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all',
-              'bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/20',
-              savingToSystem && 'opacity-50 cursor-not-allowed',
-            )}
-          >
-            <Download className="w-4 h-4" />
-            {savingToSystem ? 'Applying...' : 'Apply to System Shell'}
-          </button>
+          {activeMode === 'normal' && (
+            <button
+              onClick={handleSaveToSystem}
+              disabled={savingToSystem}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all',
+                'bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/20',
+                savingToSystem && 'opacity-50 cursor-not-allowed',
+              )}
+            >
+              <Download className="w-4 h-4" />
+              {savingToSystem ? 'Applying...' : 'Apply to System Shell'}
+            </button>
+          )}
           <button
             onClick={handleRestoreDefaults}
             disabled={restoringDefaults || !systemEnvStatus?.configured}

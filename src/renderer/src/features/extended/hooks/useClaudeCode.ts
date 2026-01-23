@@ -158,17 +158,37 @@ export const useClaudeCode = () => {
     }
     setLoadingModels((prev) => ({ ...prev, [type]: true }));
     try {
-      const result = await window.api.server.getModels(providerId);
-      console.log(`[ClaudeCode] Fetched models for ${type}/${providerId}:`, result);
+      // Use the same approach as playground - fetch from API directly
+      const serverInfo = await window.api.server.getInfo();
+      const port = serverInfo?.port || 3030;
+
+      // Fetch directly from API to handle different response formats
+      const response = await fetch(
+        `http://localhost:${port}/v1/providers/${providerId.toLowerCase()}/models`,
+      );
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(`[ClaudeCode] Fetched models for ${type}/${providerId}:`, data);
 
       // Handle different response formats
       let models: any[] = [];
-      if (result.success && Array.isArray(result.data)) {
-        models = result.data;
-      } else if (Array.isArray(result)) {
-        models = result;
-      } else if (result.data && Array.isArray(result.data)) {
-        models = result.data;
+      if (data.success && data.data) {
+        if (Array.isArray(data.data)) {
+          // Format: { success: true, data: [...] }
+          models = data.data;
+        } else if (data.data.models && typeof data.data.models === 'object') {
+          // Format: { success: true, data: { models: { key: {...}, ... } } }
+          models = Object.entries(data.data.models).map(([id, model]: [string, any]) => ({
+            id: model.name || id,
+            name: model.displayName || model.name || id,
+            ...model,
+          }));
+        }
+      } else if (Array.isArray(data)) {
+        models = data;
       }
 
       setAvailableModels((prev) => ({ ...prev, [type]: models }));
@@ -179,6 +199,30 @@ export const useClaudeCode = () => {
       setLoadingModels((prev) => ({ ...prev, [type]: false }));
     }
   };
+
+  // Fetch models for already selected providers when config is loaded
+  useEffect(() => {
+    const fetchModelsForSelectedProviders = async () => {
+      const types = ['main', 'opus', 'sonnet', 'haiku'] as const;
+      for (const type of types) {
+        const providerId = elaraConfigs[type]?.provider;
+        if (providerId && providerId !== 'auto' && !availableModels[type]?.length) {
+          await fetchModelsForType(type, providerId);
+        }
+      }
+    };
+
+    // Only run when providers are loaded and we have elaraConfigs
+    if (providers.length > 0) {
+      fetchModelsForSelectedProviders();
+    }
+  }, [
+    providers,
+    elaraConfigs.main.provider,
+    elaraConfigs.opus.provider,
+    elaraConfigs.sonnet.provider,
+    elaraConfigs.haiku.provider,
+  ]);
 
   const handleElaraConfigChange = (type: string, field: 'provider' | 'model', value: string) => {
     const newConfigs = {
