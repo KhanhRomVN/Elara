@@ -6,12 +6,13 @@ import https from 'https';
 import crypto from 'crypto';
 import { createLogger } from '../../utils/logger';
 import { getDB } from '../../utils/database';
+import { AntigravityQueue } from './queue';
 
 const logger = createLogger('AntigravityProvider');
 
 const CLIENT_ID =
   '1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com';
-const CLIENT_SECRET = process.env.ANTIGRAVITY_CLIENT_SECRET || '';
+const CLIENT_SECRET = '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';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
 // Endpoints
@@ -30,6 +31,11 @@ export class AntigravityProvider implements Provider {
     { token: string; expires: number }
   >();
 
+  private projectIDCache = new Map<string, string>();
+  private refreshPromiseMap = new Map<string, Promise<any>>();
+
+  private requestQueue = new AntigravityQueue(500); // Tăng lên 500ms cho an toàn
+
   private async fetchWithFallback(
     path: string,
     options: SendMessageOptions | any,
@@ -39,41 +45,87 @@ export class AntigravityProvider implements Provider {
 
     for (const baseUrl of BACKEND_URLS) {
       const url = `${baseUrl}${path}`;
-      try {
-        const res = await fetch(url, {
-          ...options,
-          headers: {
-            ...options.headers,
-            Authorization: `Bearer ${accessToken}`,
-          },
-        });
 
-        // If success, return response
-        if (res.ok) return res;
+      // Retry logic for rate limits
+      for (let retryCount = 0; retryCount < 2; retryCount++) {
+        try {
+          const res = await fetch(url, {
+            ...options,
+            headers: {
+              ...options.headers,
+              Authorization: `Bearer ${accessToken}`,
+            },
+          });
 
-        // If 401, throw immediately to trigger token refresh (don't fallback yet)
-        if (res.status === 401) throw new Error('401');
+          // If success, return response
+          if (res.ok) return res;
 
-        // Determine if we should fallback
-        // We fallback on: 429 (Quota), 404 (Not Found on Prod), 5xx (Server Error)
-        const shouldFallback =
-          res.status === 429 || res.status === 404 || res.status >= 500;
+          // If 401, throw immediately to trigger token refresh (don't fallback yet)
+          if (res.status === 401) throw new Error('401');
 
-        if (shouldFallback) {
-          const txt = await res.text();
+          // Handle 429 (Rate Limit) with smart retry
+          if (res.status === 429) {
+            const txt = await res.text();
+
+            // Try to extract retry delay from response
+            let retryDelayMs = 100; // Default 100ms
+            try {
+              const errorData = JSON.parse(txt);
+              const quotaResetDelay = errorData?.error?.details?.find(
+                (d: any) => d['@type']?.includes('ErrorInfo'),
+              )?.metadata?.quotaResetDelay;
+
+              if (quotaResetDelay) {
+                // Parse delay like "67.93556ms" or "0.067935560s"
+                const match = quotaResetDelay.match(/(\d+\.?\d*)([ms]s?)/);
+                if (match) {
+                  const value = parseFloat(match[1]);
+                  const unit = match[2];
+                  retryDelayMs = unit.startsWith('s') ? value * 1000 : value;
+                }
+              }
+            } catch {}
+
+            // Only retry once per endpoint
+            if (retryCount === 0) {
+              logger.info(
+                `[Antigravity] Rate limited on ${baseUrl}, waiting ${retryDelayMs}ms before retry...`,
+              );
+              await new Promise((resolve) =>
+                setTimeout(resolve, retryDelayMs + 50),
+              );
+              continue; // Retry same endpoint
+            }
+
+            // After retry failed, try next endpoint
+            logger.warn(
+              `[Antigravity] Rate limit persists on ${baseUrl} after retry. Trying next endpoint...`,
+            );
+            lastError = new Error(`HTTP 429: ${txt}`);
+            break; // Break retry loop, continue to next endpoint
+          }
+
+          // Handle other fallback cases: 404, 5xx
+          const shouldFallback = res.status === 404 || res.status >= 500;
+          if (shouldFallback) {
+            const txt = await res.text();
+            logger.warn(
+              `[Antigravity] Request to ${baseUrl} failed (${res.status}): ${txt}. Trying next endpoint...`,
+            );
+            lastError = new Error(`HTTP ${res.status}: ${txt}`);
+            break; // Break retry loop, continue to next endpoint
+          }
+
+          // Other errors (e.g. 400 Bad Request) -> return response as is (caller handles)
+          return res;
+        } catch (e: any) {
+          if (e.message === '401') throw e;
           logger.warn(
-            `[Antigravity] Request to ${baseUrl} failed (${res.status}): ${txt}. Trying next endpoint...`,
+            `[Antigravity] Network error for ${baseUrl}: ${e.message}`,
           );
-          lastError = new Error(`HTTP ${res.status}: ${txt}`);
-          continue; // Try next URL
+          lastError = e;
+          break; // Break retry loop on network error
         }
-
-        // Other errors (e.g. 400 Bad Request) -> return response as is (caller handles)
-        return res;
-      } catch (e: any) {
-        if (e.message === '401') throw e;
-        logger.warn(`[Antigravity] Network error for ${baseUrl}: ${e.message}`);
-        lastError = e;
       }
     }
 
@@ -98,7 +150,7 @@ export class AntigravityProvider implements Provider {
       const accessToken = await this.getAccessToken(credential, accountId);
 
       const makeRequest = async (token: string) => {
-        const projectID = await this.fetchProjectID(token);
+        const projectID = await this.fetchProjectID(token, accountId);
         // Clean model name - remove 'models/' prefix if present
         let targetModel = this.alias2ModelName(model || this.defaultModel);
         if (targetModel.startsWith('models/')) {
@@ -139,20 +191,23 @@ export class AntigravityProvider implements Provider {
           delete payload.request.generationConfig.thinkingConfig;
         }
 
-        const response = await this.fetchWithFallback(
-          '/v1internal:streamGenerateContent?alt=sse',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'User-Agent': 'antigravity/1.11.3 Darwin/arm64',
-              'x-goog-api-client': 'antigravity/1.11.3',
-              Accept: 'text/event-stream',
+        // Wrap API call in queue to enforce rate limiting
+        const response = await this.requestQueue.add(() =>
+          this.fetchWithFallback(
+            '/v1internal:streamGenerateContent?alt=sse',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'User-Agent': 'antigravity/1.11.3 Darwin/arm64',
+                'x-goog-api-client': 'antigravity/1.11.3',
+                Accept: 'text/event-stream',
+              },
+              body: JSON.stringify(payload),
+              agent: httpsAgent,
             },
-            body: JSON.stringify(payload),
-            agent: httpsAgent,
-          },
-          token,
+            token,
+          ),
         );
 
         if (!response.ok) {
@@ -256,11 +311,29 @@ export class AntigravityProvider implements Provider {
     }
 
     if (accountId) {
+      // Check if a refresh is already in progress
+      const existingRefresh = this.refreshPromiseMap.get(accountId);
+      if (existingRefresh) {
+        logger.debug(
+          `[Antigravity] Waiting for existing token refresh for ${accountId}`,
+        );
+        const newTokens = await existingRefresh;
+        return newTokens.access_token;
+      }
+
       logger.info(
         `[Antigravity] No valid access token, refreshing for ${accountId}...`,
       );
-      const newTokens = await this.refreshTokens(credential, accountId);
-      return newTokens.access_token;
+
+      const refreshPromise = this.refreshTokens(credential, accountId);
+      this.refreshPromiseMap.set(accountId, refreshPromise);
+
+      try {
+        const newTokens = await refreshPromise;
+        return newTokens.access_token;
+      } finally {
+        this.refreshPromiseMap.delete(accountId);
+      }
     }
 
     return credential;
@@ -317,7 +390,14 @@ export class AntigravityProvider implements Provider {
     return newTokens;
   }
 
-  private async fetchProjectID(accessToken: string): Promise<string> {
+  private async fetchProjectID(
+    accessToken: string,
+    accountId?: string,
+  ): Promise<string> {
+    if (accountId && this.projectIDCache.has(accountId)) {
+      return this.projectIDCache.get(accountId)!;
+    }
+
     const payload = {
       metadata: {
         ideType: 'IDE_UNSPECIFIED',
@@ -327,19 +407,21 @@ export class AntigravityProvider implements Provider {
     };
 
     try {
-      const res = await this.fetchWithFallback(
-        '/v1internal:loadCodeAssist',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'User-Agent': 'antigravity/1.11.3 Darwin/arm64',
-            'X-Goog-Api-Client': 'antigravity/1.11.3',
+      const res = await this.requestQueue.add(() =>
+        this.fetchWithFallback(
+          '/v1internal:loadCodeAssist',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'User-Agent': 'antigravity/1.11.3 Darwin/arm64',
+              'X-Goog-Api-Client': 'antigravity/1.11.3',
+            },
+            body: JSON.stringify(payload),
+            agent: httpsAgent,
           },
-          body: JSON.stringify(payload),
-          agent: httpsAgent,
-        },
-        accessToken,
+          accessToken,
+        ),
       );
 
       if (!res.ok) throw new Error('Failed to load code assist');
@@ -354,7 +436,13 @@ export class AntigravityProvider implements Provider {
       ) {
         pid = data.cloudaicompanionProject.id;
       }
-      return pid || `useful-fuze-${crypto.randomUUID().substring(0, 5)}`;
+
+      const finalPid =
+        pid || `useful-fuze-${crypto.randomUUID().substring(0, 5)}`;
+      if (accountId && pid) {
+        this.projectIDCache.set(accountId, finalPid);
+      }
+      return finalPid;
     } catch (e) {
       return `useful-fuze-${crypto.randomUUID().substring(0, 5)}`;
     }
@@ -404,20 +492,22 @@ export class AntigravityProvider implements Provider {
       // Must fetch project ID first for v1internal calls to work correctly?
       // Test script showed fetchAvailableModels *with* projectID returning full info.
       // Empty body resulted in 401 in app logs previously?
-      const pid = await this.fetchProjectID(token);
+      const pid = await this.fetchProjectID(token, accountId);
 
-      const res = await this.fetchWithFallback(
-        '/v1internal:fetchAvailableModels',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'User-Agent': 'antigravity/1.11.3 Darwin/arm64',
+      const res = await this.requestQueue.add(() =>
+        this.fetchWithFallback(
+          '/v1internal:fetchAvailableModels',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'User-Agent': 'antigravity/1.11.3 Darwin/arm64',
+            },
+            body: JSON.stringify({ project: pid }),
+            agent: httpsAgent,
           },
-          body: JSON.stringify({ project: pid }),
-          agent: httpsAgent,
-        },
-        token,
+          token,
+        ),
       );
 
       if (!res.ok) throw new Error('Failed to fetch models');
