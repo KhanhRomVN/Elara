@@ -27,6 +27,51 @@ interface API {
   server: {
     start: () => Promise<{ success: boolean; port?: number; error?: string }>;
     stop: () => Promise<{ success: boolean; message?: string }>;
+    getProviders: () => Promise<any[]>;
+    getInfo: () => Promise<any>;
+    getEnv: (key: string) => Promise<string | undefined>;
+    getModels: (providerId: string) => Promise<any>;
+    getPlatformInfo: () => Promise<{
+      platform: NodeJS.Platform;
+      release: string;
+      type: string;
+      homedir: string;
+      shell: string;
+      profilePath: string;
+      profileType: 'bash' | 'zsh' | 'fish' | 'powershell' | 'cmd' | 'unknown';
+    }>;
+    saveEnvToSystem: (envVars: {
+      ANTHROPIC_BASE_URL: string;
+      ANTHROPIC_AUTH_TOKEN?: string;
+      ANTHROPIC_MODEL?: string;
+      ANTHROPIC_DEFAULT_SONNET_MODEL?: string;
+    }) => Promise<{
+      success: boolean;
+      profilePath?: string;
+      profileType?: string;
+      platform?: NodeJS.Platform;
+      message?: string;
+      error?: string;
+    }>;
+    restoreEnvDefaults: () => Promise<{
+      success: boolean;
+      profilePath?: string;
+      message?: string;
+      error?: string;
+    }>;
+    checkSystemEnv: () => Promise<{
+      configured: boolean;
+      profilePath?: string;
+      platformInfo?: any;
+      currentValues?: Record<string, string>;
+      error?: string;
+    }>;
+  };
+  extendedTools: {
+    getAll: () => Promise<any[]>;
+    getByToolId: (toolId: string) => Promise<any>;
+    upsert: (tool: any) => Promise<any>;
+    delete: (id: string) => Promise<void>;
   };
   commands: {
     getAll: () => Promise<any[]>;

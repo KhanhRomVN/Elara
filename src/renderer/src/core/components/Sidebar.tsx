@@ -14,6 +14,7 @@ import {
   Cpu,
   Share2,
   Bot,
+  Layers,
 } from 'lucide-react';
 import { cn } from '../../shared/lib/utils';
 import { toast } from 'sonner';
@@ -82,6 +83,12 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }: SidebarProps) => {
       href: '/agents',
       icon: Bot,
       disabled: true,
+    },
+    {
+      title: 'Extended',
+      href: '/extended',
+      icon: Layers,
+      disabled: false,
     },
   ];
 

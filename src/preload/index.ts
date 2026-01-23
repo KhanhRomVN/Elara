@@ -7,7 +7,9 @@ import { serverAPI } from './api/server';
 import { logsAPI } from './api/logs';
 import { commandsAPI } from './api/commands';
 import { versionAPI } from './api/version';
+import { extendedToolsAPI } from './api/extended-tools';
 
+console.log('[Preload] Initializing API object');
 const api = {
   app: appAPI,
   accounts: {
@@ -22,6 +24,7 @@ const api = {
   version: versionAPI,
   logs: logsAPI,
   commands: commandsAPI,
+  extendedTools: extendedToolsAPI,
   stats: {
     getStats: (): Promise<any> => ipcRenderer.invoke('stats:get'),
   },
@@ -54,6 +57,8 @@ if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI);
     contextBridge.exposeInMainWorld('api', api);
+    console.log('[Preload] APIs exposed to main world (contextIsolated)');
+    console.log('[Preload] Server API keys:', Object.keys(api.server));
   } catch (error) {
     console.error(error);
   }

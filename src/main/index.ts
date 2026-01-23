@@ -17,6 +17,7 @@ import type { ServerStartResult } from './server';
 import { setupCommandsHandlers } from './ipc/commands';
 import { setupStatsHandlers } from './ipc/stats';
 import { setupDialogHandlers } from './ipc/dialog';
+import { setupExtendedToolsHandlers } from './ipc/extended-tools';
 import { startCLIServer, stopCLIServer } from './core/cli-server';
 import { createSystemTray, destroySystemTray } from './core/tray';
 
@@ -146,6 +147,7 @@ if (!gotTheLock) {
     setupCommandsHandlers();
     setupStatsHandlers();
     setupDialogHandlers();
+    setupExtendedToolsHandlers();
 
     // Import and register proxy handlers
     import('./ipc/proxy').then(({ registerProxyIpcHandlers }) => {

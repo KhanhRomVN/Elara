@@ -7,6 +7,7 @@ import { getProxyConfig } from './config';
 import ManagementRouter from './routes/management';
 import { getCertificateManager } from './utils/cert-manager';
 import v1Router from './routes/v1';
+import ClaudeApiRouter from './routes/claude-api';
 import { app } from 'electron';
 import path from 'path';
 import { initDatabase } from '@backend/services/db';
@@ -40,6 +41,9 @@ expressApp.use('/v0/management', ManagementRouter);
 
 // Register v1 routes
 expressApp.use('/v1', v1Router);
+
+// Register Claude-style routes for extended tools
+expressApp.use('/chat', ClaudeApiRouter);
 
 // Error handling middleware (must be last)
 expressApp.use(errorHandler);

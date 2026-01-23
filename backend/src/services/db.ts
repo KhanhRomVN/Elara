@@ -175,6 +175,35 @@ const createTables = (): void => {
       "INSERT OR IGNORE INTO config (key, value) VALUES ('enable_stats_collection', 'true')",
     ).run();
     logger.info('Config table initialized');
+
+    const extendedToolsQuery = `
+      CREATE TABLE IF NOT EXISTS extended_tools (
+        id TEXT PRIMARY KEY,
+        tool_id TEXT NOT NULL UNIQUE,
+        tool_name TEXT NOT NULL,
+        website TEXT,
+        url TEXT,
+        provider_id TEXT,
+        model_id TEXT,
+        config TEXT,
+        created_at TEXT,
+        updated_at TEXT
+      )
+    `;
+    db.exec(extendedToolsQuery);
+    logger.info('Extended tools table initialized');
+
+    // Migration: Add config column to extended_tools if it doesn't exist
+    const extendedToolsInfo = db.pragma('table_info(extended_tools)') as any[];
+    const extendedToolsColumns = extendedToolsInfo.map((c) => c.name);
+    if (!extendedToolsColumns.includes('config')) {
+      try {
+        db.exec('ALTER TABLE extended_tools ADD COLUMN config TEXT');
+        logger.info('Added config column to extended_tools');
+      } catch (e) {
+        logger.warn('Failed to add config column to extended_tools');
+      }
+    }
   } catch (err) {
     logger.error('Error creating statistics tables', err);
     throw err;

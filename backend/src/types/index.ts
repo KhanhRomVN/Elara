@@ -68,6 +68,19 @@ export const ModelPerformanceSchema = z.object({
 });
 export type ModelPerformance = z.infer<typeof ModelPerformanceSchema>;
 
+// --- Extended Tool Config ---
+export const ExtendedToolConfigSchema = z.object({
+  id: z.string(),
+  tool_id: z.string(),
+  tool_name: z.string(),
+  website: z.string().optional(),
+  url: z.string().optional(),
+  provider_id: z.string().optional(),
+  model_id: z.string().optional(),
+  config: z.record(z.string(), z.any()).optional(),
+});
+export type ExtendedToolConfig = z.infer<typeof ExtendedToolConfigSchema>;
+
 // --- API Error ---
 export interface ApiError extends Error {
   statusCode?: number;
