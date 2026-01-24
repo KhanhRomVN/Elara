@@ -87,12 +87,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }: SidebarProps) => {
       disabled: true,
     },
     {
-      title: 'IDE',
-      href: '/ide',
-      icon: Code2,
-      disabled: false,
-    },
-    {
       title: 'Extended',
       href: '/extended',
       icon: Layers,
