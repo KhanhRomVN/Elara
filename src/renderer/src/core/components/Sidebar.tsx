@@ -50,7 +50,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }: SidebarProps) => {
       title: 'Models',
       href: '/models',
       icon: Boxes,
-      disabled: true,
     },
     {
       title: 'Playground',

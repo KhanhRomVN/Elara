@@ -36,6 +36,9 @@ console.log(
 
 const providerModuleCache: Map<string, any> = new Map();
 
+// List of providers that have dynamic models
+const DYNAMIC_PROVIDERS = ['cohere', 'huggingchat', 'antigravity', 'cerebras', 'gemini'];
+
 async function loadProviderModule(providerId: string): Promise<any | null> {
   const normalizedId = providerId.toLowerCase();
   if (providerModuleCache.has(normalizedId)) return providerModuleCache.get(normalizedId);
@@ -68,15 +71,96 @@ async function loadProviderModule(providerId: string): Promise<any | null> {
 }
 
 /**
+ * Fetch dynamic models for a provider from its module
+ */
+async function fetchDynamicModels(providerId: string): Promise<any[] | null> {
+  const normalizedId = providerId.toLowerCase();
+
+  // Check if this is a dynamic provider
+  if (!DYNAMIC_PROVIDERS.includes(normalizedId)) {
+    return null;
+  }
+
+  try {
+    const module = await loadProviderModule(providerId);
+    if (!module || !module.getModels) {
+      return null;
+    }
+
+    const db = getDb();
+    const account = db
+      .prepare('SELECT * FROM accounts WHERE LOWER(provider_id) = ? LIMIT 1')
+      .get(normalizedId) as any;
+
+    if (!account) {
+      console.warn(`[Providers Router] No account found for ${providerId}, cannot fetch models`);
+      return null;
+    }
+
+    const models = await module.getModels(account.credential, account.id);
+    return models.map((m: any) => ({
+      id: m.id,
+      name: m.name,
+      is_thinking: m.is_thinking || false,
+      context_length: m.context_length !== undefined ? m.context_length : null,
+    }));
+  } catch (error) {
+    console.error(`[Providers Router] Failed to fetch dynamic models for ${providerId}:`, error);
+    return null;
+  }
+}
+
+/**
  * GET /v1/providers
- * Get all providers
+ * Get all providers with enriched data (total_accounts, models)
  */
 router.get('/', async (_req: Request, res: Response) => {
   try {
     const providers = await getProviders();
-    return res.json({ success: true, data: providers });
+    const db = getDb();
+
+    // Get account counts from DB
+    const dbProviders = db.prepare('SELECT id, total_accounts FROM providers').all() as {
+      id: string;
+      total_accounts: number;
+    }[];
+
+    const countsMap = new Map(dbProviders.map((p) => [p.id.toLowerCase(), p.total_accounts]));
+
+    // Enrich providers with total_accounts and dynamic models
+    const enrichedProviders = await Promise.all(
+      providers.map(async (p) => {
+        let models = p.models;
+
+        // If no static models, try to fetch dynamic models
+        if (!models || !Array.isArray(models) || models.length === 0) {
+          const dynamicModels = await fetchDynamicModels(p.provider_id);
+          if (dynamicModels && dynamicModels.length > 0) {
+            models = dynamicModels;
+          }
+        }
+
+        return {
+          ...p,
+          total_accounts: countsMap.get(p.provider_id.toLowerCase()) || 0,
+          models: models || undefined,
+        };
+      }),
+    );
+
+    return res.json({
+      success: true,
+      message: 'Providers retrieved successfully',
+      data: enrichedProviders,
+      meta: { timestamp: new Date().toISOString() },
+    });
   } catch (error: any) {
-    return res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch providers',
+      error: { code: 'INTERNAL_ERROR', details: error.message },
+      meta: { timestamp: new Date().toISOString() },
+    });
   }
 });
 
