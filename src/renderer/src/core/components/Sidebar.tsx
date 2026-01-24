@@ -16,6 +16,7 @@ import {
   Bot,
   Layers,
   Settings,
+  Code2,
 } from 'lucide-react';
 import { cn } from '../../shared/lib/utils';
 import { toast } from 'sonner';
@@ -84,6 +85,12 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }: SidebarProps) => {
       href: '/agents',
       icon: Bot,
       disabled: true,
+    },
+    {
+      title: 'IDE',
+      href: '/ide',
+      icon: Code2,
+      disabled: false,
     },
     {
       title: 'Extended',

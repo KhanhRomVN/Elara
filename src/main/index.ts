@@ -148,6 +148,9 @@ if (!gotTheLock) {
     setupStatsHandlers();
     setupDialogHandlers();
     setupExtendedToolsHandlers();
+    import('./ipc/ide').then(({ setupIDEHandlers }) => {
+      setupIDEHandlers();
+    });
 
     // Import and register proxy handlers
     import('./ipc/proxy').then(({ registerProxyIpcHandlers }) => {

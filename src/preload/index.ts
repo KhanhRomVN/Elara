@@ -28,6 +28,18 @@ const api = {
   stats: {
     getStats: (): Promise<any> => ipcRenderer.invoke('stats:get'),
   },
+  ide: {
+    openWindow: (folderPath: string) => ipcRenderer.invoke('ide:open-window', folderPath),
+    listFiles: (dirPath: string) => ipcRenderer.invoke('ide:list-files', dirPath),
+    readFile: (filePath: string) => ipcRenderer.invoke('ide:read-file', filePath),
+    writeFile: (filePath: string, content: string) =>
+      ipcRenderer.invoke('ide:write-file', filePath, content),
+    createItem: (parentPath: string, name: string, isDirectory: boolean) =>
+      ipcRenderer.invoke('ide:create-item', parentPath, name, isDirectory),
+    deleteItem: (itemPath: string) => ipcRenderer.invoke('ide:delete-item', itemPath),
+    renameItem: (oldPath: string, newName: string) =>
+      ipcRenderer.invoke('ide:rename-item', oldPath, newName),
+  },
   dialog: {
     openDirectory: () => ipcRenderer.invoke('dialog:open-directory'),
   },

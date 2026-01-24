@@ -8,6 +8,7 @@ import SkillsPage from '../../features/skills';
 import MCPPage from '../../features/mcp';
 import ExtendedPage from '../../features/extended';
 import SettingsPage from '../../features/setting';
+import IDEManagementPage from '../../features/ide/IDEManagementPage';
 
 export const routes: RouteObject[] = [
   {
@@ -49,6 +50,10 @@ export const routes: RouteObject[] = [
       {
         path: 'settings',
         element: <SettingsPage />,
+      },
+      {
+        path: 'ide',
+        element: <IDEManagementPage />,
       },
       {
         path: 'analytics',
