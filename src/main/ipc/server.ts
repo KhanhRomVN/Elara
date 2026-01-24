@@ -280,7 +280,34 @@ export const setupServerHandlers = () => {
 
   ipcMain.handle('server:get-env', async (_, key: string) => {
     console.log(`[IPC] Handling server:get-env for key: ${key}`);
-    return process.env[key];
+
+    // 1. Try process.env first
+    if (process.env[key]) {
+      return process.env[key];
+    }
+
+    // 2. Try to get from shell
+    try {
+      // Use bash explicitly to get env vars from user's shell profile
+      // -i (interactive) and -l (login) ensures profiles are loaded
+      const command = `echo "$${key}"`;
+      const shell = process.env.SHELL || '/bin/bash';
+
+      const { stdout } = await execAsync(`${shell} -i -c '${command}'`, {
+        timeout: 1000,
+        encoding: 'utf-8',
+      });
+
+      const value = stdout.trim();
+      if (value) {
+        console.log(`[IPC] Retrieved ${key} from shell: ${value}`);
+        return value;
+      }
+    } catch (e) {
+      console.warn(`[IPC] Failed to retrieve ${key} from shell:`, e);
+    }
+
+    return undefined;
   });
 
   ipcMain.handle('server:get-models', async (_, providerId: string) => {

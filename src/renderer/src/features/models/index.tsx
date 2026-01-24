@@ -1,6 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
-import { Loader2, RefreshCw, MoreHorizontal, Plus, ArrowDownUp, Trash2 } from 'lucide-react';
+import {
+  Loader2,
+  RefreshCw,
+  MoreHorizontal,
+  Plus,
+  ArrowDownUp,
+  Trash2,
+  Search,
+  Filter,
+} from 'lucide-react';
 import { cn } from '../../shared/lib/utils';
+import { CustomSelect } from '../playground/components/CustomSelect';
 
 interface Model {
   id: string;
@@ -21,6 +31,7 @@ interface FlatModel {
   model_name: string;
   provider_id: string;
   provider_name: string;
+  is_enabled: boolean;
   sequence?: number;
 }
 
@@ -32,6 +43,7 @@ interface ModelSequence {
 
 export const ModelsPage = () => {
   const [flatModels, setFlatModels] = useState<FlatModel[]>([]);
+  const [providers, setProviders] = useState<Provider[]>([]);
   const [sequences, setSequences] = useState<ModelSequence[]>([]);
   const [loading, setLoading] = useState(true);
   const [serverPort, setServerPort] = useState<number | null>(null);
@@ -39,6 +51,10 @@ export const ModelsPage = () => {
   const [insertDialogOpen, setInsertDialogOpen] = useState(false);
   const [insertTargetModel, setInsertTargetModel] = useState<FlatModel | null>(null);
   const [selectedSequence, setSelectedSequence] = useState<number>(1);
+
+  // Filter states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedProviderId, setSelectedProviderId] = useState('all');
 
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -79,10 +95,12 @@ export const ModelsPage = () => {
       const providersData = await providersRes.json();
 
       if (providersData.success) {
-        const providers: Provider[] = providersData.data;
+        const providersList: Provider[] = providersData.data;
+        setProviders(providersList); // Save full providers list for filter dropdown
+
         const models: FlatModel[] = [];
 
-        providers.forEach((provider) => {
+        providersList.forEach((provider) => {
           if (provider.models && provider.models.length > 0) {
             provider.models.forEach((model) => {
               models.push({
@@ -90,6 +108,7 @@ export const ModelsPage = () => {
                 model_name: model.name,
                 provider_id: provider.provider_id,
                 provider_name: provider.provider_name,
+                is_enabled: provider.is_enabled !== false, // Default to true if undefined
               });
             });
           }
@@ -204,16 +223,42 @@ export const ModelsPage = () => {
     setActiveDropdownId(null);
   };
 
-  // Sort models: those with sequence first (by sequence), then others
-  const sortedModels = [...flatModels].sort((a, b) => {
+  // Filter models
+  const filteredModels = flatModels.filter((model) => {
+    // Search query filter
+    const matchesSearch =
+      model.model_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      model.provider_id.toLowerCase().includes(searchQuery.toLowerCase());
+
+    // Provider filter
+    const matchesProvider =
+      selectedProviderId === 'all' || model.provider_id === selectedProviderId;
+
+    return matchesSearch && matchesProvider;
+  });
+
+  // Sort models:
+  // 1. Sequence (ascending)
+  // 2. Provider Enabled (enabled first)
+  // 3. Model ID (alphabetical)
+  const sortedModels = [...filteredModels].sort((a, b) => {
     const seqA = getModelSequence(a.model_id, a.provider_id);
     const seqB = getModelSequence(b.model_id, b.provider_id);
 
+    // 1. Priority: Sequence
     if (seqA !== undefined && seqB !== undefined) {
       return seqA - seqB;
     }
+    // Items with sequence come first
     if (seqA !== undefined) return -1;
     if (seqB !== undefined) return 1;
+
+    // 2. Priority: Provider enabled status (disabled at bottom)
+    if (a.is_enabled !== b.is_enabled) {
+      return a.is_enabled ? -1 : 1;
+    }
+
+    // 3. Priority: Alphabetical
     return a.model_id.localeCompare(b.model_id);
   });
 
@@ -235,7 +280,39 @@ export const ModelsPage = () => {
         <p className="text-muted-foreground">Manage model sequences for priority ordering.</p>
       </div>
 
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3 flex-1">
+          {/* Search Bar */}
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search models..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-secondary/50 border border-input rounded-md py-2 pl-9 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+
+          {/* Provider Filter */}
+          <div className="relative z-20">
+            <CustomSelect
+              value={selectedProviderId}
+              onChange={setSelectedProviderId}
+              options={[
+                { value: 'all', label: 'All Providers' },
+                ...providers.map((p) => ({
+                  value: p.provider_id,
+                  label: p.provider_name || p.provider_id,
+                  subLabel: !p.is_enabled ? '(Disabled)' : undefined,
+                  disabled: false,
+                })),
+              ]}
+              placeholder="Select Provider"
+            />
+          </div>
+        </div>
+
         <button
           onClick={() => fetchData()}
           className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-3"
@@ -250,7 +327,7 @@ export const ModelsPage = () => {
           <table className="w-full caption-bottom text-sm text-left">
             <thead className="[&_tr]:border-b">
               <tr className="border-b transition-colors hover:bg-muted/50">
-                <th className="h-12 px-4 align-middle font-medium text-muted-foreground w-[60px]">
+                <th className="h-12 px-4 align-middle font-medium text-muted-foreground w-[60px] text-center">
                   STT
                 </th>
                 <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
@@ -259,10 +336,10 @@ export const ModelsPage = () => {
                 <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
                   PROVIDER ID
                 </th>
-                <th className="h-12 px-4 align-middle font-medium text-muted-foreground w-[100px]">
+                <th className="h-12 px-4 align-middle font-medium text-muted-foreground w-[100px] text-center">
                   SEQUENCE
                 </th>
-                <th className="h-12 px-4 align-middle font-medium text-muted-foreground text-right w-[100px]">
+                <th className="h-12 px-4 align-middle font-medium text-muted-foreground w-[100px] text-center">
                   Actions
                 </th>
               </tr>
@@ -289,14 +366,16 @@ export const ModelsPage = () => {
                       hasSequence && 'bg-primary/5',
                     )}
                   >
-                    <td className="p-4 align-middle text-muted-foreground">{index + 1}</td>
+                    <td className="p-4 align-middle text-muted-foreground text-center">
+                      {index + 1}
+                    </td>
                     <td className="p-4 align-middle">
                       <span className="font-mono text-sm">{model.model_id}</span>
                     </td>
                     <td className="p-4 align-middle">
                       <span className="text-sm text-muted-foreground">{model.provider_id}</span>
                     </td>
-                    <td className="p-4 align-middle">
+                    <td className="p-4 align-middle text-center">
                       {hasSequence ? (
                         <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
                           {sequence}
@@ -305,7 +384,7 @@ export const ModelsPage = () => {
                         <span className="text-muted-foreground">-</span>
                       )}
                     </td>
-                    <td className="p-4 align-middle text-right">
+                    <td className="p-4 align-middle text-center">
                       <div className="relative inline-block" ref={dropdownRef}>
                         <button
                           onClick={() =>

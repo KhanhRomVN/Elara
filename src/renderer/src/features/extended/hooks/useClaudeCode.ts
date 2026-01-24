@@ -4,44 +4,32 @@ import { ExtendedToolConfig, PlatformInfo, SystemEnvStatus } from '../types/clau
 
 export const useClaudeCode = () => {
   const [isClaudeInstalled, setIsClaudeInstalled] = useState<boolean | null>(null);
-  const [activeMode, setActiveMode] = useState<'elara' | 'normal'>('elara');
+
+  // Simplified config state - removed 'activeMode' and Elara specific fields
   const [config, setConfig] = useState<Partial<ExtendedToolConfig>>({
     tool_id: 'claude_code',
     tool_name: 'Claude Code',
     website: 'https://claude.ai/',
     url: '',
+    // Deprecated fields kept for type compatibility but unused
     provider_id: 'auto',
     model_id: 'auto',
-    mode: 'elara',
+    mode: 'normal',
     ANTHROPIC_DEFAULT_OPUS_MODEL: '',
     ANTHROPIC_DEFAULT_SONNET_MODEL: '',
     ANTHROPIC_DEFAULT_HAIKU_MODEL: '',
   });
 
-  const [providers, setProviders] = useState<any[]>([]);
   const [serverPort, setServerPort] = useState<number>(3030);
   const [platformInfo, setPlatformInfo] = useState<PlatformInfo | null>(null);
   const [systemEnvStatus, setSystemEnvStatus] = useState<SystemEnvStatus | null>(null);
 
-  // States for Normal Mode (Inputs)
+  // States for Environment Variables
   const [authToken, setAuthToken] = useState('');
   const [normalModel, setNormalModel] = useState('');
   const [normalOpus, setNormalOpus] = useState('');
   const [normalSonnet, setNormalSonnet] = useState('');
   const [normalHaiku, setNormalHaiku] = useState('');
-
-  // States for Elara Mode (Dropdowns per model)
-  const [elaraConfigs, setElaraConfigs] = useState<
-    Record<string, { provider: string; model: string }>
-  >({
-    main: { provider: 'auto', model: 'auto' },
-    opus: { provider: 'auto', model: 'auto' },
-    sonnet: { provider: 'auto', model: 'auto' },
-    haiku: { provider: 'auto', model: 'auto' },
-  });
-
-  const [loadingModels, setLoadingModels] = useState<Record<string, boolean>>({});
-  const [availableModels, setAvailableModels] = useState<Record<string, any[]>>({});
 
   const [savingToSystem, setSavingToSystem] = useState(false);
   const [restoringDefaults, setRestoringDefaults] = useState(false);
@@ -82,53 +70,16 @@ export const useClaudeCode = () => {
         // 5. Fetch env base URL
         const envBaseUrl = (await window.api.server.getEnv('ANTHROPIC_BASE_URL')) || '';
 
-        // 6. Fetch existing config from database
-        const existingConfig: any = await window.api.extendedTools.getByToolId('claude_code');
-        if (existingConfig) {
-          setIsNewConfig(false);
-          const flatConfig = {
-            ...existingConfig,
-            ...(existingConfig.config || {}),
-          };
-          delete flatConfig.config;
+        // 6. Config is now purely managed via system env vars and defaults
+        // Standard Anthropic SDK appends /v1/messages, so we point to server root
+        setConfig((prev) => ({
+          ...prev,
+          url: envBaseUrl || `http://localhost:${port}`,
+          mode: 'normal',
+        }));
 
-          setConfig(flatConfig);
-          setActiveMode(flatConfig.mode || 'elara');
-
-          // Load saved authToken if exists in config
-          if (flatConfig.authToken) {
-            setAuthToken(flatConfig.authToken);
-          }
-
-          // If Elara mode, parse the complex config from backend if stored
-          if (flatConfig.mode === 'elara') {
-            setElaraConfigs({
-              main: {
-                provider: flatConfig.provider_id || 'auto',
-                model: flatConfig.model_id || 'auto',
-              },
-              opus: parseElaraModel(flatConfig.ANTHROPIC_DEFAULT_OPUS_MODEL),
-              sonnet: parseElaraModel(flatConfig.ANTHROPIC_DEFAULT_SONNET_MODEL),
-              haiku: parseElaraModel(flatConfig.ANTHROPIC_DEFAULT_HAIKU_MODEL),
-            });
-          } else {
-            // Normal mode - load saved model values if they exist
-            if (flatConfig.normalModel) setNormalModel(flatConfig.normalModel);
-            if (flatConfig.normalOpus) setNormalOpus(flatConfig.normalOpus);
-            if (flatConfig.normalSonnet) setNormalSonnet(flatConfig.normalSonnet);
-            if (flatConfig.normalHaiku) setNormalHaiku(flatConfig.normalHaiku);
-          }
-        } else {
-          setConfig((prev) => ({
-            ...prev,
-            url: envBaseUrl || `http://localhost:${port}/chat/messages`,
-            mode: 'elara',
-          }));
-        }
-
-        // 7. Fetch providers
-        const providersData = await window.api.server.getProviders();
-        setProviders(providersData || []);
+        // Check if legacy config exists locally to migrate once (optional, skipped for simplicity as per user request to rely on env vars)
+        setIsNewConfig(false);
       } catch (error) {
         console.error('Failed to initialize Claude Code:', error);
       }
@@ -137,196 +88,25 @@ export const useClaudeCode = () => {
     init();
   }, []);
 
-  const parseElaraModel = (val?: string) => {
-    if (!val) return { provider: 'auto', model: 'auto' };
-    if (val.startsWith('elara://')) {
-      const parts = val.replace('elara://', '').split('/');
-      return { provider: parts[0] || 'auto', model: parts[1] || 'auto' };
-    }
-    return { provider: 'auto', model: 'auto' };
-  };
-
-  const stringifyElaraModel = (p: string, m: string) => {
-    if (p === 'auto' && m === 'auto') return '';
-    return `elara://${p}/${m}`;
-  };
-
-  const fetchModelsForType = async (type: string, providerId: string) => {
-    if (providerId === 'auto') {
-      setAvailableModels((prev) => ({ ...prev, [type]: [] }));
-      return;
-    }
-    setLoadingModels((prev) => ({ ...prev, [type]: true }));
-    try {
-      // Use the same approach as playground - fetch from API directly
-      const serverInfo = await window.api.server.getInfo();
-      const port = serverInfo?.port || 3030;
-
-      // Fetch directly from API to handle different response formats
-      const response = await fetch(
-        `http://localhost:${port}/v1/providers/${providerId.toLowerCase()}/models`,
-      );
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log(`[ClaudeCode] Fetched models for ${type}/${providerId}:`, data);
-
-      // Handle different response formats
-      let models: any[] = [];
-      if (data.success && data.data) {
-        if (Array.isArray(data.data)) {
-          // Format: { success: true, data: [...] }
-          models = data.data;
-        } else if (data.data.models && typeof data.data.models === 'object') {
-          // Format: { success: true, data: { models: { key: {...}, ... } } }
-          models = Object.entries(data.data.models).map(([id, model]: [string, any]) => ({
-            id: model.name || id,
-            name: model.displayName || model.name || id,
-            ...model,
-          }));
-        }
-      } else if (Array.isArray(data)) {
-        models = data;
-      }
-
-      setAvailableModels((prev) => ({ ...prev, [type]: models }));
-    } catch (e) {
-      console.error(`Failed to fetch models for ${type}:`, e);
-      setAvailableModels((prev) => ({ ...prev, [type]: [] }));
-    } finally {
-      setLoadingModels((prev) => ({ ...prev, [type]: false }));
-    }
-  };
-
-  // Fetch models for already selected providers when config is loaded
-  useEffect(() => {
-    const fetchModelsForSelectedProviders = async () => {
-      const types = ['main', 'opus', 'sonnet', 'haiku'] as const;
-      for (const type of types) {
-        const providerId = elaraConfigs[type]?.provider;
-        if (providerId && providerId !== 'auto' && !availableModels[type]?.length) {
-          await fetchModelsForType(type, providerId);
-        }
-      }
-    };
-
-    // Only run when providers are loaded and we have elaraConfigs
-    if (providers.length > 0) {
-      fetchModelsForSelectedProviders();
-    }
-  }, [
-    providers,
-    elaraConfigs.main.provider,
-    elaraConfigs.opus.provider,
-    elaraConfigs.sonnet.provider,
-    elaraConfigs.haiku.provider,
-  ]);
-
-  const handleElaraConfigChange = (type: string, field: 'provider' | 'model', value: string) => {
-    const newConfigs = {
-      ...elaraConfigs,
-      [type]: { ...elaraConfigs[type], [field]: value },
-    };
-
-    if (field === 'provider') {
-      newConfigs[type].model = 'auto';
-      fetchModelsForType(type, value);
-    }
-
-    setElaraConfigs(newConfigs);
-
-    // Update main config object
-    if (type === 'main') {
-      setConfig({
-        ...config,
-        provider_id: newConfigs.main.provider,
-        model_id: newConfigs.main.model,
-      });
-    } else {
-      const fieldName = `ANTHROPIC_DEFAULT_${type.toUpperCase()}_MODEL` as keyof ExtendedToolConfig;
-      setConfig({
-        ...config,
-        [fieldName]: stringifyElaraModel(newConfigs[type].provider, newConfigs[type].model),
-      });
-    }
-  };
-
   const resetUrl = () => {
-    setConfig({ ...config, url: `http://localhost:${serverPort}/chat/messages` });
+    setConfig({ ...config, url: `http://localhost:${serverPort}` });
     toast.info('Base URL reset to local Elara server');
   };
 
-  const handleSave = async () => {
-    try {
-      const { id, tool_id, tool_name, website, url, provider_id, model_id, ...toolSpecific } =
-        config as any;
-
-      const finalConfig = {
-        id,
-        tool_id,
-        tool_name,
-        website,
-        url,
-        provider_id,
-        model_id,
-        config: {
-          ...toolSpecific,
-          mode: activeMode,
-          authToken,
-          normalModel,
-          normalOpus,
-          normalSonnet,
-          normalHaiku,
-        },
-      };
-
-      const result: any = await window.api.extendedTools.upsert(finalConfig);
-
-      const flatResult = {
-        ...result,
-        ...(result.config || {}),
-      };
-      delete flatResult.config;
-
-      setConfig(flatResult);
-      setIsNewConfig(false);
-      toast.success('Configuration saved successfully');
-    } catch (error) {
-      console.error('Failed to save config:', error);
-      toast.error('Failed to save configuration');
-    }
-  };
+  // handleSave removed as we no longer save to extended_tools db
 
   const handleSaveToSystem = async () => {
     setSavingToSystem(true);
     try {
-      let payload: any = {
+      // Only process "Normal Mode" logic (direct env vars)
+      const payload: any = {
         ANTHROPIC_BASE_URL: config.url,
         ANTHROPIC_AUTH_TOKEN: authToken || undefined,
+        ANTHROPIC_MODEL: normalModel || undefined,
+        ANTHROPIC_DEFAULT_OPUS_MODEL: normalOpus || undefined,
+        ANTHROPIC_DEFAULT_SONNET_MODEL: normalSonnet || undefined,
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: normalHaiku || undefined,
       };
-
-      if (activeMode === 'elara') {
-        payload.ANTHROPIC_MODEL = `elara://${elaraConfigs.main.provider}/${elaraConfigs.main.model}`;
-        payload.ANTHROPIC_DEFAULT_OPUS_MODEL = stringifyElaraModel(
-          elaraConfigs.opus.provider,
-          elaraConfigs.opus.model,
-        );
-        payload.ANTHROPIC_DEFAULT_SONNET_MODEL = stringifyElaraModel(
-          elaraConfigs.sonnet.provider,
-          elaraConfigs.sonnet.model,
-        );
-        payload.ANTHROPIC_DEFAULT_HAIKU_MODEL = stringifyElaraModel(
-          elaraConfigs.haiku.provider,
-          elaraConfigs.haiku.model,
-        );
-      } else {
-        payload.ANTHROPIC_MODEL = normalModel || undefined;
-        payload.ANTHROPIC_DEFAULT_OPUS_MODEL = normalOpus || undefined;
-        payload.ANTHROPIC_DEFAULT_SONNET_MODEL = normalSonnet || undefined;
-        payload.ANTHROPIC_DEFAULT_HAIKU_MODEL = normalHaiku || undefined;
-      }
 
       const result = await window.api.server.saveEnvToSystem(payload);
 
@@ -380,57 +160,20 @@ export const useClaudeCode = () => {
       return val1 === val2;
     };
 
-    const status: Record<string, boolean> = {
+    return {
       url: checkSync(config.url || '', env.ANTHROPIC_BASE_URL),
       authToken: checkSync(authToken, env.ANTHROPIC_AUTH_TOKEN),
+      main: checkSync(normalModel, env.ANTHROPIC_MODEL),
+      opus: checkSync(normalOpus, env.ANTHROPIC_DEFAULT_OPUS_MODEL),
+      sonnet: checkSync(normalSonnet, env.ANTHROPIC_DEFAULT_SONNET_MODEL),
+      haiku: checkSync(normalHaiku, env.ANTHROPIC_DEFAULT_HAIKU_MODEL),
     };
-
-    if (activeMode === 'elara') {
-      status.main = checkSync(
-        `elara://${elaraConfigs.main.provider}/${elaraConfigs.main.model}`,
-        env.ANTHROPIC_MODEL,
-      );
-      status.opus = checkSync(
-        stringifyElaraModel(elaraConfigs.opus.provider, elaraConfigs.opus.model),
-        env.ANTHROPIC_DEFAULT_OPUS_MODEL,
-      );
-      status.sonnet = checkSync(
-        stringifyElaraModel(elaraConfigs.sonnet.provider, elaraConfigs.sonnet.model),
-        env.ANTHROPIC_DEFAULT_SONNET_MODEL,
-      );
-      status.haiku = checkSync(
-        stringifyElaraModel(elaraConfigs.haiku.provider, elaraConfigs.haiku.model),
-        env.ANTHROPIC_DEFAULT_HAIKU_MODEL,
-      );
-    } else {
-      status.main = checkSync(normalModel, env.ANTHROPIC_MODEL);
-      status.opus = checkSync(normalOpus, env.ANTHROPIC_DEFAULT_OPUS_MODEL);
-      status.sonnet = checkSync(normalSonnet, env.ANTHROPIC_DEFAULT_SONNET_MODEL);
-      status.haiku = checkSync(normalHaiku, env.ANTHROPIC_DEFAULT_HAIKU_MODEL);
-    }
-
-    return status;
-  }, [
-    config.url,
-    authToken,
-    normalModel,
-    normalOpus,
-    normalSonnet,
-    normalHaiku,
-    elaraConfigs,
-    activeMode,
-    systemEnvStatus,
-  ]);
+  }, [config.url, authToken, normalModel, normalOpus, normalSonnet, normalHaiku, systemEnvStatus]);
 
   return {
     isClaudeInstalled,
-    activeMode,
-    setActiveMode,
     config,
     setConfig,
-    providers,
-    availableModels,
-    loadingModels,
     systemEnvStatus,
     authToken,
     setAuthToken,
@@ -442,12 +185,9 @@ export const useClaudeCode = () => {
     setNormalSonnet,
     normalHaiku,
     setNormalHaiku,
-    elaraConfigs,
-    handleElaraConfigChange,
     savingToSystem,
     restoringDefaults,
     resetUrl,
-    handleSave,
     handleSaveToSystem,
     handleRestoreDefaults,
     syncStatus,

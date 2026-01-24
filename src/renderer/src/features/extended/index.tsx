@@ -2,21 +2,30 @@ import { useState, useEffect } from 'react';
 import { Layers } from 'lucide-react';
 import { cn } from '../../shared/lib/utils';
 import { ClaudeCodePanel } from './components/ClaudeCodePanel';
+import { OpenCodePanel } from './components/OpenCodePanel';
 
 const ExtendedPage = () => {
   const [activeTool, setActiveTool] = useState('claude_code');
   const [isClaudeInstalled, setIsClaudeInstalled] = useState<boolean | null>(null);
+  const [isOpenCodeInstalled, setIsOpenCodeInstalled] = useState<boolean | null>(null);
 
   useEffect(() => {
-    const checkClaude = async () => {
+    const checkTools = async () => {
       try {
         await window.api.shell.execute('claude --version');
         setIsClaudeInstalled(true);
       } catch (e) {
         setIsClaudeInstalled(false);
       }
+
+      try {
+        await window.api.shell.execute('opencode --version');
+        setIsOpenCodeInstalled(true);
+      } catch (e) {
+        setIsOpenCodeInstalled(false);
+      }
     };
-    checkClaude();
+    checkTools();
   }, []);
 
   return (
@@ -53,11 +62,37 @@ const ExtendedPage = () => {
               </span>
             )}
           </button>
+
+          <button
+            onClick={() => setActiveTool('opencode')}
+            disabled={isOpenCodeInstalled === false}
+            className={cn(
+              'flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-all',
+              activeTool === 'opencode'
+                ? 'bg-primary/10 text-primary border border-primary/20'
+                : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100',
+              isOpenCodeInstalled === false && 'opacity-50 cursor-not-allowed grayscale',
+            )}
+          >
+            <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
+            OpenCode
+            {isOpenCodeInstalled === false && (
+              <span className="ml-auto text-[10px] bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded border border-red-500/20">
+                Offline
+              </span>
+            )}
+            {isOpenCodeInstalled === true && (
+              <span className="ml-auto text-[10px] bg-green-500/10 text-green-500 px-1.5 py-0.5 rounded border border-green-500/20">
+                Ready
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Content Area */}
         <div className="flex-1 flex flex-col overflow-y-auto p-6 bg-zinc-950/30">
           {activeTool === 'claude_code' && <ClaudeCodePanel />}
+          {activeTool === 'opencode' && <OpenCodePanel />}
         </div>
       </div>
     </div>

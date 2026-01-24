@@ -239,6 +239,19 @@ const createTables = (): void => {
     `;
     db.exec(providerModelsSyncQuery);
     logger.info('Provider models sync table initialized');
+
+    // Table to track model sequences (user defined ordering)
+    const modelSequencesQuery = `
+      CREATE TABLE IF NOT EXISTS model_sequences (
+        provider_id TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        sequence INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY(provider_id, model_id)
+      )
+    `;
+    db.exec(modelSequencesQuery);
+    logger.info('Model sequences table initialized');
   } catch (err) {
     logger.error('Error creating statistics tables', err);
     throw err;

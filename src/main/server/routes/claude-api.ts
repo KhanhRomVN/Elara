@@ -24,13 +24,40 @@ router.post(['/messages', '/message'], async (req: Request, res: Response) => {
     let account;
 
     if (config?.provider_id && config.provider_id !== 'auto') {
-      // Find account by provider_id and maybe model_id or just first one
+      // Find account by provider_id
       account = db
         .prepare('SELECT * FROM accounts WHERE provider_id = ?')
         .get(config.provider_id) as any;
     }
 
-    // Fallback if no account found for specific provider
+    // Resolving model: "auto" (Global Auto)
+    // If request model is "auto" OR config model is "auto"
+    let targetModel = config?.model_id && config.model_id !== 'auto' ? config.model_id : model;
+
+    if (targetModel === 'auto') {
+      // Find the GLOBALLY best model from sequences
+      const bestSequence = db
+        .prepare('SELECT * FROM model_sequences ORDER BY sequence ASC LIMIT 1')
+        .get() as { provider_id: string; model_id: string } | undefined;
+
+      if (bestSequence) {
+        console.log(
+          `[Claude API] Global auto-selected: ${bestSequence.provider_id}/${bestSequence.model_id}`,
+        );
+        targetModel = bestSequence.model_id;
+
+        // If we don't have a specific account forced by config, stick to this provider
+        if (!config?.provider_id || config.provider_id === 'auto') {
+          account = db
+            .prepare('SELECT * FROM accounts WHERE provider_id = ? LIMIT 1')
+            .get(bestSequence.provider_id) as any;
+        }
+      } else {
+        console.warn('[Claude API] "auto" requested but no model sequences found.');
+      }
+    }
+
+    // Fallback if no account found (either specific provider failed, or auto resolution failed/skipped)
     if (!account) {
       account = db.prepare('SELECT * FROM accounts LIMIT 1').get() as any;
     }
@@ -61,7 +88,7 @@ router.post(['/messages', '/message'], async (req: Request, res: Response) => {
         credential: account.credential,
         provider_id: account.provider_id,
         accountId: account.id,
-        model: config?.model_id && config.model_id !== 'auto' ? config.model_id : model,
+        model: targetModel,
         messages: messages.map((m: any) => ({
           role: m.role,
           content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),

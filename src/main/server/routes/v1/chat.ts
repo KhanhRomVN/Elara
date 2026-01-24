@@ -191,12 +191,34 @@ router.post('/accounts/:accountId/messages', async (req: Request, res: Response)
     let accumulatedThinking = '';
     let accumulatedMetadata: any = {};
 
+    // Resolve "auto" model
+    let finalModel = model;
+    if (model === 'auto') {
+      const bestModel = db
+        .prepare(
+          'SELECT model_id FROM model_sequences WHERE provider_id = ? ORDER BY sequence ASC LIMIT 1',
+        )
+        .get(account.provider_id) as { model_id: string } | undefined;
+
+      if (bestModel) {
+        finalModel = bestModel.model_id;
+        console.log(`[Chat] Auto-selected model for ${account.provider_id}: ${finalModel}`);
+      } else {
+        // Fallback if no sequence defined: use the first model found for this provider?
+        // Or keep "auto" and let the provider handle it (likely fail).
+        // Let's try to query provider_models if available, or just log warning.
+        console.warn(
+          `[Chat] "auto" model requested but no sequence found for ${account.provider_id}`,
+        );
+      }
+    }
+
     try {
       await sendMessage({
         credential: account.credential,
         provider_id: account.provider_id,
         accountId, // Pass accountId here
-        model,
+        model: finalModel,
         messages,
         conversationId: finalConversationId,
         stream: stream !== false,
