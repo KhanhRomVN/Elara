@@ -79,11 +79,11 @@ export const importAccounts = async (
 
         db.prepare('COMMIT').run();
 
-        // Update provider counts
+        // Update provider counts (case-insensitive)
         const providerIds = [...new Set(toInsert.map((a) => a.provider_id))];
         for (const pid of providerIds) {
           db.prepare(
-            'UPDATE providers SET total_accounts = (SELECT COUNT(*) FROM accounts WHERE provider_id = ?) WHERE id = ?',
+            'UPDATE providers SET total_accounts = (SELECT COUNT(*) FROM accounts WHERE LOWER(provider_id) = LOWER(?)) WHERE LOWER(id) = LOWER(?)',
           ).run(pid, pid);
         }
 
@@ -205,9 +205,9 @@ export const addAccount = async (
         'INSERT INTO accounts (id, provider_id, email, credential) VALUES (?, ?, ?, ?)',
       ).run(id, account.provider_id, account.email, account.credential);
 
-      // Increment total_accounts in providers table
+      // Increment total_accounts in providers table (case-insensitive)
       db.prepare(
-        'UPDATE providers SET total_accounts = total_accounts + 1 WHERE id = ?',
+        'UPDATE providers SET total_accounts = total_accounts + 1 WHERE LOWER(id) = LOWER(?)',
       ).run(account.provider_id);
 
       res.status(201).json({
@@ -350,13 +350,9 @@ export const deleteAccount = async (
       const { provider_id } = account as any;
       db.prepare('DELETE FROM accounts WHERE id = ?').run(id);
 
-      // Decrement total_accounts in providers table
+      // Decrement total_accounts in providers table (case-insensitive)
       db.prepare(
-        'UPDATE providers SET total_accounts = total_accounts - 1 WHERE id = ?, total_accounts > 0',
-      );
-      // Correction: Standard SQL update or cautious update
-      db.prepare(
-        'UPDATE providers SET total_accounts = MAX(0, total_accounts - 1) WHERE id = ?',
+        'UPDATE providers SET total_accounts = MAX(0, total_accounts - 1) WHERE LOWER(id) = LOWER(?)',
       ).run(provider_id);
 
       res.status(200).json({

@@ -12,7 +12,11 @@ import {
   PROVIDER_GITHUB_BASE,
   TEMP_STORAGE_DIR,
 } from '../config/constants';
-import { syncAllDynamicProviders } from './models-sync.service';
+import {
+  syncAllDynamicProviders,
+  scheduleNextGmtSync,
+} from './models-sync.service';
+import { getDb } from './db';
 
 const logger = createLogger('ProviderSync');
 
@@ -88,6 +92,61 @@ class ProviderSyncService {
   }
 
   /**
+   * Ensure all providers from config exist in the providers DB table
+   * This is needed for total_accounts tracking to work correctly
+   */
+  private ensureProvidersInDb(providers: Provider[]): void {
+    try {
+      const db = getDb();
+      const insertStmt = db.prepare(`
+        INSERT OR IGNORE INTO providers (id, name, total_accounts)
+        VALUES (?, ?, 0)
+      `);
+
+      for (const provider of providers) {
+        insertStmt.run(provider.provider_id, provider.provider_name);
+      }
+
+      // Update total_accounts for all providers based on actual account counts
+      // Use LOWER() to handle case-insensitive matching
+      db.exec(`
+        UPDATE providers
+        SET total_accounts = (
+          SELECT COUNT(*)
+          FROM accounts
+          WHERE LOWER(accounts.provider_id) = LOWER(providers.id)
+        )
+      `);
+
+      logger.info(
+        `Ensured ${providers.length} providers exist in DB with correct account counts`,
+      );
+    } catch (error) {
+      logger.error('Failed to ensure providers in DB:', error);
+    }
+  }
+
+  /**
+   * Sync total_accounts for all providers (can be called independently)
+   */
+  syncProviderAccountCounts(): void {
+    try {
+      const db = getDb();
+      db.exec(`
+        UPDATE providers
+        SET total_accounts = (
+          SELECT COUNT(*)
+          FROM accounts
+          WHERE LOWER(accounts.provider_id) = LOWER(providers.id)
+        )
+      `);
+      logger.info('Synchronized provider account counts');
+    } catch (error) {
+      logger.error('Failed to sync provider account counts:', error);
+    }
+  }
+
+  /**
    * Download provider implementation files
    * Note: For now, we'll focus on provider.json. Provider implementation files
    * are TypeScript modules that need to be compiled, so we'll use bundled versions
@@ -129,6 +188,9 @@ class ProviderSyncService {
 
       // Download provider files (if needed)
       await this.downloadProviderFiles(providers);
+
+      // Ensure all providers exist in the DB for total_accounts tracking
+      this.ensureProvidersInDb(providers);
 
       this.isInitialized = true;
       logger.info('Provider sync completed successfully');
@@ -196,6 +258,13 @@ class ProviderSyncService {
     logger.info('Initializing provider sync service...');
     await this.syncProviders();
 
+    // Always sync provider account counts on startup
+    // This handles cases where providers exist but counts are stale
+    const providers = this.getProviders();
+    if (providers.length > 0) {
+      this.ensureProvidersInDb(providers);
+    }
+
     // Sync dynamic provider models on startup
     logger.info('Syncing dynamic provider models...');
     try {
@@ -216,15 +285,11 @@ class ProviderSyncService {
       60 * 60 * 1000,
     ); // Check every hour
 
-    // Set up periodic models sync (every 24 hours)
-    setInterval(
-      () => {
-        syncAllDynamicProviders().catch((error) => {
-          logger.error('Periodic models sync failed:', error);
-        });
-      },
-      24 * 60 * 60 * 1000,
-    ); // Check every 24 hours
+    // Set up periodic models sync at GMT midnight every 24 hours
+    scheduleNextGmtSync(async () => {
+      logger.info('Running scheduled GMT midnight models sync...');
+      await syncAllDynamicProviders();
+    });
   }
 
   /**

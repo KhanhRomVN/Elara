@@ -127,7 +127,10 @@ export const getAllProviders = async (): Promise<Provider[]> => {
     total_accounts: number;
   }[];
 
-  const countsMap = new Map(dbProviders.map((p) => [p.id, p.total_accounts]));
+  // Use lowercase keys for case-insensitive matching
+  const countsMap = new Map(
+    dbProviders.map((p) => [p.id.toLowerCase(), p.total_accounts]),
+  );
 
   // Build providers with models
   const providersWithModels: Provider[] = [];
@@ -156,7 +159,7 @@ export const getAllProviders = async (): Promise<Provider[]> => {
 
     providersWithModels.push({
       ...p,
-      total_accounts: countsMap.get(p.provider_id) || 0,
+      total_accounts: countsMap.get(p.provider_id.toLowerCase()) || 0,
       models: models || undefined,
     });
   }

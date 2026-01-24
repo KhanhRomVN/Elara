@@ -44,6 +44,8 @@
     "install-cli": "node scripts/install-cli.js",
     "uninstall-cli": "node scripts/uninstall-cli.js",
     "setup-cli": "node scripts/dev-setup.js",
+    "setup-zed": "node scripts/setup-zed.js",
+    "build-zed": "node scripts/build-zed.js",
     "prepare": "husky"
   },
   "dependencies": {

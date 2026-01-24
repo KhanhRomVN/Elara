@@ -7,7 +7,53 @@ const logger = createLogger('ModelsSyncService');
 const SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // List of providers that have dynamic models (fetched from API)
-const DYNAMIC_PROVIDERS = ['cohere', 'huggingchat', 'antigravity', 'cerebras'];
+const DYNAMIC_PROVIDERS = [
+  'cohere',
+  'huggingchat',
+  'antigravity',
+  'cerebras',
+  'gemini',
+];
+
+/**
+ * Calculate milliseconds until next sync time at midnight GMT
+ */
+export const getMsUntilNextGmtMidnight = (): number => {
+  const now = new Date();
+  const nextMidnight = new Date(
+    Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate() + 1,
+      0,
+      0,
+      0,
+      0,
+    ),
+  );
+  return nextMidnight.getTime() - now.getTime();
+};
+
+/**
+ * Schedule the next sync at GMT midnight
+ */
+export const scheduleNextGmtSync = (callback: () => Promise<void>): void => {
+  const msUntilMidnight = getMsUntilNextGmtMidnight();
+  const hoursUntil = (msUntilMidnight / (1000 * 60 * 60)).toFixed(2);
+  logger.info(
+    `Scheduling next models sync at GMT midnight (in ${hoursUntil} hours)`,
+  );
+
+  setTimeout(async () => {
+    try {
+      await callback();
+    } catch (error) {
+      logger.error('Scheduled GMT sync failed:', error);
+    }
+    // Schedule the next one after this completes
+    scheduleNextGmtSync(callback);
+  }, msUntilMidnight);
+};
 
 export interface CachedModel {
   id: string;

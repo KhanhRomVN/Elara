@@ -7,8 +7,26 @@ export const setupIDEHandlers = () => {
   // Window Management
   ipcMain.handle('ide:open-window', async (_, folderPath: string) => {
     try {
+      const { app } = require('electron');
+      const isDev = !app.isPackaged;
+      const bundledZedPath = isDev
+        ? path.join(process.cwd(), 'resources', 'bin', 'zed')
+        : path.join(process.resourcesPath, 'resources', 'bin', 'zed');
+
+      if (fs.existsSync(bundledZedPath)) {
+        console.log('[IDE] Using bundled Zed:', bundledZedPath);
+        const { exec } = require('child_process');
+        exec(`"${bundledZedPath}" "${folderPath}"`, (error) => {
+          if (error) {
+            console.error('[IDE] Failed to launch bundled Zed:', error);
+          }
+        });
+        return { success: true, method: 'bundled-zed' };
+      }
+
+      console.log('[IDE] Bundled Zed not found, using internal window manager.');
       windowManager.createIDEWindow(folderPath);
-      return { success: true };
+      return { success: true, method: 'internal' };
     } catch (error: any) {
       console.error('[IDE] Failed to open window:', error);
       return { success: false, error: error.message };
