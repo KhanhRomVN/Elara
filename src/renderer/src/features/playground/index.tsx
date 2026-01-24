@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ModelSelector } from './components/ModelSelector';
 import { CustomSelect } from './components/CustomSelect';
 import { AccountAvatar } from '../accounts/components/AccountAvatar';
@@ -27,6 +28,7 @@ export const PlaygroundPage = ({
   onNewTab?: () => void;
   onUpdateTab?: (id: string, data: Partial<ConversationTab>) => void;
 } = {}) => {
+  const navigate = useNavigate();
   const activeTab = tabs?.find((t) => t.id === activeTabId);
 
   const {
@@ -74,6 +76,8 @@ export const PlaygroundPage = ({
     handleQuickSelectWorkspace,
     temperature,
     setTemperature,
+    indexingStatus,
+    handleStartIndexing,
   } = usePlaygroundLogic({ activeTab, activeTabId, onUpdateTab });
 
   // Sidebar Resize State (UI only)
@@ -277,6 +281,9 @@ export const PlaygroundPage = ({
               )?.is_temperature
             }
             onToggleSettings={() => setIsSettingsOpen(!isSettingsOpen)}
+            indexingStatus={indexingStatus}
+            onStartIndexing={handleStartIndexing}
+            onNavigateToSettings={() => navigate('/settings')}
           />
         ) : (
           <>
@@ -354,6 +361,8 @@ export const PlaygroundPage = ({
                 )?.is_temperature
               }
               onToggleSettings={() => setIsSettingsOpen(!isSettingsOpen)}
+              indexingStatus={indexingStatus}
+              onStartIndexing={handleStartIndexing}
             />
           </>
         )}

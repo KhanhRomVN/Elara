@@ -34,6 +34,15 @@ interface WelcomeScreenProps {
   setTemperature?: (val: number) => void;
   isTemperatureSupported?: boolean;
   onToggleSettings?: () => void;
+  indexingStatus?: {
+    indexed: boolean;
+    configured: boolean;
+    loading?: boolean;
+    needsSync?: boolean;
+    syncStats?: { added: number; modified: number; deleted: number };
+  };
+  onStartIndexing?: () => void;
+  onNavigateToSettings?: () => void;
 }
 
 export const WelcomeScreen = ({
@@ -68,6 +77,9 @@ export const WelcomeScreen = ({
   setTemperature,
   isTemperatureSupported,
   onToggleSettings,
+  indexingStatus,
+  onStartIndexing,
+  onNavigateToSettings,
 }: WelcomeScreenProps) => {
   return (
     <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-6 animate-in fade-in zoom-in-95 duration-500">
@@ -114,6 +126,9 @@ export const WelcomeScreen = ({
           setTemperature={setTemperature}
           isTemperatureSupported={isTemperatureSupported}
           onToggleSettings={onToggleSettings}
+          indexingStatus={indexingStatus}
+          onStartIndexing={onStartIndexing}
+          onNavigateToSettings={onNavigateToSettings}
         />
       </div>
     </div>

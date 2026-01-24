@@ -11,6 +11,9 @@ import {
   Bot,
   FolderOpen,
   Settings2,
+  AlertTriangle,
+  Database,
+  RefreshCw,
 } from 'lucide-react';
 import {
   ChangeEvent,
@@ -62,6 +65,15 @@ interface InputAreaProps {
   setTemperature?: (val: number) => void;
   isTemperatureSupported?: boolean;
   onToggleSettings?: () => void;
+  indexingStatus?: {
+    indexed: boolean;
+    configured: boolean;
+    loading?: boolean;
+    needsSync?: boolean;
+    syncStats?: { added: number; modified: number; deleted: number };
+  };
+  onStartIndexing?: () => void;
+  onNavigateToSettings?: () => void;
 }
 
 export const InputArea = ({
@@ -101,6 +113,9 @@ export const InputArea = ({
   setTemperature: _setTemperature,
   isTemperatureSupported: _isTemperatureSupported,
   onToggleSettings,
+  indexingStatus,
+  onStartIndexing,
+  onNavigateToSettings,
 }: InputAreaProps) => {
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false);
   const workspaceDropdownRef = useRef<HTMLDivElement>(null);
@@ -534,6 +549,75 @@ export const InputArea = ({
             </div>
           </div>
         </div>
+
+        {/* Indexing Warning Box */}
+        {agentMode &&
+          selectedWorkspacePath &&
+          !isConversationActive &&
+          indexingStatus &&
+          (!indexingStatus.indexed || indexingStatus.needsSync) && (
+            <div
+              onClick={() => {
+                // If RAG is not configured, navigate to settings instead of starting indexing
+                if (!indexingStatus.configured && onNavigateToSettings) {
+                  onNavigateToSettings();
+                } else if (onStartIndexing) {
+                  onStartIndexing();
+                }
+              }}
+              className={cn(
+                'flex items-center gap-3 px-4 py-3 rounded-lg border cursor-pointer transition-all',
+                indexingStatus.loading
+                  ? 'bg-blue-500/10 border-blue-500/30 cursor-wait'
+                  : indexingStatus.needsSync
+                    ? 'bg-orange-500/10 border-orange-500/30 hover:bg-orange-500/20'
+                    : indexingStatus.configured
+                      ? 'bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20'
+                      : 'bg-red-500/10 border-red-500/30 hover:bg-red-500/20',
+              )}
+            >
+              {indexingStatus.loading ? (
+                <Loader2 className="w-5 h-5 text-blue-500 animate-spin flex-shrink-0" />
+              ) : indexingStatus.needsSync ? (
+                <RefreshCw className="w-5 h-5 text-orange-500 flex-shrink-0" />
+              ) : indexingStatus.configured ? (
+                <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+              ) : (
+                <Database className="w-5 h-5 text-red-500 flex-shrink-0" />
+              )}
+              <div className="flex-1 min-w-0">
+                <p
+                  className={cn(
+                    'text-sm font-medium',
+                    indexingStatus.loading
+                      ? 'text-blue-500'
+                      : indexingStatus.needsSync
+                        ? 'text-orange-500'
+                        : indexingStatus.configured
+                          ? 'text-amber-500'
+                          : 'text-red-500',
+                  )}
+                >
+                  {indexingStatus.loading
+                    ? 'Indexing in progress...'
+                    : indexingStatus.needsSync
+                      ? 'Codebase needs sync'
+                      : indexingStatus.configured
+                        ? 'Codebase not indexed'
+                        : 'RAG not configured'}
+                </p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {indexingStatus.loading
+                    ? 'Please wait while the codebase is being indexed'
+                    : indexingStatus.needsSync && indexingStatus.syncStats
+                      ? `Click to sync: +${indexingStatus.syncStats.added} new, ~${indexingStatus.syncStats.modified} modified, -${indexingStatus.syncStats.deleted} deleted`
+                      : indexingStatus.configured
+                        ? 'Click to index this workspace for better code context'
+                        : 'Configure Qdrant and Gemini API keys in Settings'}
+                </p>
+              </div>
+            </div>
+          )}
       </div>
 
       <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />

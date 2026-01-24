@@ -7,6 +7,7 @@ import TutorialPage from '../../features/tutorial';
 import SkillsPage from '../../features/skills';
 import MCPPage from '../../features/mcp';
 import ExtendedPage from '../../features/extended';
+import SettingsPage from '../../features/setting';
 
 export const routes: RouteObject[] = [
   {
@@ -44,6 +45,10 @@ export const routes: RouteObject[] = [
       {
         path: 'extended',
         element: <ExtendedPage />,
+      },
+      {
+        path: 'settings',
+        element: <SettingsPage />,
       },
       {
         path: 'analytics',

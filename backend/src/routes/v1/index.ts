@@ -10,6 +10,8 @@ import chatHistoryRouter from './chat.routes';
 import providerRouter from './provider';
 import messagesRouter from './messages';
 import debugRouter from './debug';
+import configRouter from './config';
+import indexingRouter from './indexing';
 
 // Register routes
 router.use('/chat', chatRouter);
@@ -17,6 +19,8 @@ router.use('/accounts', accountRouter);
 router.use('/providers', providerRouter);
 router.use('/messages', messagesRouter);
 router.use('/debug', debugRouter);
+router.use('/config', configRouter);
+router.use('/indexing', indexingRouter);
 
 // Provider-specific custom routes (e.g., /cohere/sessions)
 providerRegistry.registerAllRoutes(router);
