@@ -64,7 +64,7 @@
   {
     "provider_id": "gemini",
     "provider_name": "Gemini",
-    "is_enabled": true,
+    "is_enabled": false,
     "website": "https://gemini.google.com/",
     "is_search": false,
     "is_upload": false,
