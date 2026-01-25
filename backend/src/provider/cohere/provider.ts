@@ -219,4 +219,8 @@ export class CohereProvider implements Provider {
       }
     });
   }
+
+  isModelSupported(model: string): boolean {
+    return model.toLowerCase().startsWith('command-');
+  }
 }

@@ -15,6 +15,7 @@ const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
 router.get('/history/:account_id/:conversation_id', getChatHistoryController);
+router.post('/accounts/messages', sendMessageController);
 router.post('/accounts/:accountId/messages', sendMessageController);
 router.post(
   '/accounts/:accountId/uploads',

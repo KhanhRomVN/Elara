@@ -153,4 +153,12 @@ export class CerebrasProvider implements Provider {
   registerRoutes(_router: Router) {
     // No extra routes needed for now
   }
+
+  isModelSupported(model: string): boolean {
+    const m = model.toLowerCase();
+    // Cerebras supports Llama 3.1/3.3 and Qwen
+    return (
+      m.includes('llama-3.3') || m.includes('llama3.1') || m.includes('qwen')
+    );
+  }
 }

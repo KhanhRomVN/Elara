@@ -22,10 +22,11 @@ send_request() {
   echo "[$request_num] Sending request at $(date +%H:%M:%S.%N)"
   
   response=$(curl -s -w "\n%{http_code}" -X POST \
-    "$BASE_URL/v1/chat/accounts/$ACCOUNT_ID/messages" \
+    "$BASE_URL/v1/chat/accounts/messages" \
     -H "Content-Type: application/json" \
     -d '{
       "model": "gemini-3-flash",
+      "accountId": "'$ACCOUNT_ID'",
       "messages": [
         {
           "role": "user",

@@ -309,4 +309,8 @@ export class ClaudeProvider implements Provider {
       }
     });
   }
+
+  isModelSupported(model: string): boolean {
+    return model.toLowerCase().startsWith('claude-');
+  }
 }

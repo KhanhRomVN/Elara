@@ -20,7 +20,9 @@ export type Message = z.infer<typeof MessageSchema>;
 
 // --- Chat Request ---
 export const ChatRequestSchema = z.object({
-  model: z.string(),
+  accountId: z.string().optional(),
+  providerId: z.string().optional(),
+  modelId: z.string(),
   messages: z.array(MessageSchema),
   stream: z.boolean().optional(),
   conversation_id: z.string().optional(),

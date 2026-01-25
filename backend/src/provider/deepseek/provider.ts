@@ -669,4 +669,9 @@ export class DeepSeekProvider implements Provider {
       res.json({ id: 'mock-id-uploaded' });
     });
   }
+
+  isModelSupported(model: string): boolean {
+    const m = model.toLowerCase();
+    return m.includes('deepseek-chat') || m.includes('deepseek-reasoner');
+  }
 }

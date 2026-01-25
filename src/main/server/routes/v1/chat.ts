@@ -6,7 +6,7 @@ import { getDb } from '@backend/services/db';
 import { sendMessage, getConversationDetail } from '@backend/services/chat.service';
 import { uploadFileController } from '@backend/controllers/upload.controller';
 import { validateProviderCapabilities } from '@backend/utils/chat-validator';
-import { ChatRequestSchema } from '@backend/types';
+import { ChatRequestSchema, ChatRequest } from '@backend/types';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -135,14 +135,22 @@ router.post('/accounts/:accountId/uploads', upload.single('file'), (req, res) =>
   uploadFileController(req as any, res as any),
 );
 
+// POST /v1/chat/accounts/messages - Send message (auto-select account)
+router.post('/accounts/messages', async (req: Request, res: Response) => {
+  await handleSendMessage(req, res);
+});
+
 // POST /v1/chat/accounts/:accountId/messages - Send message via unified API
 router.post('/accounts/:accountId/messages', async (req: Request, res: Response) => {
-  try {
-    const { accountId } = req.params;
+  await handleSendMessage(req, res);
+});
 
-    let validatedBody;
+async function handleSendMessage(req: Request, res: Response) {
+  try {
+    const accountIdFromParams = req.params.accountId;
+
+    let validatedBody: ChatRequest;
     try {
-      // @ts-ignore
       validatedBody = ChatRequestSchema.parse(req.body);
     } catch (error: any) {
       res.status(400).json({ error: 'Invalid request body', details: error.errors });
@@ -150,7 +158,9 @@ router.post('/accounts/:accountId/messages', async (req: Request, res: Response)
     }
 
     const {
-      model,
+      accountId: accountIdFromBody,
+      providerId,
+      modelId,
       messages,
       conversation_id,
       conversationId,
@@ -162,19 +172,60 @@ router.post('/accounts/:accountId/messages', async (req: Request, res: Response)
     } = validatedBody;
     const finalConversationId = conversationId || conversation_id;
 
-    // Support legacy conversationId field if conversation_id is missing, or unify handling.
-    // The schema defines conversation_id. Only conversation_id is in the new schema.
-    // If frontend sends conversationId, we might need to handle it or update frontend to send conversation_id.
-    // However, looking at previous code: "conversationId" was destructured.
-    // Let's ensure the schema supports what frontend sends.
-
-    console.log('[API] POST /messages body:', JSON.stringify(req.body, null, 2));
-
+    let accountId = accountIdFromParams || accountIdFromBody;
     const db = getDb();
-    const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(accountId) as any;
+    let account: any | undefined;
+
+    if (accountId) {
+      account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(accountId) as any;
+
+      if (account && providerId) {
+        // Kiểm tra tính nhất quán giữa accountId và providerId
+        if (account.provider_id.toLowerCase() !== providerId.toLowerCase()) {
+          res.status(400).json({
+            success: false,
+            message: `Account Conflict: The provided accountId belongs to provider '${account.provider_id}', but providerId is '${providerId}'.`,
+            error: { code: 'BAD_REQUEST' },
+          });
+          return;
+        }
+      }
+    } else if (providerId) {
+      const { getAccountSelector } = await import('../../account-selector');
+      account = getAccountSelector().selectAccount(providerId);
+    } else if (modelId) {
+      if (modelId === 'auto') {
+        // @ts-ignore
+        const { getAccountSelector } = await import('../../account-selector');
+
+        // Find provider with highest priority sequence
+        const bestSequence = db
+          .prepare('SELECT provider_id FROM model_sequences ORDER BY sequence ASC LIMIT 1')
+          .get() as { provider_id: string } | undefined;
+
+        if (bestSequence) {
+          account = getAccountSelector().selectAccount(bestSequence.provider_id);
+        } else {
+          account = getAccountSelector().selectAccount();
+        }
+      } else {
+        // Tự động chọn account dựa trên modelId
+        const inferredProvider = providerRegistry.getProviderForModel(modelId);
+        if (inferredProvider) {
+          // @ts-ignore
+          const { getAccountSelector } = await import('../../account-selector');
+          account = getAccountSelector().selectAccount(inferredProvider.name);
+        }
+      }
+    }
 
     if (!account) {
-      res.status(404).json({ error: 'Account not found' });
+      res.status(401).json({
+        success: false,
+        message:
+          'No valid account found for this request. Please provide a valid accountId, providerId, or modelId.',
+        error: { code: 'UNAUTHORIZED' },
+      });
       return;
     }
 
@@ -185,15 +236,16 @@ router.post('/accounts/:accountId/messages', async (req: Request, res: Response)
         'Cache-Control': 'no-cache',
         Connection: 'keep-alive',
       });
+      res.write(`data: ${JSON.stringify({ meta: { accountId: account.id } })}\n\n`);
     }
 
     let accumulatedContent = '';
     let accumulatedThinking = '';
-    let accumulatedMetadata: any = {};
+    let accumulatedMetadata: any = { accountId: account.id };
 
     // Resolve "auto" model
-    let finalModel = model;
-    if (model === 'auto') {
+    let finalModel = modelId;
+    if (modelId === 'auto') {
       const bestModel = db
         .prepare(
           'SELECT model_id FROM model_sequences WHERE provider_id = ? ORDER BY sequence ASC LIMIT 1',
@@ -204,12 +256,14 @@ router.post('/accounts/:accountId/messages', async (req: Request, res: Response)
         finalModel = bestModel.model_id;
         console.log(`[Chat] Auto-selected model for ${account.provider_id}: ${finalModel}`);
       } else {
-        // Fallback if no sequence defined: use the first model found for this provider?
-        // Or keep "auto" and let the provider handle it (likely fail).
-        // Let's try to query provider_models if available, or just log warning.
         console.warn(
           `[Chat] "auto" model requested but no sequence found for ${account.provider_id}`,
         );
+        // Fallback
+        const provider = providerRegistry.getProvider(account.provider_id);
+        if (provider?.defaultModel) {
+          finalModel = provider.defaultModel;
+        }
       }
     }
 
@@ -293,11 +347,11 @@ router.post('/accounts/:accountId/messages', async (req: Request, res: Response)
       res.status(500).json({ error: 'Internal server error' });
     }
   }
-});
+}
 
 router.post('/completions', async (req, res) => {
   try {
-    const { model, messages, search, conversation_id, ref_file_ids } = req.body;
+    const { modelId, messages, search, conversation_id, ref_file_ids } = req.body;
 
     const authHeader = req.headers.authorization;
     const emailQuery = req.query.email as string;
@@ -417,7 +471,7 @@ router.post('/completions', async (req, res) => {
       await chatFn(
         account.credential,
         {
-          model,
+          model: modelId,
           messages,
           stream: true,
           search,

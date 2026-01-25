@@ -8,6 +8,7 @@ import {
 import { createLogger } from '../utils/logger';
 import crypto from 'crypto';
 import { recordRequest, recordSuccess } from '../services/stats.service';
+import { ChatRequest } from '../types';
 
 const logger = createLogger('ChatController');
 
@@ -356,9 +357,11 @@ export const sendMessageController = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const { accountId } = req.params;
+    const accountIdFromParams = req.params.accountId;
     const {
-      model,
+      accountId: accountIdFromBody,
+      providerId,
+      modelId,
       messages,
       conversationId,
       stream,
@@ -368,36 +371,96 @@ export const sendMessageController = async (
       thinking,
       ref_file_ids,
     } = req.body;
+
+    let accountId = accountIdFromParams || accountIdFromBody;
     const useSearch = is_search === true || search === true;
 
-    // Get account from database (synchronous)
     const db = getDb();
-    const account = db
-      .prepare('SELECT * FROM accounts WHERE id = ?')
-      .get(accountId) as any;
+    let account: any | undefined;
+
+    if (accountId) {
+      account = db
+        .prepare('SELECT * FROM accounts WHERE id = ?')
+        .get(accountId) as any;
+
+      if (account && providerId) {
+        // Kiểm tra tính nhất quán giữa accountId và providerId
+        if (account.provider_id.toLowerCase() !== providerId.toLowerCase()) {
+          res.status(400).json({
+            success: false,
+            message: `Account Conflict: The provided accountId belongs to provider '${account.provider_id}', but providerId is '${providerId}'.`,
+            error: { code: 'BAD_REQUEST' },
+          });
+          return;
+        }
+      }
+    } else if (providerId) {
+      // Tự tìm account khi chỉ có providerId
+      account = getAccountSelector().selectAccount(providerId);
+    } else if (modelId) {
+      if (modelId === 'auto') {
+        // Find provider with highest priority sequence
+        const bestSequence = db
+          .prepare(
+            'SELECT provider_id FROM model_sequences ORDER BY sequence ASC LIMIT 1',
+          )
+          .get() as { provider_id: string } | undefined;
+
+        if (bestSequence) {
+          // Use provider from sequence
+          account = getAccountSelector().selectAccount(
+            bestSequence.provider_id,
+          );
+        } else {
+          // Fallback to random/default
+          account = getAccountSelector().selectAccount();
+        }
+      } else {
+        // Tự tìm account dựa trên modelId cụ thể
+        const inferredProvider = providerRegistry.getProviderForModel(modelId);
+        if (inferredProvider) {
+          account = getAccountSelector().selectAccount(inferredProvider.name);
+        }
+      }
+    }
 
     if (!account) {
-      res.status(404).json({ error: 'Account not found' });
+      res.status(401).json({
+        success: false,
+        message:
+          'No valid account found for this request. Please provide a valid accountId, providerId, or modelId.',
+        error: { code: 'UNAUTHORIZED' },
+      });
       return;
     }
 
-    // Record request start
-    recordRequest(account.id, account.provider_id);
+    // Resolve "auto" model
+    let finalModel = modelId;
+    if (modelId === 'auto') {
+      const bestModel = db
+        .prepare(
+          'SELECT model_id FROM model_sequences WHERE provider_id = ? ORDER BY sequence ASC LIMIT 1',
+        )
+        .get(account.provider_id) as { model_id: string } | undefined;
 
-    // Validate if the model belongs to this provider
-    const providerModels = await getProviderModels(account.provider_id);
-    const isValidModel = providerModels.some((m: any) => m.id === model);
-
-    if (!isValidModel) {
-      // Check if it's the provider's default model (fallback)
-      const dynamicProvider = providerRegistry.getProvider(account.provider_id);
-      if (dynamicProvider?.defaultModel !== model) {
-        res.status(400).json({
-          error: `Model ${model} is not supported by provider ${account.provider_id}`,
-        });
-        return;
+      if (bestModel) {
+        finalModel = bestModel.model_id;
+        console.log(
+          `[Chat] Auto-selected model for ${account.provider_id}: ${finalModel}`,
+        );
+      } else {
+        console.warn(
+          `[Chat] "auto" model requested but no sequence found for ${account.provider_id}`,
+        );
+        // Fallback: try to get default model from provider registry or let it fail
+        const provider = providerRegistry.getProvider(account.provider_id);
+        if (provider?.defaultModel) {
+          finalModel = provider.defaultModel;
+        }
       }
     }
+
+    const model = finalModel;
 
     // Validate search capability
     if (useSearch) {
@@ -422,10 +485,13 @@ export const sendMessageController = async (
         'Cache-Control': 'no-cache',
         Connection: 'keep-alive',
       });
+      res.write(
+        `data: ${JSON.stringify({ meta: { accountId: account.id } })}\n\n`,
+      );
     }
 
     let accumulatedContent = '';
-    let accumulatedMetadata: any = {};
+    let accumulatedMetadata: any = { accountId: account.id };
 
     try {
       const startTime = Date.now();

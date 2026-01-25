@@ -6,7 +6,7 @@
   },
   "description": "AI-powered developer productivity desktop app with CLI integration for commit message generation and more",
   "bin": {
-    "elara": "./bin/cli.js"
+    "elara": "./cli/bin/run.js"
   },
   "files": [
     "bin",

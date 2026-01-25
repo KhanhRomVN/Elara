@@ -516,4 +516,10 @@ export class GeminiProvider implements Provider {
       res.json(await this.getModels(account.credential));
     });
   }
+
+  isModelSupported(model: string): boolean {
+    // Gemini models in Elara are usually '0', '1', '2' or contain 'gemini'
+    const m = model.toLowerCase();
+    return m === '0' || m === '1' || m === '2' || m.includes('gemini');
+  }
 }

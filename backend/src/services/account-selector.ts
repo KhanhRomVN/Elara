@@ -54,7 +54,8 @@ export class AccountSelector {
       let filtered = accounts;
 
       if (provider_id) {
-        filtered = filtered.filter((a) => a.provider_id === provider_id);
+        const pid = provider_id.toLowerCase();
+        filtered = filtered.filter((a) => a.provider_id.toLowerCase() === pid);
       }
 
       return filtered;

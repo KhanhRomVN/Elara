@@ -1,0 +1,34 @@
+{
+  "name": "@elara/cli",
+  "version": "1.0.0",
+  "description": "Elara Agent CLI",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "elara": "./bin/run.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.tsx",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@oclif/core": "^4.8.0",
+    "chalk": "^4.1.2",
+    "figlet": "^1.6.0",
+    "fuse.js": "^7.1.0",
+    "gradient-string": "^2.0.2",
+    "ink": "^6.5.1",
+    "ink-spinner": "^5.0.0",
+    "node-fetch": "^3.3.2",
+    "react": "^19.2.3"
+  },
+  "devDependencies": {
+    "@types/figlet": "^1.5.8",
+    "@types/gradient-string": "^1.1.3",
+    "@types/node": "^20.10.0",
+    "@types/react": "^19.2.7",
+    "tsx": "^4.19.2",
+    "typescript": "^5.3.0"
+  }
+}

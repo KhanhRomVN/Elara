@@ -924,16 +924,14 @@ export const usePlaygroundLogic = ({
     uiHidden?: boolean,
   ) => {
     const finalInput = overrideContent ?? input;
-    if (!finalInput.trim() || !selectedAccount) return;
-
-    if (agentMode && !selectedWorkspacePath) {
-      // Should be handled by UI disabling, but extra safety check
-      console.warn('Agent mode requires a selected workspace');
-      return;
-    }
-
     setTokenCount((prev) => prev + accumulatedUsage);
     setAccumulatedUsage(0);
+
+    const account = accounts.find((acc) => acc.id === selectedAccount);
+    if (!account && selectedAccount) {
+      console.warn('Selected account not found');
+      return;
+    }
 
     const messageAttachments = attachments.map((att) => ({
       id: att.id,
@@ -972,7 +970,7 @@ export const usePlaygroundLogic = ({
       if (!account) throw new Error('Account not found');
 
       // Use new unified endpoint
-      const url = `http://localhost:${port}/v1/chat/accounts/${account.id}/messages`;
+      const url = `http://localhost:${port}/v1/chat/accounts/messages`;
 
       const controller = new AbortController();
       setAbortController(controller);
@@ -1018,7 +1016,9 @@ export const usePlaygroundLogic = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: getProviderModel(account.provider_id),
+          modelId: getProviderModel(account?.provider_id || selectedProvider),
+          providerId: account?.provider_id || selectedProvider,
+          accountId: account?.id || null,
           messages: [
             ...messages.map((m) => ({ role: m.role, content: m.hiddenText ?? m.content })),
             {
@@ -1113,6 +1113,9 @@ export const usePlaygroundLogic = ({
                   if (parsed.meta.total_token !== undefined) {
                     setTokenCount(parsed.meta.total_token);
                   }
+                  if (parsed.meta.accountId && !selectedAccount) {
+                    setSelectedAccount(parsed.meta.accountId);
+                  }
                   if (parsed.meta.thinking_elapsed !== undefined) {
                     setMessages((prev) =>
                       prev.map((m) =>
@@ -1149,6 +1152,9 @@ export const usePlaygroundLogic = ({
           }
           if (result.metadata.total_token !== undefined) {
             setTokenCount(result.metadata.total_token);
+          }
+          if (result.metadata.accountId && !selectedAccount) {
+            setSelectedAccount(result.metadata.accountId);
           }
         }
       }

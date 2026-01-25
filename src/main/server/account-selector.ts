@@ -48,7 +48,8 @@ export class AccountSelector {
       const accounts = db.prepare('SELECT * FROM accounts').all() as Account[];
 
       if (provider) {
-        return accounts.filter((a) => a.provider_id === provider);
+        const pid = provider.toLowerCase();
+        return accounts.filter((a) => a.provider_id.toLowerCase() === pid);
       }
 
       return accounts;

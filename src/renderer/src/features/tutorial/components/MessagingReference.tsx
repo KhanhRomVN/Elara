@@ -16,7 +16,7 @@ export const MessagingReference = () => {
         description="Send a message using a specific provider and email account."
         reqHeader="Content-Type: application/json"
         reqBody={`{
-  "model": "gpt-4",
+  "modelId": "gpt-4",
   "messages": [
     { "role": "user", "content": "Hello!" }
   ],
@@ -38,7 +38,7 @@ export const MessagingReference = () => {
         description="Send a message specifying only the provider. The system will automatically select an available account."
         reqHeader="Content-Type: application/json"
         reqBody={`{
-  "model": "gpt-4",
+  "modelId": "gpt-4",
   "messages": [
     { "role": "user", "content": "Hello!" }
   ],

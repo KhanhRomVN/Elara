@@ -12,6 +12,7 @@ import messagesRouter from './messages';
 import debugRouter from './debug';
 import configRouter from './config';
 import indexingRouter from './indexing';
+import modelRouter from './model';
 
 // Register routes
 router.use('/chat', chatRouter);
@@ -21,6 +22,7 @@ router.use('/messages', messagesRouter);
 router.use('/debug', debugRouter);
 router.use('/config', configRouter);
 router.use('/indexing', indexingRouter);
+router.use('/models', modelRouter);
 
 // Provider-specific custom routes (e.g., /cohere/sessions)
 providerRegistry.registerAllRoutes(router);
