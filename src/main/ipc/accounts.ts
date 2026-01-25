@@ -22,7 +22,7 @@ let cachedProviderIds: string[] = [];
 /**
  * Update provider cache from backend API
  */
-const updateProviderCache = async () => {
+const updateProviderCache = async (retryCount = 0) => {
   try {
     const baseUrl = getBackendApiUrl();
     const response = await fetch(`${baseUrl}/v1/providers`);
@@ -35,14 +35,28 @@ const updateProviderCache = async () => {
           .map((p) => p.provider_id.toLowerCase());
         console.log(`[Accounts] Updated provider cache: ${cachedProviderIds.length} providers`);
       }
+    } else {
+      throw new Error(`HTTP ${response.status}`);
     }
-  } catch (error) {
-    console.error('[Accounts] Failed to fetch provider list from backend API:', error);
+  } catch (error: any) {
+    const isConnRefused =
+      error?.cause?.code === 'ECONNREFUSED' || error?.message?.includes('ECONNREFUSED');
+
+    if (isConnRefused && retryCount < 5) {
+      const delay = 1000 * Math.pow(2, retryCount); // 1s, 2s, 4s, 8s, 16s
+      console.log(
+        `[Accounts] Backend not ready, retrying in ${delay}ms... (Attempt ${retryCount + 1}/5)`,
+      );
+      setTimeout(() => updateProviderCache(retryCount + 1), delay);
+    } else {
+      console.error('[Accounts] Failed to fetch provider list from backend API:', error.message);
+    }
   }
 };
 
-updateProviderCache();
-setInterval(updateProviderCache, 1000 * 60 * 60);
+// Initial call with retry
+setTimeout(() => updateProviderCache(), 2000); // Give backend a little head start
+setInterval(() => updateProviderCache(), 1000 * 60 * 60);
 
 const DATA_FILE = path.join(app.getPath('userData'), 'accounts.json');
 

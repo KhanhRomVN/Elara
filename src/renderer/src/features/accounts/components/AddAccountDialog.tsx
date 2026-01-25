@@ -11,6 +11,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { cn } from '../../../shared/lib/utils';
+import { getApiBaseUrl } from '../../../utils/apiUrl';
 import googleIcon from '../../../assets/auth_icons/google.svg';
 
 // Fallback providers just in case API fails
@@ -89,7 +90,8 @@ export function AddAccountDialog({
 
       console.log('[AddAccountDialog] Syncing account to backend...', { ...account, id: finalId });
 
-      const res = await fetch(`http://localhost:${serverPort}/v1/accounts`, {
+      const baseUrl = getApiBaseUrl(serverPort);
+      const res = await fetch(`${baseUrl}/v1/accounts`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

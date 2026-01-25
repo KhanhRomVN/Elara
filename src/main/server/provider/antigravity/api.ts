@@ -106,8 +106,15 @@ const defaultModels = {
 
 export const getModels = async (_account: Account) => {
   console.log('[Antigravity] getModels called - returning verified hardcoded list');
-  // Return the verified hardcoded list directly
-  return defaultModels;
+  const result = Object.values(defaultModels.models);
+  console.log(
+    '[Antigravity] getModels result isArray:',
+    Array.isArray(result),
+    'length:',
+    result.length,
+  );
+  // Return the verified hardcoded list directly as an array
+  return result;
 };
 
 const projectIDCache = new Map<string, string>();

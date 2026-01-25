@@ -16,6 +16,7 @@ import {
 import { getCachedModels, fetchAndCacheModels } from '../../../utils/model-cache';
 import { DEFAULT_RULE_PROMPT } from '../prompts';
 import { FuzzyMatcher } from '../../../utils/FuzzyMatcher';
+import { getApiBaseUrl } from '../../../utils/apiUrl';
 
 export const usePlaygroundLogic = ({
   activeTab,
@@ -145,10 +146,12 @@ export const usePlaygroundLogic = ({
         const serverStatus = await window.api.server.start();
         const port = serverStatus.port || 11434;
 
+        const baseUrl = getApiBaseUrl(port);
+
         console.log('[Indexing] Fetching status for:', selectedWorkspacePath);
 
         const response = await fetch(
-          `http://localhost:${port}/v1/indexing/status?workspace_path=${encodeURIComponent(selectedWorkspacePath)}`,
+          `${baseUrl}/v1/indexing/status?workspace_path=${encodeURIComponent(selectedWorkspacePath)}`,
         );
 
         console.log('[Indexing] Response status:', response.status);
@@ -187,11 +190,12 @@ export const usePlaygroundLogic = ({
       const serverStatus = await window.api.server.start();
       const port = serverStatus.port || 11434;
 
+      const baseUrl = getApiBaseUrl(port);
       // Use sync endpoint if already indexed but needs sync
       const endpoint =
         indexingStatus.indexed && indexingStatus.needsSync
-          ? `http://localhost:${port}/v1/indexing/sync`
-          : `http://localhost:${port}/v1/indexing/start`;
+          ? `${baseUrl}/v1/indexing/sync`
+          : `${baseUrl}/v1/indexing/start`;
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -203,8 +207,9 @@ export const usePlaygroundLogic = ({
         // Poll for completion
         const pollInterval = setInterval(async () => {
           try {
+            const baseUrl = getApiBaseUrl(port);
             const statusRes = await fetch(
-              `http://localhost:${port}/v1/indexing/status?workspace_path=${encodeURIComponent(selectedWorkspacePath)}`,
+              `${baseUrl}/v1/indexing/status?workspace_path=${encodeURIComponent(selectedWorkspacePath)}`,
             );
             if (statusRes.ok) {
               const statusData = await statusRes.json();
@@ -262,7 +267,9 @@ export const usePlaygroundLogic = ({
       const serverStatus = await window.api.server.start();
       const port = serverStatus.port || 11434;
 
-      const response = await fetch(`http://localhost:${port}/v1/indexing/search`, {
+      const baseUrl = getApiBaseUrl(port);
+
+      const response = await fetch(`${baseUrl}/v1/indexing/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -594,7 +601,8 @@ export const usePlaygroundLogic = ({
             formData.append('file', att.file);
 
             // Backend endpoint: POST /v1/chat/accounts/:accountId/uploads
-            const uploadUrl = `http://localhost:${port}/v1/chat/accounts/${account.id}/uploads`;
+            const baseUrl = getApiBaseUrl(port);
+            const uploadUrl = `${baseUrl}/v1/chat/accounts/${account.id}/uploads`;
 
             const res = await fetch(uploadUrl, {
               method: 'POST',
@@ -810,8 +818,9 @@ export const usePlaygroundLogic = ({
         // Use lowercase provider_id from configuration
         const providerId = selectedProvider.toLowerCase();
 
+        const baseUrl = getApiBaseUrl(port);
         const res = await fetch(
-          `http://localhost:${port}/v1/accounts?page=1&limit=10&provider_id=${encodeURIComponent(providerId)}`,
+          `${baseUrl}/v1/accounts?page=1&limit=10&provider_id=${encodeURIComponent(providerId)}`,
         );
         if (res.ok) {
           const data = await res.json();
@@ -970,7 +979,8 @@ export const usePlaygroundLogic = ({
       if (!account) throw new Error('Account not found');
 
       // Use new unified endpoint
-      const url = `http://localhost:${port}/v1/chat/accounts/messages`;
+      const baseUrl = getApiBaseUrl(port);
+      const url = `${baseUrl}/v1/chat/accounts/messages`;
 
       const controller = new AbortController();
       setAbortController(controller);

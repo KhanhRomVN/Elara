@@ -10,6 +10,7 @@ import {
   Filter,
 } from 'lucide-react';
 import { cn } from '../../shared/lib/utils';
+import { getApiBaseUrl } from '../../utils/apiUrl';
 import { CustomSelect } from '../playground/components/CustomSelect';
 
 interface Model {
@@ -91,7 +92,8 @@ export const ModelsPage = () => {
     setLoading(true);
     try {
       // Fetch providers with models
-      const providersRes = await fetch(`http://localhost:${serverPort}/v1/providers`);
+      const baseUrl = getApiBaseUrl(serverPort);
+      const providersRes = await fetch(`${baseUrl}/v1/providers`);
       const providersData = await providersRes.json();
 
       if (providersData.success) {
@@ -118,7 +120,7 @@ export const ModelsPage = () => {
       }
 
       // Fetch sequences
-      const sequencesRes = await fetch(`http://localhost:${serverPort}/v1/model-sequences`);
+      const sequencesRes = await fetch(`${baseUrl}/v1/model-sequences`);
       const sequencesData = await sequencesRes.json();
 
       if (sequencesData.success) {
@@ -152,7 +154,8 @@ export const ModelsPage = () => {
     const nextSeq = getMaxSequence() + 1;
 
     try {
-      const res = await fetch(`http://localhost:${serverPort}/v1/model-sequences`, {
+      const baseUrl = getApiBaseUrl(serverPort);
+      const res = await fetch(`${baseUrl}/v1/model-sequences`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -175,7 +178,8 @@ export const ModelsPage = () => {
     if (!serverPort || !insertTargetModel) return;
 
     try {
-      const res = await fetch(`http://localhost:${serverPort}/v1/model-sequences/insert`, {
+      const baseUrl = getApiBaseUrl(serverPort);
+      const res = await fetch(`${baseUrl}/v1/model-sequences/insert`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -200,8 +204,9 @@ export const ModelsPage = () => {
     if (!serverPort) return;
 
     try {
+      const baseUrl = getApiBaseUrl(serverPort);
       const res = await fetch(
-        `http://localhost:${serverPort}/v1/model-sequences/${model.provider_id}/${model.model_id}`,
+        `${baseUrl}/v1/model-sequences/${model.provider_id}/${model.model_id}`,
         {
           method: 'DELETE',
         },

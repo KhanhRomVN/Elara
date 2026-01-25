@@ -22,26 +22,16 @@ const updateModelPerformance = async (
 ) => {
   try {
     const db = getDb();
-    const record = db
-      .prepare(
-        'SELECT * FROM models_performance WHERE model_id = ? AND provider_id = ?',
-      )
-      .get(modelId, providerId) as any;
-
-    if (!record) {
-      db.prepare(
-        'INSERT INTO models_performance (id, model_id, provider_id, avg_response_time, total_samples) VALUES (?, ?, ?, ?, ?)',
-      ).run(crypto.randomUUID(), modelId, providerId, responseTime, 1);
-    } else {
-      const newTotalSamples = record.total_samples + 1;
-      const newAvgTime =
-        (record.avg_response_time * record.total_samples + responseTime) /
-        newTotalSamples;
-
-      db.prepare(
-        'UPDATE models_performance SET avg_response_time = ?, total_samples = ? WHERE model_id = ? AND provider_id = ?',
-      ).run(newAvgTime, newTotalSamples, modelId, providerId);
-    }
+    // Use UPSERT to handle race conditions safely
+    db.prepare(
+      `
+      INSERT INTO models_performance (id, model_id, provider_id, avg_response_time, total_samples)
+      VALUES (?, ?, ?, ?, 1)
+      ON CONFLICT(model_id, provider_id) DO UPDATE SET
+        avg_response_time = (models_performance.avg_response_time * models_performance.total_samples + excluded.avg_response_time) / (models_performance.total_samples + 1),
+        total_samples = models_performance.total_samples + 1
+    `,
+    ).run(crypto.randomUUID(), modelId, providerId, responseTime);
   } catch (error) {
     logger.error(
       `Error updating model performance for ${modelId} (${providerId}):`,

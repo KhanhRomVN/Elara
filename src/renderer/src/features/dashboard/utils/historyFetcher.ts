@@ -1,5 +1,6 @@
 import { Account } from '../../playground/types';
 import { fetchProviders, findProvider } from '../../../config/providers';
+import { getApiBaseUrl } from '../../../utils/apiUrl';
 
 export interface TokenUsageData {
   date: string; // ISO date string YYYY-MM-DD
@@ -42,7 +43,8 @@ export const fetchAllHistory = async (
 
       // Standardize usage of "sessions" or "conversations" endpoint
       // The backend maps both to the same logic essentially
-      const endpoint = `http://localhost:${port}/v1/providers/${account.provider_id}/conversations`;
+      const baseUrl = getApiBaseUrl(port);
+      const endpoint = `${baseUrl}/v1/providers/${account.provider_id}/conversations`;
 
       const res = await fetch(`${endpoint}?email=${encodeURIComponent(account.email)}`);
       if (!res.ok) continue;
@@ -89,7 +91,8 @@ const parseHistory = async (
         batch.map(async (session: any) => {
           try {
             // Standard detail endpoint
-            const url = `http://localhost:${port}/v1/providers/${providerId}/conversations/${session.id || session.uuid}?email=${encodeURIComponent(email)}`;
+            const baseUrl = getApiBaseUrl(port);
+            const url = `${baseUrl}/v1/providers/${providerId}/conversations/${session.id || session.uuid}?email=${encodeURIComponent(email)}`;
             const detailRes = await fetch(url);
 
             if (detailRes.ok) {

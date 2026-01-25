@@ -11,6 +11,7 @@ import {
   Server,
   Check,
   FolderSearch,
+  Settings,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../shared/lib/utils';
@@ -36,7 +37,7 @@ interface SettingsConfig {
   rerank_enabled: boolean;
 }
 
-type SidebarOption = 'indexing';
+type SidebarOption = 'indexing' | 'general';
 
 const SettingsPage = () => {
   const [config, setConfig] = useState<SettingsConfig>({
@@ -53,7 +54,10 @@ const SettingsPage = () => {
   const [showQdrantForm, setShowQdrantForm] = useState(false);
   const [editingGemini, setEditingGemini] = useState<GeminiKeyConfig | null>(null);
   const [showGeminiForm, setShowGeminiForm] = useState(false);
-  const [activeSection, setActiveSection] = useState<SidebarOption>('indexing');
+  const [activeSection, setActiveSection] = useState<SidebarOption>('general');
+  const [generalConfig, setGeneralConfig] = useState({
+    apiUrl: localStorage.getItem('ELARA_API_URL') || 'http://localhost:11434',
+  });
 
   useEffect(() => {
     loadConfig();
@@ -113,8 +117,23 @@ const SettingsPage = () => {
   const saveConfig = async () => {
     try {
       setSaving(true);
+
+      // Save General Config
+      localStorage.setItem('ELARA_API_URL', generalConfig.apiUrl);
+      window.dispatchEvent(new Event('storage')); // Notify other components
+
       const serverStatus = await window.api.server.start();
       const port = serverStatus.port || 11434;
+
+      // Use configured URL if it points to localhost/different port,
+      // but for saving RAG config, we typically save to the *current* backend.
+      // If the User changes the URL, they are effectively pointing to a NEW backend.
+      // The settings here (RAG, Qdrant) belong to the backend.
+      // So if we save, we should save to the backend we are currently connected to (or trying to).
+
+      // For safety, let's try to save to the configured URL if possible, or fallback to local.
+      // But typically `loadConfig` fetches from local.
+      // Let's assume for now we still sync with local backend for RAG settings.
 
       const response = await fetch(`http://localhost:${port}/v1/config/rag`, {
         method: 'PUT',
@@ -248,6 +267,7 @@ const SettingsPage = () => {
   }
 
   const sidebarItems = [
+    { id: 'general' as SidebarOption, label: 'General', icon: Settings },
     { id: 'indexing' as SidebarOption, label: 'Indexing Codebase', icon: FolderSearch },
   ];
 
@@ -280,6 +300,56 @@ const SettingsPage = () => {
       {/* Main Content */}
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-2xl mx-auto space-y-8">
+          {activeSection === 'general' && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-xl font-bold">General Settings</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Configure general application settings.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">
+                    API URL <span className="text-destructive">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={generalConfig.apiUrl}
+                    onChange={(e) => setGeneralConfig({ ...generalConfig, apiUrl: e.target.value })}
+                    placeholder="http://localhost:11434"
+                    className="w-full px-3 py-2 text-sm bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The URL of the Elara backend server. Change this if you are hosting the server
+                    remotely or on a different port.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex justify-start pt-4 border-t">
+                <button
+                  onClick={saveConfig}
+                  disabled={saving}
+                  className={cn(
+                    'px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors',
+                    saving
+                      ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                      : 'bg-primary text-primary-foreground hover:bg-primary/90',
+                  )}
+                >
+                  {saving ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  {saving ? 'Saving...' : 'Save General Settings'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {activeSection === 'indexing' && (
             <>
               <div>

@@ -98,6 +98,15 @@ async function fetchDynamicModels(providerId: string): Promise<any[] | null> {
     }
 
     const models = await module.getModels(account.credential, account.id);
+
+    if (!Array.isArray(models)) {
+      console.error(
+        `[Providers Router] getModels for ${providerId} returned non-array:`,
+        typeof models,
+      );
+      return null;
+    }
+
     return models.map((m: any) => ({
       id: m.id,
       name: m.name,

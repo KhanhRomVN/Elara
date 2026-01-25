@@ -1,3 +1,5 @@
+import { getApiBaseUrl } from '../utils/apiUrl';
+
 /**
  * Provider Configuration
  *
@@ -55,7 +57,8 @@ export function getFaviconUrl(websiteUrl?: string): string {
  */
 export async function fetchProviders(port: number = 11434): Promise<ProviderConfig[]> {
   try {
-    const res = await fetch(`http://localhost:${port}/v1/providers`);
+    const baseUrl = getApiBaseUrl(port);
+    const res = await fetch(`${baseUrl}/v1/providers`);
     if (!res.ok) {
       console.error('[providers] Failed to fetch providers:', res.status);
       return cachedProviders || [];

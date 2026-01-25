@@ -1,3 +1,5 @@
+import { getApiBaseUrl } from './apiUrl';
+
 /**
  * Model Cache Utility
  *
@@ -107,7 +109,8 @@ async function fetchModelsFromAPI(providerId: string, port: number): Promise<Mod
     const normalizedProviderId = providerId.toLowerCase();
 
     // Use unified endpoint for all providers
-    const endpoint = `http://localhost:${port}/v1/providers/${normalizedProviderId}/models`;
+    const baseUrl = getApiBaseUrl(port);
+    const endpoint = `${baseUrl}/v1/providers/${normalizedProviderId}/models`;
 
     console.log(`[Model Cache] Fetching models from: ${endpoint}`);
 

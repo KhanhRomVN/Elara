@@ -153,6 +153,58 @@ const createTables = (): void => {
     }
     logger.info('Models performance table initialized');
 
+    // Migration: Fix models_performance unique constraint if needed
+    try {
+      const idxList = db.pragma('index_list(models_performance)') as any[];
+      // Check if we have the wrong autoindex on model_id only
+      const wrongIndex = idxList.find((idx) => {
+        if (!idx.unique) return false;
+        const info = db!.pragma(`index_info(${idx.name})`) as any[];
+        return info.length === 1 && info[0].name === 'model_id';
+      });
+
+      if (wrongIndex) {
+        logger.info(
+          'Detected incorrect UNIQUE constraint on models_performance.model_id. Migrating...',
+        );
+
+        db!.transaction(() => {
+          // 1. Create temporary table with correct schema
+          db!.exec(`
+            CREATE TABLE models_performance_new (
+              id TEXT PRIMARY KEY,
+              model_id TEXT NOT NULL,
+              provider_id TEXT NOT NULL,
+              avg_response_time REAL DEFAULT 0,
+              total_samples INTEGER DEFAULT 0,
+              UNIQUE(model_id, provider_id)
+            )
+          `);
+
+          // 2. Copy data (handling duplicates by keeping the latest/one of them)
+          // Since we are moving from unique(model) to unique(model, provider), duplicates shouldn't technically exist yet in the new sense
+          // but we might have multiple rows for different providers that were blocked before? No, before it was stricter.
+          // The issue is simply the constraint definition.
+          db!.exec(`
+            INSERT OR IGNORE INTO models_performance_new (id, model_id, provider_id, avg_response_time, total_samples)
+            SELECT id, model_id, IFNULL(provider_id, 'unknown'), avg_response_time, total_samples FROM models_performance
+          `);
+
+          // 3. Drop old table and rename new one
+          db!.exec('DROP TABLE models_performance');
+          db!.exec(
+            'ALTER TABLE models_performance_new RENAME TO models_performance',
+          );
+        })();
+
+        logger.info(
+          'Successfully migrated models_performance to correct schema',
+        );
+      }
+    } catch (e) {
+      logger.error('Failed to migrate models_performance table', e);
+    }
+
     const accountsStatsQuery = `
       CREATE TABLE IF NOT EXISTS accounts_stats (
         account_id TEXT PRIMARY KEY,

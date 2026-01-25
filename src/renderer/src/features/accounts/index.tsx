@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { AddAccountDialog } from './components/AddAccountDialog';
 import { fetchProviders } from '../../config/providers';
+import { getApiBaseUrl } from '../../utils/apiUrl';
 // import { AccountAvatar } from './components/AccountAvatar';
 
 interface Account {
@@ -86,9 +87,8 @@ export const Accounts = () => {
       if (searchQuery) queryParams.append('email', searchQuery);
       if (filterProvider !== 'all') queryParams.append('provider_id', filterProvider);
 
-      const response = await fetch(
-        `http://localhost:${serverPort}/v1/accounts?${queryParams.toString()}`,
-      );
+      const baseUrl = getApiBaseUrl(serverPort);
+      const response = await fetch(`${baseUrl}/v1/accounts?${queryParams.toString()}`);
       const result = await response.json();
       console.log('[Accounts] Fetched:', result);
 
@@ -139,7 +139,8 @@ export const Accounts = () => {
     try {
       if (serverPort) {
         // Use API
-        const response = await fetch(`http://localhost:${serverPort}/v1/accounts/${id}`, {
+        const baseUrl = getApiBaseUrl(serverPort);
+        const response = await fetch(`${baseUrl}/v1/accounts/${id}`, {
           method: 'DELETE',
         });
         const result = await response.json();

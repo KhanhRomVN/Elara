@@ -1,4 +1,5 @@
 import { Provider } from '../types';
+import { getApiBaseUrl } from '../../../utils/apiUrl';
 
 // Now uses unified endpoint for all providers
 export const getHistoryEndpoint = (
@@ -6,11 +7,11 @@ export const getHistoryEndpoint = (
   port: number | string,
   accountId?: string,
 ): string => {
-  const baseUrl = `http://localhost:${port}`;
+  const baseUrl = getApiBaseUrl(port);
 
   // Use new unified endpoint if accountId is provided
   if (accountId) {
-    return `${baseUrl}/v1/accounts/${accountId}/conversations`;
+    return `${baseUrl}/v1/chat/history/${accountId}`;
   }
 
   // Legacy fallback (should not be used anymore)
@@ -23,7 +24,8 @@ export const getConversationDetailEndpoint = (
   accountId: string,
   conversationId: string,
 ): string => {
-  return `http://localhost:${port}/v1/chat/history/${accountId}/${conversationId}`;
+  const baseUrl = getApiBaseUrl(port);
+  return `${baseUrl}/v1/chat/history/${accountId}/${conversationId}`;
 };
 
 export interface FormattedConversation {
