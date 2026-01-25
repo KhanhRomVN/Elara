@@ -32,6 +32,11 @@ export const createApp = async () => {
   // Routes
   app.use('/v1', v1Router);
 
+  // Claude Code CLI Telemetry dummy endpoint
+  app.post('/api/event_logging/batch', (req, res) => {
+    res.status(200).json({ status: 'ok' });
+  });
+
   // 404 handler - must be after all routes
   app.use((req, res, next) => {
     res.status(404).json({

@@ -52,7 +52,8 @@ async function fetchProvidersFromApi(): Promise<Provider[]> {
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
-    const providers = await response.json();
+    const result = await response.json();
+    const providers = result?.data || result;
     return Array.isArray(providers) ? providers : [];
   } catch (error) {
     console.error('[ProviderRegistry] Failed to fetch from backend API:', error);

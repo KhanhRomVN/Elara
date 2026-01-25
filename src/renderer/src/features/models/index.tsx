@@ -8,6 +8,10 @@ import {
   Trash2,
   Search,
   Filter,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from 'lucide-react';
 import { cn } from '../../shared/lib/utils';
 import { getApiBaseUrl } from '../../utils/apiUrl';
@@ -56,8 +60,55 @@ export const ModelsPage = () => {
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProviderId, setSelectedProviderId] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [maxHeight, setMaxHeight] = useState<number | string>('600px');
+  const tableContainerRef = useRef<HTMLDivElement>(null);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!tableContainerRef.current) return;
+
+    const calculateRows = () => {
+      if (!tableContainerRef.current) return;
+
+      // Constants for heights
+      const headerHeight = 48; // h-12
+      const footerHeight = 65; // Pagination footer height
+      const rowHeight = 41; // Height of py-1.5 row
+      const padding = 16; // Safety padding
+
+      // Calculate available height within the container
+      // However, the container itself should ideally be constrained by the viewport
+      // If the container is just auto-height, we should look at viewport
+      const viewportHeight = window.innerHeight;
+      const containerTop = tableContainerRef.current.getBoundingClientRect().top;
+
+      // Space from top of table to bottom of screen
+      const availableHeight = viewportHeight - containerTop - 32; // 32px safety bottom
+
+      if (availableHeight > 200) {
+        // More precise row calculation
+        const usableHeight = availableHeight - headerHeight - footerHeight - 10;
+        const calculatedCount = Math.floor(usableHeight / rowHeight);
+        setItemsPerPage(Math.max(5, calculatedCount));
+        setMaxHeight(availableHeight);
+      }
+    };
+
+    calculateRows();
+    window.addEventListener('resize', calculateRows);
+
+    // Also use ResizeObserver for more accuracy if parent layout changes
+    const observer = new ResizeObserver(calculateRows);
+    observer.observe(document.body);
+
+    return () => {
+      window.removeEventListener('resize', calculateRows);
+      observer.disconnect();
+    };
+  }, [loading]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -106,7 +157,7 @@ export const ModelsPage = () => {
           if (provider.models && provider.models.length > 0) {
             provider.models.forEach((model) => {
               models.push({
-                model_id: model.id,
+                model_id: model.id || model.name,
                 model_name: model.name,
                 provider_id: provider.provider_id,
                 provider_name: provider.provider_name,
@@ -138,6 +189,10 @@ export const ModelsPage = () => {
       fetchData();
     }
   }, [serverPort]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedProviderId]);
 
   const getModelSequence = (modelId: string, providerId: string): number | undefined => {
     const seq = sequences.find((s) => s.model_id === modelId && s.provider_id === providerId);
@@ -232,8 +287,8 @@ export const ModelsPage = () => {
   const filteredModels = flatModels.filter((model) => {
     // Search query filter
     const matchesSearch =
-      model.model_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      model.provider_id.toLowerCase().includes(searchQuery.toLowerCase());
+      (model.model_id?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+      (model.provider_id?.toLowerCase() || '').includes(searchQuery.toLowerCase());
 
     // Provider filter
     const matchesProvider =
@@ -266,6 +321,16 @@ export const ModelsPage = () => {
     // 3. Priority: Alphabetical
     return a.model_id.localeCompare(b.model_id);
   });
+
+  // Calculate pagination
+  const totalItems = sortedModels.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedModels = sortedModels.slice(startIndex, startIndex + itemsPerPage);
+
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+  };
 
   if (loading) {
     return (
@@ -327,10 +392,14 @@ export const ModelsPage = () => {
         </button>
       </div>
 
-      <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden">
-        <div className="w-full overflow-auto">
+      <div
+        ref={tableContainerRef}
+        style={{ maxHeight }}
+        className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden flex flex-col"
+      >
+        <div className="w-full overflow-auto flex-1">
           <table className="w-full caption-bottom text-sm text-left">
-            <thead className="[&_tr]:border-b">
+            <thead className="sticky top-0 bg-card z-10 border-b">
               <tr className="border-b transition-colors hover:bg-muted/50">
                 <th className="h-12 px-4 align-middle font-medium text-muted-foreground w-[60px] text-center">
                   STT
@@ -350,15 +419,16 @@ export const ModelsPage = () => {
               </tr>
             </thead>
             <tbody className="[&_tr:last-child]:border-0">
-              {sortedModels.length === 0 && (
+              {paginatedModels.length === 0 && (
                 <tr>
                   <td colSpan={5} className="h-24 text-center text-muted-foreground">
                     No models available.
                   </td>
                 </tr>
               )}
-              {sortedModels.map((model, index) => {
+              {paginatedModels.map((model, index) => {
                 const sequence = getModelSequence(model.model_id, model.provider_id);
+                const absoluteIndex = startIndex + index + 1;
                 const hasSequence = sequence !== undefined;
                 const uniqueKey = `${model.provider_id}-${model.model_id}`;
                 const maxSeq = getMaxSequence();
@@ -371,16 +441,16 @@ export const ModelsPage = () => {
                       hasSequence && 'bg-primary/5',
                     )}
                   >
-                    <td className="p-4 align-middle text-muted-foreground text-center">
-                      {index + 1}
+                    <td className="px-4 py-1.5 align-middle text-muted-foreground text-center">
+                      {absoluteIndex}
                     </td>
-                    <td className="p-4 align-middle">
+                    <td className="px-4 py-1.5 align-middle">
                       <span className="font-mono text-sm">{model.model_id}</span>
                     </td>
-                    <td className="p-4 align-middle">
+                    <td className="px-4 py-1.5 align-middle">
                       <span className="text-sm text-muted-foreground">{model.provider_id}</span>
                     </td>
-                    <td className="p-4 align-middle text-center">
+                    <td className="px-4 py-1.5 align-middle text-center">
                       {hasSequence ? (
                         <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
                           {sequence}
@@ -389,7 +459,7 @@ export const ModelsPage = () => {
                         <span className="text-muted-foreground">-</span>
                       )}
                     </td>
-                    <td className="p-4 align-middle text-center">
+                    <td className="px-4 py-1.5 align-middle text-center">
                       <div className="relative inline-block" ref={dropdownRef}>
                         <button
                           onClick={() =>
@@ -445,6 +515,37 @@ export const ModelsPage = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Server-Side style Pagination Footer */}
+        {totalItems > 0 && (
+          <div className="flex items-center justify-between px-4 py-4 border-t">
+            <div className="text-sm text-muted-foreground">
+              Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, totalItems)} of{' '}
+              {totalItems} models
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-transparent shadow-sm hover:bg-accent hover:text-accent-foreground h-8 px-4 disabled:opacity-50 transition-colors"
+                onClick={() => goToPage(currentPage - 1)}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Previous
+              </button>
+              <div className="text-sm font-medium px-2">
+                Page {currentPage} of {totalPages}
+              </div>
+              <button
+                className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-transparent shadow-sm hover:bg-accent hover:text-accent-foreground h-8 px-4 disabled:opacity-50 transition-colors"
+                onClick={() => goToPage(currentPage + 1)}
+                disabled={currentPage === totalPages}
+              >
+                Next
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Insert Sequence Dialog */}

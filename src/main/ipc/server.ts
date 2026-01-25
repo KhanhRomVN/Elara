@@ -462,6 +462,18 @@ export const setupServerHandlers = () => {
           message = `Environment variables saved to ${profilePath}. Run: ${sourceCmd} or open a new terminal.`;
         }
 
+        // Update current process.env so changes take effect immediately for the app
+        if (envVars.ANTHROPIC_BASE_URL) process.env.ANTHROPIC_BASE_URL = envVars.ANTHROPIC_BASE_URL;
+        if (envVars.ANTHROPIC_AUTH_TOKEN)
+          process.env.ANTHROPIC_AUTH_TOKEN = envVars.ANTHROPIC_AUTH_TOKEN;
+        if (envVars.ANTHROPIC_MODEL) process.env.ANTHROPIC_MODEL = envVars.ANTHROPIC_MODEL;
+        if (envVars.ANTHROPIC_DEFAULT_OPUS_MODEL)
+          process.env.ANTHROPIC_DEFAULT_OPUS_MODEL = envVars.ANTHROPIC_DEFAULT_OPUS_MODEL;
+        if (envVars.ANTHROPIC_DEFAULT_SONNET_MODEL)
+          process.env.ANTHROPIC_DEFAULT_SONNET_MODEL = envVars.ANTHROPIC_DEFAULT_SONNET_MODEL;
+        if (envVars.ANTHROPIC_DEFAULT_HAIKU_MODEL)
+          process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL = envVars.ANTHROPIC_DEFAULT_HAIKU_MODEL;
+
         return {
           success: true,
           profilePath,
@@ -524,6 +536,14 @@ export const setupServerHandlers = () => {
         platform === 'win32'
           ? `Elara configuration removed from ${profilePath}. Restart your terminal to apply.`
           : `Elara configuration removed from ${profilePath}. Run: ${sourceCmd} or open a new terminal.`;
+
+      // Remove from current process.env
+      delete process.env.ANTHROPIC_BASE_URL;
+      delete process.env.ANTHROPIC_AUTH_TOKEN;
+      delete process.env.ANTHROPIC_MODEL;
+      delete process.env.ANTHROPIC_DEFAULT_OPUS_MODEL;
+      delete process.env.ANTHROPIC_DEFAULT_SONNET_MODEL;
+      delete process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL;
 
       return {
         success: true,
@@ -620,6 +640,209 @@ export const setupServerHandlers = () => {
         configured: false,
         error: error.message,
       };
+    }
+  });
+
+  const getApiUrl = async () => {
+    const { getProxyConfig } = await import('../server/config');
+    const port = getProxyConfig()?.port || 11434;
+    return `http://localhost:${port}/v1`;
+  };
+
+  const callBackend = async (url: string, method: string = 'GET', body?: any) => {
+    try {
+      const options: any = { method };
+      if (body) {
+        options.headers = { 'Content-Type': 'application/json' };
+        options.body = JSON.stringify(body);
+      }
+      const response = await fetch(url, options);
+      return await response.json();
+    } catch (e: any) {
+      console.error(`[IPC] Backend call failed (${url}):`, e);
+      return { success: false, message: e.message };
+    }
+  };
+
+  ipcMain.handle('server:get-config-values', async (_, keys: string) => {
+    return callBackend(`${await getApiUrl()}/config/values?keys=${keys}`);
+  });
+
+  ipcMain.handle('server:save-config-values', async (_, values: Record<string, string>) => {
+    return callBackend(`${await getApiUrl()}/config/values`, 'PUT', values);
+  });
+
+  // --- New Claude Code CLI JSON Sync Mechanism ---
+
+  const getClaudeCodeFiles = () => {
+    const homedir = os.homedir();
+    return [
+      {
+        name: '.claude.json',
+        path: path.join(homedir, '.claude.json'),
+      },
+      {
+        name: 'settings.json',
+        path: path.join(homedir, '.claude', 'settings.json'),
+      },
+    ];
+  };
+
+  ipcMain.handle('server:get-claudecode-sync-status', async (_, proxyUrl: string) => {
+    console.log('[IPC] Handling server:get-claudecode-sync-status');
+    try {
+      const files = getClaudeCodeFiles();
+      let installed = false;
+      let version = null;
+
+      // Check if installed
+      try {
+        const { stdout } = await execAsync('claude --version');
+        installed = true;
+        version = stdout.trim();
+        // Extract version number
+        const matches = version.match(/(\d+\.\d+\.\d+)/);
+        if (matches) version = matches[1];
+      } catch (e) {
+        installed = false;
+      }
+
+      let allSynced = true;
+      let hasBackup = false;
+      let currentBaseUrl = null;
+
+      for (const file of files) {
+        const backupPath = `${file.path}.antigravity.bak`;
+        if (fs.existsSync(backupPath)) {
+          hasBackup = true;
+        }
+
+        if (!fs.existsSync(file.path)) {
+          allSynced = false;
+          continue;
+        }
+
+        const content = fs.readFileSync(file.path, 'utf-8');
+        try {
+          const json = JSON.parse(content);
+          if (file.name === 'settings.json') {
+            const url = json.env?.ANTHROPIC_BASE_URL;
+            if (url) {
+              currentBaseUrl = url;
+              if (url.replace(/\/+$/, '') !== proxyUrl.replace(/\/+$/, '')) {
+                allSynced = false;
+              }
+            } else {
+              allSynced = false;
+            }
+          } else if (file.name === '.claude.json') {
+            if (json.hasCompletedOnboarding !== true) {
+              allSynced = false;
+            }
+          }
+        } catch (e) {
+          allSynced = false;
+        }
+      }
+
+      return {
+        installed,
+        version,
+        is_synced: allSynced,
+        has_backup: hasBackup,
+        current_base_url: currentBaseUrl,
+        files: files.map((f) => f.name),
+      };
+    } catch (error: any) {
+      console.error('[IPC] Failed to get Claude Code sync status:', error);
+      return { error: error.message };
+    }
+  });
+
+  ipcMain.handle(
+    'server:execute-claudecode-sync',
+    async (_, { proxyUrl, apiKey }: { proxyUrl: string; apiKey: string }) => {
+      console.log('[IPC] Handling server:execute-claudecode-sync');
+      try {
+        const files = getClaudeCodeFiles();
+
+        for (const file of files) {
+          // Ensure directory exists
+          const dir = path.dirname(file.path);
+          if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+          }
+
+          // Backup if not exists
+          if (fs.existsSync(file.path)) {
+            const backupPath = `${file.path}.antigravity.bak`;
+            if (!fs.existsSync(backupPath)) {
+              fs.copyFileSync(file.path, backupPath);
+            }
+          }
+
+          let content = '{}';
+          if (fs.existsSync(file.path)) {
+            content = fs.readFileSync(file.path, 'utf-8');
+          }
+
+          let json: any = {};
+          try {
+            json = JSON.parse(content);
+          } catch (e) {
+            json = {};
+          }
+
+          if (file.name === '.claude.json') {
+            json.hasCompletedOnboarding = true;
+          } else if (file.name === 'settings.json') {
+            if (!json.env) json.env = {};
+            json.env.ANTHROPIC_BASE_URL = proxyUrl;
+            json.env.ANTHROPIC_API_KEY = apiKey;
+
+            // Normalize Auth: Clear token to avoid conflict with API Key
+            delete json.env.ANTHROPIC_AUTH_TOKEN;
+
+            // Clear old model variables to allow Backend Model Mapping to take over
+            delete json.env.ANTHROPIC_MODEL;
+            delete json.env.ANTHROPIC_DEFAULT_OPUS_MODEL;
+            delete json.env.ANTHROPIC_DEFAULT_SONNET_MODEL;
+            delete json.env.ANTHROPIC_DEFAULT_HAIKU_MODEL;
+          }
+
+          fs.writeFileSync(file.path, JSON.stringify(json, null, 2), 'utf-8');
+        }
+
+        return { success: true };
+      } catch (error: any) {
+        console.error('[IPC] Failed to execute Claude Code sync:', error);
+        return { success: false, error: error.message };
+      }
+    },
+  );
+
+  ipcMain.handle('server:execute-claudecode-restore', async () => {
+    console.log('[IPC] Handling server:execute-claudecode-restore');
+    try {
+      const files = getClaudeCodeFiles();
+      let restoredCount = 0;
+
+      for (const file of files) {
+        const backupPath = `${file.path}.antigravity.bak`;
+        if (fs.existsSync(backupPath)) {
+          fs.copyFileSync(backupPath, file.path);
+          restoredCount++;
+        }
+      }
+
+      if (restoredCount === 0) {
+        return { success: false, error: 'No backup found to restore' };
+      }
+
+      return { success: true, message: `Restored ${restoredCount} configuration files` };
+    } catch (error: any) {
+      console.error('[IPC] Failed to restore Claude Code config:', error);
+      return { success: false, error: error.message };
     }
   });
 };

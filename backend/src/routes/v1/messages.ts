@@ -1,8 +1,12 @@
 import express from 'express';
-import { claudeMessagesController } from '../../controllers/chat.controller';
+import {
+  messagesController,
+  countTokensController,
+} from '../../controllers/messages.controller';
 
 const router = express.Router();
 
-router.post('/', claudeMessagesController);
+router.post('/', messagesController);
+router.post('/count_tokens', countTokensController);
 
 export default router;

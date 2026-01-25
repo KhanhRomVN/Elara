@@ -10,6 +10,11 @@ import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import * as crypto from 'crypto';
+import { promisify } from 'util';
+import { exec } from 'child_process';
+
+const execAsync = promisify(exec);
 
 const LOG_FILE = path.join(process.cwd(), 'debug.log');
 const IS_DEV = process.env.npm_lifecycle_event === 'dev';
@@ -26,8 +31,10 @@ const logDebug = (message: string, data?: any) => {
 };
 
 interface Message {
+  id: string;
   role: string;
   content: string;
+  uiHidden?: boolean;
 }
 
 interface Account {
@@ -37,6 +44,12 @@ interface Account {
 }
 
 // BASE_URL removed, will use state
+
+const formatTime = (seconds: number) => {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
 
 const Header = React.memo(
   ({
@@ -127,7 +140,8 @@ const ToolBlock = React.memo(
     const info = getToolInfo();
 
     if (tagName === 'text') return <Text color="white">{tagContent}</Text>;
-    if (tagName === 'temp' || tagName === 'comment')
+    if (tagName === 'temp') return null; // Hide temp tags
+    if (tagName === 'comment')
       return (
         <Box marginBottom={1}>
           <Text color="gray" italic>
@@ -135,6 +149,25 @@ const ToolBlock = React.memo(
           </Text>
         </Box>
       );
+
+    if (tagName === 'code') {
+      const languageMatch = tagContent.match(/<language>([\s\S]*?)<\/language>/);
+      const contentMatch = tagContent.match(/<content>([\s\S]*?)<\/content>/);
+      const language = languageMatch ? languageMatch[1].trim() : 'text';
+      const code = contentMatch ? contentMatch[1].trim() : '';
+
+      return (
+        <Box flexDirection="column" marginY={1} paddingX={1} paddingY={0} backgroundColor="#262626">
+          <Box justifyContent="space-between">
+            <Text> </Text>
+            <Text color="gray" dimColor italic>
+              {getIconForFile(language)} {language}
+            </Text>
+          </Box>
+          <CLIHighlighter code={code} language={language} />
+        </Box>
+      );
+    }
 
     if (!info) return null;
 
@@ -154,9 +187,8 @@ const ToolBlock = React.memo(
 
     return (
       <Box flexDirection="column" marginY={0}>
-        <Box>
+        <Box marginLeft={-1}>
           <Text color={getStatusColor()} bold>
-            {' '}
             ●{' '}
           </Text>
           <Text color={info.color} bold>
@@ -187,46 +219,26 @@ const ToolBlock = React.memo(
                 if (!match) return null;
                 const searchLines = match[1].split('\n');
                 const replaceLines = match[2].split('\n');
-                const max = 10;
                 return (
-                  <Box key={idx} flexDirection="row" width="100%" marginBottom={1}>
-                    <Box
-                      flexDirection="column"
-                      flexGrow={1}
-                      borderStyle="round"
-                      borderColor="red"
-                      paddingX={1}
-                    >
-                      <Text color="red" bold>
-                        SEARCH (-{searchLines.length})
-                      </Text>
-                      <CLIHighlighter
-                        code={
-                          searchLines.slice(0, max).join('\n') +
-                          (searchLines.length > max ? '\n...' : '')
-                        }
-                        language={args.path}
-                      />
-                    </Box>
-                    <Box
-                      flexDirection="column"
-                      flexGrow={1}
-                      borderStyle="round"
-                      borderColor="green"
-                      paddingX={1}
-                      marginLeft={1}
-                    >
-                      <Text color="green" bold>
-                        REPLACE (+{replaceLines.length})
-                      </Text>
-                      <CLIHighlighter
-                        code={
-                          replaceLines.slice(0, max).join('\n') +
-                          (replaceLines.length > max ? '\n...' : '')
-                        }
-                        language={args.path}
-                      />
-                    </Box>
+                  <Box
+                    key={idx}
+                    flexDirection="column"
+                    marginBottom={1}
+                    paddingX={1}
+                    backgroundColor="#262626"
+                  >
+                    {searchLines.map((line, i) => (
+                      <Box key={`search-${i}`} flexDirection="row">
+                        <Text color="red">- </Text>
+                        <CLIHighlighter code={line} language={args.path} />
+                      </Box>
+                    ))}
+                    {replaceLines.map((line, i) => (
+                      <Box key={`replace-${i}`} flexDirection="row">
+                        <Text color="green">+ </Text>
+                        <CLIHighlighter code={line} language={args.path} />
+                      </Box>
+                    ))}
                   </Box>
                 );
               })}
@@ -234,20 +246,22 @@ const ToolBlock = React.memo(
         )}
 
         {tagName === 'write_to_file' && args.content && (
-          <Box
-            marginLeft={2}
-            borderStyle="round"
-            borderColor={info.color}
-            paddingX={1}
-            marginTop={1}
-          >
-            <CLIHighlighter
-              code={
-                args.content.split('\n').slice(0, 15).join('\n') +
-                (args.content.split('\n').length > 15 ? '\n...' : '')
-              }
-              language={args.path}
-            />
+          <Box marginLeft={2} marginTop={1}>
+            <Box flexDirection="column" paddingX={1} paddingY={0} backgroundColor="#262626">
+              <Box justifyContent="space-between" marginBottom={0}>
+                <Text> </Text>
+                <Text color="gray" dimColor italic>
+                  {getIconForFile(args.path || '')} {args.path || 'file'}
+                </Text>
+              </Box>
+              <CLIHighlighter
+                code={
+                  args.content.split('\n').slice(0, 15).join('\n') +
+                  (args.content.split('\n').length > 15 ? '\n...' : '')
+                }
+                language={args.path}
+              />
+            </Box>
           </Box>
         )}
 
@@ -369,7 +383,7 @@ const ToolCallRenderer = ({
   toolStatuses: Record<string, string>;
 }) => {
   const parts = content.split(
-    /(<read_file>[\s\S]*?<\/read_file>|<write_to_file>[\s\S]*?<\/write_to_file>|<execute_command>[\s\S]*?<\/execute_command>|<list_files>[\s\S]*?<\/list_files>|<replace_in_file>[\s\S]*?<\/replace_in_file>|<text>[\s\S]*?<\/text>|<temp>[\s\S]*?<\/temp>|<comment>[\s\S]*?<\/comment>)/g,
+    /(<read_file>[\s\S]*?<\/read_file>|<write_to_file>[\s\S]*?<\/write_to_file>|<execute_command>[\s\S]*?<\/execute_command>|<list_files>[\s\S]*?<\/list_files>|<replace_in_file>[\s\S]*?<\/replace_in_file>|<text>[\s\S]*?<\/text>|<temp>[\s\S]*?<\/temp>|<comment>[\s\S]*?<\/comment>|<code>[\s\S]*?<\/code>)/g,
   );
 
   return (
@@ -421,15 +435,18 @@ const MessageList = React.memo(
     isLoading,
     chatAreaHeight,
     toolStatuses,
+    thinkingTime,
   }: {
     messages: Message[];
     isLoading: boolean;
     chatAreaHeight: number;
     toolStatuses: Record<string, string>;
+    thinkingTime: number;
   }) => {
-    const visibleMessages = messages.slice(
-      Math.max(0, messages.length - chatAreaHeight),
-      messages.length,
+    const filteredMessages = messages.filter((m) => !m.uiHidden);
+    const visibleMessages = filteredMessages.slice(
+      Math.max(0, filteredMessages.length - chatAreaHeight),
+      filteredMessages.length,
     );
 
     return (
@@ -457,7 +474,10 @@ const MessageList = React.memo(
         {isLoading && (
           <Box paddingX={1}>
             <Text color="yellow">
-              <Spinner type="dots" /> Elara is thinking...
+              <Spinner type="dots" /> Elara is thinking...{' '}
+              <Text color="gray" dimColor>
+                (ESC to stop, {formatTime(thinkingTime)})
+              </Text>
             </Text>
           </Box>
         )}
@@ -484,7 +504,12 @@ const InputArea = ({
   isSearching?: boolean;
 }) => {
   useInput((inputChar, key) => {
-    if (isLoading) return;
+    if (isLoading) {
+      if (key.escape) {
+        onKeyDown?.(inputChar, key);
+      }
+      return;
+    }
 
     if (onKeyDown) {
       onKeyDown(inputChar, key);
@@ -575,10 +600,12 @@ const StatusBar = React.memo(
     chatMode,
     escPressCount,
     messageCount,
+    tokenCount,
   }: {
     chatMode: string;
     escPressCount: number;
     messageCount: number;
+    tokenCount: number;
   }) => (
     <Box justifyContent="space-between" paddingX={1}>
       <Box>
@@ -587,11 +614,9 @@ const StatusBar = React.memo(
         </Text>
         {escPressCount > 0 && <Text color="red"> (Press ESC again to exit)</Text>}
       </Box>
-      {messageCount === 0 && (
-        <Text color={chatMode === 'CHAT' ? 'green' : 'yellow'} bold>
-          {chatMode}
-        </Text>
-      )}
+      <Text color={chatMode === 'CHAT' ? 'green' : 'yellow'} bold>
+        ({tokenCount} token) {chatMode}
+      </Text>
     </Box>
   ),
 );
@@ -651,7 +676,12 @@ const AgentInterface: React.FC = () => {
   const [escTimer, setEscTimer] = useState<NodeJS.Timeout | null>(null);
   const [selectedCommandIdx, setSelectedCommandIdx] = useState<number>(0);
   const [currentConversationId, setCurrentConversationId] = useState<string>('');
+  const conversationIdRef = React.useRef<string>('');
+  const [tokenCount, setTokenCount] = useState<number>(0);
   const [toolStatuses, setToolStatuses] = useState<Record<string, string>>({});
+  const [isExecutingTool, setIsExecutingTool] = useState<boolean>(false);
+  const [thinkingTime, setThinkingTime] = useState<number>(0);
+  const abortControllerRef = React.useRef<AbortController | null>(null);
   const executedTagsRef = React.useRef<Set<string>>(new Set());
   const version = '1.1.6';
   const currentPath = process.cwd().replace(process.env.HOME || '', '~');
@@ -703,6 +733,24 @@ const AgentInterface: React.FC = () => {
     };
   }, [stdout]);
 
+  // Thinking timer logic
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    if (isLoading) {
+      setThinkingTime(0);
+      interval = setInterval(() => {
+        setThinkingTime((prev) => prev + 1);
+      }, 1000);
+    } else {
+      setThinkingTime(0);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isLoading]);
+
+  // Placeholder for component logic
+
   const executeToolCall = async (tagName: string, tagContent: string): Promise<string> => {
     const args = parseTagArguments(tagContent);
     const workspacePath = process.cwd();
@@ -710,42 +758,96 @@ const AgentInterface: React.FC = () => {
     try {
       switch (tagName) {
         case 'read_file': {
-          const path = args.path;
-          if (!path) return 'Error: path is required.';
-          const res = await fetch(
-            `${baseUrl}/v1/commands/read-file?path=${encodeURIComponent(path)}&workspace=${encodeURIComponent(workspacePath)}`,
-          );
-          const data = (await res.json()) as any;
-          return data.content || 'Error reading file';
+          const filePath = args.path;
+          if (!filePath) return 'Error: path is required.';
+          const fullPath = path.isAbsolute(filePath)
+            ? filePath
+            : path.resolve(workspacePath, filePath);
+
+          if (!fs.existsSync(fullPath)) {
+            return `Error: File not found: ${filePath}`;
+          }
+          return fs.readFileSync(fullPath, 'utf-8');
         }
         case 'write_to_file': {
-          const { path, content } = args;
-          if (!path || content === undefined) return 'Error: path/content required.';
-          const res = await fetch(`${baseUrl}/v1/commands/write-file`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path, content, workspace: workspacePath }),
-          });
-          return `Successfully wrote to ${path}`;
+          const { path: filePath, content } = args;
+          if (!filePath || content === undefined) return 'Error: path/content required.';
+          const fullPath = path.isAbsolute(filePath)
+            ? filePath
+            : path.resolve(workspacePath, filePath);
+
+          const dir = path.dirname(fullPath);
+          if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+          }
+
+          fs.writeFileSync(fullPath, content, 'utf-8');
+          return `Successfully wrote to ${filePath}`;
         }
         case 'execute_command': {
           const { command } = args;
           if (!command) return 'Error: command required.';
-          const res = await fetch(`${baseUrl}/v1/shell/execute`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ command, cwd: workspacePath }),
+
+          const { stdout, stderr } = await execAsync(command, {
+            cwd: workspacePath,
+            maxBuffer: 50 * 1024 * 1024,
           });
-          const data = (await res.json()) as any;
-          return data.output || 'Command executed';
+          return stdout.trim() || stderr.trim() || 'Command executed';
         }
         case 'list_files': {
-          const { path, recursive } = args;
-          const res = await fetch(
-            `${baseUrl}/v1/commands/list-files?path=${encodeURIComponent(path || '.')}&workspace=${encodeURIComponent(workspacePath)}&recursive=${recursive === 'true'}`,
-          );
-          const data = (await res.json()) as any;
-          return Array.isArray(data.files) ? data.files.join('\n') : 'Error listing files';
+          const { path: dirPath, recursive } = args;
+          const relPath = !dirPath || dirPath === '.' ? '' : dirPath;
+          const targetPath = path.isAbsolute(relPath)
+            ? relPath
+            : path.resolve(workspacePath, relPath);
+
+          if (!fs.existsSync(targetPath)) {
+            return 'Error: Directory not found';
+          }
+
+          const isRecursive = recursive === 'true';
+          const listDir = (dir: string, depth = 0): string[] => {
+            if (depth > 5) return []; // Limit depth for safety
+            const results: string[] = [];
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+            for (const entry of entries) {
+              const full = path.join(dir, entry.name);
+              const rel = path.relative(workspacePath, full);
+
+              if (entry.isDirectory()) {
+                if (entry.name === 'node_modules' || entry.name === '.git') continue;
+                results.push(rel + '/');
+                if (isRecursive) {
+                  results.push(...listDir(full, depth + 1));
+                }
+              } else {
+                results.push(rel);
+              }
+            }
+            return results;
+          };
+
+          const files = listDir(targetPath);
+          return files.join('\n') || 'No files found';
+        }
+        case 'replace_in_file': {
+          const { path: filePath } = args;
+          if (!filePath) return 'Error: path is required.';
+
+          const fullPath = path.isAbsolute(filePath)
+            ? filePath
+            : path.resolve(workspacePath, filePath);
+
+          if (!fs.existsSync(fullPath)) {
+            return `Error: File not found: ${filePath}`;
+          }
+
+          const content = fs.readFileSync(fullPath, 'utf-8');
+          const newContent = applyDiff(content, tagContent);
+
+          fs.writeFileSync(fullPath, newContent, 'utf-8');
+          return `Successfully updated ${filePath}`;
         }
         default:
           return `Error: Unknown tool ${tagName}`;
@@ -756,48 +858,80 @@ const AgentInterface: React.FC = () => {
   };
 
   const processAgentTools = async (message: Message) => {
-    let tagIndex = -1;
-    const parts = message.content.split(/(<[\w_]+>[\s\S]*?<\/\1>)/g);
-    const msgIndex = messages.indexOf(message);
+    if (isExecutingTool) return;
+    const content = message.content;
+    const toolRegex =
+      /<(read_file|write_to_file|replace_in_file|list_files|list_file|search_files|execute_command|write_to_file_elara|replace_in_file_elara)(?:>([\s\S]*?)<\/\1>| \/>|\/>)/g;
+
     const results: string[] = [];
+    let match;
     let foundNew = false;
 
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i];
-      if (part.startsWith('<')) {
-        const match = part.match(/<([\w_]+)>([\s\S]*?)<\/\1>/);
-        if (match) {
-          const tagType = match[1];
-          const tagContent = match[2];
-          const fullTag = part;
-          const statusKey = `${msgIndex}:${i}`;
-          const executionKey = `${message.role}:${fullTag}`;
-
-          if (!executedTagsRef.current.has(executionKey)) {
-            foundNew = true;
-            setToolStatuses((prev) => ({ ...prev, [statusKey]: 'running' }));
-            try {
-              const result = await executeToolCall(tagType, tagContent);
-              results.push(`[${tagType}]\n\`\`\`\n${result}\n\`\`\``);
-              setToolStatuses((prev) => ({ ...prev, [statusKey]: 'success' }));
-            } catch (err) {
-              setToolStatuses((prev) => ({ ...prev, [statusKey]: 'error' }));
-              results.push(`[${tagType}]\n\`\`\`\nError: ${err}\n\`\`\``);
-            }
-            executedTagsRef.current.add(executionKey);
-          }
-        }
+    // Check if there are any new tools to execute before setting state
+    const tempMatches = [];
+    const tempToolRegex = new RegExp(toolRegex);
+    let m;
+    while ((m = tempToolRegex.exec(content)) !== null) {
+      if (!executedTagsRef.current.has(`${message.id}:${m[0]}`)) {
+        tempMatches.push(m);
       }
     }
 
-    if (foundNew) {
-      const actualResult = results.join('\n\n');
-      handleSendMessage(actualResult, true);
+    if (tempMatches.length === 0) return;
+
+    setIsExecutingTool(true);
+    try {
+      for (const match of tempMatches) {
+        const fullTag = match[0];
+        const tagType = match[1];
+        const tagInner = match[2];
+
+        const key = `${message.id}:${fullTag}`;
+        foundNew = true;
+
+        // Find match index for tool status display
+        const msgIndex = messages.findIndex((m) => m.id === message.id);
+        const statusKey = `${msgIndex}:${match.index}`;
+
+        setToolStatuses((prev) => ({ ...prev, [statusKey]: 'running' }));
+        try {
+          const result = await executeToolCall(tagType, tagInner);
+
+          const args = parseTagArguments(tagInner);
+          let info = '';
+          if (
+            tagType === 'read_file' ||
+            tagType === 'write_to_file' ||
+            tagType === 'replace_in_file'
+          ) {
+            info = args.path || 'file';
+          } else if (tagType === 'list_files' || tagType === 'list_file') {
+            info = args.path || 'directory';
+          } else if (tagType === 'execute_command') {
+            info = args.command || 'command';
+          }
+          const header = info ? `${tagType} for '${info}'` : tagType;
+
+          results.push(`[${header}]\n\`\`\`\n${result}\n\`\`\``);
+          setToolStatuses((prev) => ({ ...prev, [statusKey]: 'success' }));
+        } catch (err) {
+          setToolStatuses((prev) => ({ ...prev, [statusKey]: 'error' }));
+          results.push(`[${tagType}]\n\`\`\`\nError: ${err}\n\`\`\``);
+        }
+        executedTagsRef.current.add(key);
+      }
+
+      if (foundNew) {
+        const actualResult = results.join('\n\n');
+        handleSendMessage(actualResult, true);
+      }
+    } finally {
+      setIsExecutingTool(false);
     }
   };
 
   useEffect(() => {
-    if (chatMode === 'AGENT' && messages.length > 0 && !isLoading) {
+    if (!isLoading && chatMode === 'AGENT' && messages.length > 0) {
       const lastMsg = messages[messages.length - 1];
       if (lastMsg.role === 'assistant') {
         processAgentTools(lastMsg);
@@ -812,7 +946,24 @@ const AgentInterface: React.FC = () => {
       let cmd = inputVal.trim();
       if (cmd === '/') {
         cmd =
-          selectedCommandIdx === 0 ? '/mode' : selectedCommandIdx === 1 ? '/chat-mode' : '/config';
+          selectedCommandIdx === 0
+            ? '/mode'
+            : selectedCommandIdx === 1
+              ? '/chat-mode'
+              : selectedCommandIdx === 2
+                ? '/config'
+                : '/new';
+      }
+
+      if (cmd.startsWith('/new')) {
+        setMessages([]);
+        setCurrentConversationId('');
+        conversationIdRef.current = '';
+        setTokenCount(0);
+        setToolStatuses({});
+        executedTagsRef.current = new Set();
+        setInput('');
+        return;
       }
 
       if (cmd.startsWith('/mode')) {
@@ -832,6 +983,7 @@ const AgentInterface: React.FC = () => {
           setMessages((prev) => [
             ...prev,
             {
+              id: crypto.randomUUID(),
               role: 'assistant',
               content: `Configuration updated. New URL: ${newUrl}. Please restart the CLI for changes to take effect.`,
             },
@@ -858,6 +1010,7 @@ const AgentInterface: React.FC = () => {
             setMessages((prev) => [
               ...prev,
               {
+                id: crypto.randomUUID(),
                 role: 'assistant',
                 content: `Could not open editor. Config file is at: ${configPath}`,
               },
@@ -869,48 +1022,53 @@ const AgentInterface: React.FC = () => {
         // Mặc định hiện danh sách lệnh
         setInput('/');
       } else {
-        setMessages((prev) => [...prev, { role: 'assistant', content: `Unknown command: ${cmd}` }]);
+        setMessages((prev) => [
+          ...prev,
+          { id: crypto.randomUUID(), role: 'assistant', content: `Unknown command: ${cmd}` },
+        ]);
         setInput('');
       }
       return;
     }
 
-    const userMessage: Message = { role: isToolResult ? 'assistant' : 'user', content: inputVal };
+    const userMessage: Message = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: inputVal, // Store actual user input for UI
+      uiHidden: isToolResult,
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
     if (!isToolResult) {
-      setMessages((prev) => [...prev, userMessage]);
       setInput('');
     }
     setIsLoading(true);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120000); // 120s timeout (2 mins)
+    abortControllerRef.current = controller;
+    const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 min timeout for AGENT tasks
 
     try {
-      logDebug('handleSendMessage: Start', { input: inputVal, isToolResult });
       let finalPrompt = inputVal;
       if (messages.length === 0 && chatMode === 'AGENT' && !isToolResult) {
         finalPrompt = `${DEFAULT_RULE_PROMPT}\n\n## User Request\n${inputVal}`;
       }
 
-      logDebug('handleSendMessage: Sending fetch request', {
-        url: `${baseUrl}/v1/chat/accounts/messages`,
-        model: currentModel,
-        stream: false,
-      });
+      const messageHistory = [
+        ...messages.filter((m) => !m.uiHidden),
+        { role: userMessage.role, content: finalPrompt }, // Use finalPrompt for AI context
+      ].map((m) => ({ role: m.role, content: m.content }));
 
       const response = await fetch(`${baseUrl}/v1/chat/accounts/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
+        signal: abortControllerRef.current.signal,
         body: JSON.stringify({
           modelId: currentModel === 'AUTO' ? 'auto' : currentModel.toLowerCase(),
           providerId: currentProvider || undefined,
           accountId: selectedAccount?.id || undefined,
-          messages: [
-            ...messages.map((m) => ({ role: m.role, content: m.content })),
-            { role: isToolResult ? 'assistant' : 'user', content: finalPrompt },
-          ],
-          conversationId: currentConversationId,
+          messages: messageHistory,
+          conversationId: conversationIdRef.current || undefined,
           stream: false,
           thinking: currentModel.toLowerCase().includes('thinking'),
         }),
@@ -926,33 +1084,48 @@ const AgentInterface: React.FC = () => {
       const result = (await response.json()) as any;
       if (result.success) {
         logDebug('handleSendMessage: Success', { messageLength: result.message.content.length });
-        setMessages((prev) => [...prev, result.message]);
+        const assistantMsg = { ...result.message, id: crypto.randomUUID() };
+        setMessages((prev) => [...prev, assistantMsg]);
 
         // Update metadata
         const metadata = result.metadata || {};
         if (metadata.conversation_id) {
           setCurrentConversationId(metadata.conversation_id);
+          conversationIdRef.current = metadata.conversation_id;
         }
         if (metadata.accountId && !selectedAccount) {
           const foundAccount = accounts.find((a) => a.id === metadata.accountId);
           if (foundAccount) setSelectedAccount(foundAccount);
         }
 
-        if (chatMode === 'AGENT') {
-          processAgentTools(result.message);
+        // Robust token extraction
+        const usage = result.usage || {};
+        const totalTokens =
+          usage.total_tokens ?? metadata.total_token ?? metadata.total_tokens ?? 0;
+
+        if (totalTokens > 0) {
+          setTokenCount(totalTokens);
         }
       } else {
         logDebug('handleSendMessage: Backend returned success=false');
         setMessages((prev) => [
           ...prev,
-          { role: 'assistant', content: `Error: ${result.error || 'Unknown error'}` },
+          {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: `Error: ${result.error || 'Unknown error'}`,
+          },
         ]);
       }
     } catch (err: any) {
       logDebug('handleSendMessage: Error', { message: err.message, stack: err.stack });
       setMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: `Error: ${err.message || 'Connection failed.'}` },
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: `Error: ${err.message || 'Connection failed.'}`,
+        },
       ]);
     } finally {
       clearTimeout(timeoutId);
@@ -990,6 +1163,15 @@ const AgentInterface: React.FC = () => {
   };
 
   const handleInputKeyDown = (inputChar: string, key: any) => {
+    if (isLoading) {
+      if (key.escape) {
+        logDebug('handleInputKeyDown: ESC pressed during loading, aborting...');
+        abortControllerRef.current?.abort();
+        setIsLoading(false);
+      }
+      return;
+    }
+
     if (isSelectingModel) {
       const models = filteredModels;
       if (key.upArrow) {
@@ -1037,11 +1219,12 @@ const AgentInterface: React.FC = () => {
     }
 
     if (input.startsWith('/') && !isSelectingModel && !isSelectingChatMode) {
-      if (key.upArrow || key.downArrow) {
-        // Cycle through 0, 1, 2
-        if (selectedCommandIdx !== -1) {
-          setSelectedCommandIdx((prev) => (prev === 0 ? 1 : 0));
-        }
+      if (key.upArrow) {
+        setSelectedCommandIdx((prev) => (prev > 0 ? prev - 1 : 3));
+        return;
+      }
+      if (key.downArrow) {
+        setSelectedCommandIdx((prev) => (prev < 3 ? prev + 1 : 0));
         return;
       }
     }
@@ -1227,6 +1410,7 @@ const AgentInterface: React.FC = () => {
             isLoading={isLoading}
             chatAreaHeight={chatAreaHeight}
             toolStatuses={toolStatuses}
+            thinkingTime={thinkingTime}
           />
         </>
       )}
@@ -1250,6 +1434,8 @@ const AgentInterface: React.FC = () => {
                 const isChatModeSelected = selectedCommandIdx === 1;
                 const isConfigSelected = selectedCommandIdx === 2;
 
+                const isNewSelected = selectedCommandIdx === 3;
+
                 const isModeMatch =
                   (input === '/' && isModeSelected) ||
                   (input.length > 1 && '/mode'.startsWith(input));
@@ -1259,12 +1445,16 @@ const AgentInterface: React.FC = () => {
                 const isConfigMatch =
                   (input === '/' && isConfigSelected) ||
                   (input.length > 1 && '/config'.startsWith(input));
+                const isNewMatch =
+                  (input === '/' && isNewSelected) ||
+                  (input.length > 1 && '/new'.startsWith(input));
 
                 const modeLabel = `/mode(${currentModel})`;
                 const chatModeLabel = `/chat-mode(${chatMode})`;
                 const configLabel = `/config(${configPath})`;
+                const newLabel = `/new`;
 
-                const labels = [modeLabel, chatModeLabel, configLabel];
+                const labels = [modeLabel, chatModeLabel, configLabel, newLabel];
                 return (
                   <>
                     <Box>
@@ -1276,6 +1466,9 @@ const AgentInterface: React.FC = () => {
                     <Box>
                       <Text color={isConfigMatch ? 'green' : 'gray'}>{configLabel}</Text>
                     </Box>
+                    <Box>
+                      <Text color={isNewMatch ? 'green' : 'gray'}>{newLabel}</Text>
+                    </Box>
                   </>
                 );
               })()}
@@ -1285,6 +1478,7 @@ const AgentInterface: React.FC = () => {
               chatMode={chatMode}
               escPressCount={escPressCount}
               messageCount={messages.length}
+              tokenCount={tokenCount}
             />
           )}
         </>

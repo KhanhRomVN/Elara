@@ -18,4 +18,16 @@ export const serverAPI = {
   }) => ipcRenderer.invoke('server:save-env-to-system', envVars),
   restoreEnvDefaults: () => ipcRenderer.invoke('server:restore-env-defaults'),
   checkSystemEnv: () => ipcRenderer.invoke('server:check-system-env'),
+
+  // Claude Code CLI JSON Sync
+  getClaudeCodeSyncStatus: (proxyUrl: string) =>
+    ipcRenderer.invoke('server:get-claudecode-sync-status', proxyUrl),
+  executeClaudeCodeSync: (params: { proxyUrl: string; apiKey: string }) =>
+    ipcRenderer.invoke('server:execute-claudecode-sync', params),
+  executeClaudeCodeRestore: () => ipcRenderer.invoke('server:execute-claudecode-restore'),
+
+  // Generic Config
+  getConfigValues: (keys: string) => ipcRenderer.invoke('server:get-config-values', keys),
+  saveConfigValues: (values: Record<string, string>) =>
+    ipcRenderer.invoke('server:save-config-values', values),
 };

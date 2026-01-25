@@ -28,3 +28,11 @@ export interface SystemEnvStatus {
   platformInfo?: PlatformInfo;
   currentValues?: Record<string, string>;
 }
+export interface CliSyncStatus {
+  installed: boolean;
+  version: string | null;
+  is_synced: boolean;
+  has_backup: boolean;
+  current_base_url: string | null;
+  files: string[];
+}

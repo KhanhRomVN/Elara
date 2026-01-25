@@ -10,6 +10,14 @@ import crypto from 'crypto';
 import { recordRequest, recordSuccess } from '../services/stats.service';
 import { ChatRequest } from '../types';
 
+import {
+  getAllProviders,
+  getProviderModels,
+} from '../services/provider.service';
+import { providerRegistry } from '../provider/registry';
+import { getAccountSelector } from '../services/account-selector';
+import { countTokens, countMessagesTokens } from '../utils/tokenizer';
+
 const logger = createLogger('ChatController');
 
 /**
@@ -192,13 +200,6 @@ export const getAccountConversationDetail = async (
     });
   }
 };
-
-import {
-  getAllProviders,
-  getProviderModels,
-} from '../services/provider.service';
-import { providerRegistry } from '../provider/registry';
-import { getAccountSelector } from '../services/account-selector';
 
 // POST /v1/chat/completions (Legacy/Generic endpoint)
 export const completionController = async (
@@ -655,7 +656,7 @@ export const getChatHistoryController = async (
   }
 };
 
-// POST /v1/chat/messages (Anthropic Mock API using Gemini-3-Flash)
+// POST /v1/chat/messages (Anthropic Mock API)
 export const claudeMessagesController = async (
   req: Request,
   res: Response,
@@ -663,23 +664,47 @@ export const claudeMessagesController = async (
   try {
     const { model, messages, stream, max_tokens, temperature } = req.body;
 
-    // We only support gemini-3-flash as requested
-    const targetModel = 'gemini-3-flash';
+    // Resolve Provider and Model
+    let targetProviderId: string | undefined;
+    let targetModelId: string | undefined = model;
 
-    // Find any antigravity account
+    if (model && model.includes('/')) {
+      const parts = model.split('/');
+      targetProviderId = parts[0];
+      targetModelId = parts.slice(1).join('/');
+    } else if (model) {
+      const inferredProvider = providerRegistry.getProviderForModel(model);
+      if (inferredProvider) {
+        targetProviderId = inferredProvider.name;
+      }
+    }
+
     const selector = getAccountSelector();
     const accounts = selector.getActiveAccounts();
-    const account = accounts.find((a) => a.provider_id === 'antigravity');
+    let account: any | undefined;
+
+    if (targetProviderId) {
+      account = accounts.find(
+        (a) => a.provider_id.toLowerCase() === targetProviderId!.toLowerCase(),
+      );
+    }
+
+    // Fallback if no specific provider/account found
+    if (!account && accounts.length > 0) {
+      account = accounts[0];
+    }
 
     if (!account) {
-      res.status(500).json({
+      res.status(401).json({
         error: {
           type: 'not_found_error',
-          message: 'Antigravity account (Gemini) not found in Elara.',
+          message: 'No active account found in Elara for this request.',
         },
       });
       return;
     }
+
+    const finalModel = targetModelId || model || 'gemini-3-flash';
 
     // Convert Anthropic messages to Elara format
     const elaraMessages = messages.map((m: any) => ({
@@ -691,6 +716,11 @@ export const claudeMessagesController = async (
         : m.content,
     }));
 
+    // Token calculation
+    const inputTokens = countMessagesTokens(elaraMessages);
+    let outputTokens = 0;
+    let accumulatedContent = '';
+
     if (stream) {
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
@@ -699,18 +729,19 @@ export const claudeMessagesController = async (
       });
 
       // Anthropic format: message_start
+      const messageId = `msg_${crypto.randomUUID()}`;
       res.write(
         `data: ${JSON.stringify({
           type: 'message_start',
           message: {
-            id: `msg_${crypto.randomUUID()}`,
+            id: messageId,
             type: 'message',
             role: 'assistant',
             content: [],
-            model: targetModel,
+            model: finalModel,
             stop_reason: null,
             stop_sequence: null,
-            usage: { input_tokens: 0, output_tokens: 0 },
+            usage: { input_tokens: inputTokens, output_tokens: 0 },
           },
         })}\n\n`,
       );
@@ -719,10 +750,13 @@ export const claudeMessagesController = async (
         credential: account.credential,
         provider_id: account.provider_id,
         accountId: account.id,
-        model: targetModel,
+        model: finalModel,
         messages: elaraMessages,
         temperature,
+        stream: true,
         onContent: (content) => {
+          accumulatedContent += content;
+          outputTokens += countTokens(content);
           res.write(
             `data: ${JSON.stringify({
               type: 'content_block_delta',
@@ -736,7 +770,7 @@ export const claudeMessagesController = async (
             `data: ${JSON.stringify({
               type: 'message_delta',
               delta: { stop_reason: 'end_turn', stop_sequence: null },
-              usage: { output_tokens: 0 },
+              usage: { output_tokens: outputTokens },
             })}\n\n`,
           );
           res.write(`data: ${JSON.stringify({ type: 'message_stop' })}\n\n`);
@@ -753,27 +787,31 @@ export const claudeMessagesController = async (
         },
       });
     } else {
-      let accumulatedContent = '';
       await sendMessage({
         credential: account.credential,
         provider_id: account.provider_id,
         accountId: account.id,
-        model: targetModel,
+        model: finalModel,
         messages: elaraMessages,
         temperature,
+        stream: false,
         onContent: (content) => {
           accumulatedContent += content;
         },
         onDone: () => {
+          outputTokens = countTokens(accumulatedContent);
           res.status(200).json({
             id: `msg_${crypto.randomUUID()}`,
             type: 'message',
             role: 'assistant',
             content: [{ type: 'text', text: accumulatedContent }],
-            model: targetModel,
+            model: finalModel,
             stop_reason: 'end_turn',
             stop_sequence: null,
-            usage: { input_tokens: 0, output_tokens: 0 },
+            usage: {
+              input_tokens: inputTokens,
+              output_tokens: outputTokens,
+            },
           });
         },
         onError: (err) => {
