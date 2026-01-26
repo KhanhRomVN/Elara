@@ -29,6 +29,7 @@ router.get('/', (req, res) => {
 router.post('/', (req, res) => {
   try {
     const { provider_id, model_id, sequence } = req.body;
+    console.log('[Model Sequences] Setting sequence:', req.body);
 
     if (!provider_id || !model_id || sequence === undefined) {
       return res.status(400).json({ success: false, error: 'Missing required fields' });

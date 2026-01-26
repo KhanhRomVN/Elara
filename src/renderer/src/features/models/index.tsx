@@ -223,7 +223,7 @@ export const ModelsPage = () => {
   };
 
   const getMaxSequence = (): number => {
-    return Math.max(...sequences.map((s) => s.sequence));
+    return sequences.length > 0 ? Math.max(...sequences.map((s) => s.sequence)) : 0;
   };
 
   const handleSetNextSequence = async (model: FlatModel) => {
@@ -528,15 +528,19 @@ export const ModelsPage = () => {
                       {absoluteIndex}
                     </td>
                     <td className="px-4 py-1.5 align-middle">
-                      <div className="flex items-center gap-3">
-                        <Favicon url={model.website} size={24} className="rounded-sm" />
-                        <div className="flex flex-col">
-                          <div className="text-sm font-medium">
-                            <span className="text-primary/70">{model.provider_id}</span>
-                            <span className="mx-1 text-muted-foreground">|</span>
-                            <span>{model.model_id}</span>
-                          </div>
+                      <div className="flex items-center gap-2 truncate flex-1">
+                        <div className="w-32 shrink-0 flex items-center justify-end gap-1.5">
+                          <Favicon
+                            url={model.website}
+                            size={14}
+                            className="rounded-sm opacity-70"
+                          />
+                          <span className="text-[10px] text-zinc-500 font-mono shrink-0 lowercase">
+                            {model.provider_id}
+                          </span>
                         </div>
+                        <span className="text-zinc-700 font-light shrink-0">|</span>
+                        <span className="truncate flex-1 font-medium">{model.model_id}</span>
                       </div>
                     </td>
                     <td className="px-4 py-1.5 align-middle text-center">

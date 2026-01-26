@@ -27,7 +27,11 @@ interface SidebarProps {
   setIsCollapsed: (value: boolean) => void;
 }
 
+import { useBackendConnection } from '../contexts/BackendConnectionContext';
+import { WifiOff } from 'lucide-react';
+
 const Sidebar = ({ isCollapsed, setIsCollapsed }: SidebarProps) => {
+  const { isConnected, currentUrl } = useBackendConnection();
   const [version, setVersion] = React.useState<string | null>(null);
   const [remoteVersion, setRemoteVersion] = React.useState<string | null>(null);
   const [isChecking, setIsChecking] = React.useState(false);
@@ -260,6 +264,20 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }: SidebarProps) => {
           >
             <UnfoldHorizontal className="w-5 h-5" />
           </button>
+        )}
+
+        {!isCollapsed && !isConnected && (
+          <div className="flex flex-col gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20 animate-in slide-in-from-bottom-2">
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-center gap-2 text-destructive font-bold">
+                <WifiOff className="w-4 h-4" />
+                <span className="text-base">Connection Lost</span>
+              </div>
+              <span className="text-xs text-muted-foreground break-all">
+                Cannot reach {currentUrl}
+              </span>
+            </div>
+          </div>
         )}
 
         {!isCollapsed && hasUpdate && updateType === 'app' ? (

@@ -15,6 +15,8 @@ import indexingRouter from './indexing';
 import modelRouter from './model';
 import statsRouter from './stats';
 
+import modelSequencesRouter from './model-sequences';
+
 // Register routes
 router.use('/chat', chatRouter);
 router.use('/accounts', accountRouter);
@@ -24,6 +26,7 @@ router.use('/debug', debugRouter);
 router.use('/config', configRouter);
 router.use('/indexing', indexingRouter);
 router.use('/models', modelRouter);
+router.use('/model-sequences', modelSequencesRouter);
 router.use('/stats', statsRouter);
 
 // Provider-specific custom routes (e.g., /cohere/sessions)

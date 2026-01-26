@@ -5,6 +5,8 @@ import { ThemeProvider } from './core/theme/ThemeProvider';
 import { useCommandRegistration } from './features/commands/useCommandRegistration';
 import { Toaster } from 'sonner';
 
+import { BackendConnectionProvider } from './core/contexts/BackendConnectionContext';
+
 function App() {
   const router = createHashRouter(routes);
   const queryClient = new QueryClient();
@@ -14,10 +16,12 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="dark" storageKey="syfer-theme">
-        <RouterProvider router={router} />
-        <Toaster />
-      </ThemeProvider>
+      <BackendConnectionProvider>
+        <ThemeProvider defaultTheme="dark" storageKey="syfer-theme">
+          <RouterProvider router={router} />
+          <Toaster />
+        </ThemeProvider>
+      </BackendConnectionProvider>
     </QueryClientProvider>
   );
 }

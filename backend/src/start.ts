@@ -8,9 +8,6 @@ const logger = createLogger('Startup');
 const main = async (options?: { dbPath?: string }) => {
   logger.info('Starting backend service...');
 
-  // Kill any existing process on port 11434
-  await killPort(11434);
-
   // Initialize database (synchronous)
   try {
     initDatabase(options?.dbPath);

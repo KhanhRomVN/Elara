@@ -67,6 +67,7 @@ export const startServer = async (retryCount = 0, maxRetries = 10): Promise<Serv
       logger.info(`[Server] Database initialized successfully at ${dbPath}`);
     } catch (err) {
       logger.error('[Server] Failed to initialize database:', err);
+      // Continue anyway? Or fail? failing might be safer but let's try to continue for now or return error
       return { success: false, error: 'Database initialization failed' };
     }
   }
@@ -109,6 +110,38 @@ export const startServer = async (retryCount = 0, maxRetries = 10): Promise<Serv
         server.on('error', async (e: any) => {
           if (e.code === 'EADDRINUSE') {
             server = null;
+
+            // Check if it's our own backend running
+            try {
+              // Try to hit the health endpoint
+              const protocol = config.tls.enable ? 'https' : 'http';
+              const healthUrl = `${protocol}://${host}:${port}/health`;
+
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 1000);
+
+              const res = await fetch(healthUrl, { signal: controller.signal });
+              clearTimeout(timeoutId);
+
+              if (res.ok) {
+                const data = await res.json();
+                if (data.status === 'ok') {
+                  logger.info(
+                    `[Server] Detected existing compatible backend on port ${port}. Using it.`,
+                  );
+                  resolve({
+                    success: true,
+                    port,
+                    https: config.tls.enable,
+                    message: 'Connected to existing backend',
+                  });
+                  return;
+                }
+              }
+            } catch (err) {
+              // Ignore error, assume it's not our backend or not healthy
+              logger.debug(`[Server] Port ${port} in use but health check failed:`, err);
+            }
 
             if (retryCount < maxRetries) {
               logger.info(`[Server] Port ${port} is already in use, trying port ${port + 1}...`);

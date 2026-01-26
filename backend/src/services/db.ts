@@ -9,7 +9,8 @@ export const initDatabase = (customPath?: string): void => {
   const dbPath = customPath || path.resolve(__dirname, '../../database.sqlite');
 
   try {
-    db = new Database(dbPath);
+    db = new Database(dbPath, { timeout: 10000 }); // Wait up to 10s for lock
+    db.pragma('journal_mode = WAL'); // Enable WAL mode for better concurrency
     logger.info(`Connected to SQLite database at ${dbPath}`);
     createTables();
   } catch (err) {

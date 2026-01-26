@@ -260,7 +260,14 @@ function getSourceCommand(profilePath: string, profileType: PlatformInfo['profil
 
 export const setupServerHandlers = () => {
   ipcMain.handle('server:start', async () => {
-    return await startServer();
+    const result = await startServer();
+    if (result.success && result.port) {
+      // Sync the port to config manager (in-memory only or persisted provided by implementation)
+      // This ensures getServerInfo() returns the correct port if we fell back to an existing one
+      const { updateProxyConfig } = await import('../server/config');
+      updateProxyConfig({ port: result.port });
+    }
+    return result;
   });
 
   ipcMain.handle('server:stop', async () => {
