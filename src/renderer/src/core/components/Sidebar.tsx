@@ -17,6 +17,7 @@ import {
   Layers,
   Settings,
   Code2,
+  Palette,
 } from 'lucide-react';
 import { cn } from '../../shared/lib/utils';
 import { toast } from 'sonner';
@@ -29,6 +30,7 @@ interface SidebarProps {
 
 import { useBackendConnection } from '../contexts/BackendConnectionContext';
 import { WifiOff } from 'lucide-react';
+import ThemeDrawer from '../theme/components/ThemeDrawer';
 
 const Sidebar = ({ isCollapsed, setIsCollapsed }: SidebarProps) => {
   const { isConnected, currentUrl } = useBackendConnection();
@@ -37,6 +39,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }: SidebarProps) => {
   const [isChecking, setIsChecking] = React.useState(false);
   const [isUpdating, setIsUpdating] = React.useState(false);
   const [updateType, setUpdateType] = React.useState<'app' | 'resource' | 'none'>('none');
+  const [isThemeDrawerOpen, setIsThemeDrawerOpen] = React.useState(false);
 
   const navItems = [
     {
@@ -175,7 +178,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }: SidebarProps) => {
   return (
     <div
       className={cn(
-        'fixed left-0 top-0 h-full bg-sidebar border-r border-border flex flex-col transition-all duration-300',
+        'fixed left-0 top-0 h-full bg-sidebar-bg border-r border-border flex flex-col transition-all duration-300',
         isCollapsed ? 'w-[60px] p-2' : 'w-72 p-4',
       )}
     >
@@ -187,12 +190,22 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }: SidebarProps) => {
         ) : (
           <div className="flex items-center justify-between border-b border-border/50 pb-4 w-full">
             <h1 className="text-3xl font-bold tracking-tight text-primary">Elara</h1>
-            <button
-              onClick={() => setIsCollapsed(true)}
-              className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
-            >
-              <FoldHorizontal className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setIsThemeDrawerOpen(true)}
+                className="p-1.5 text-muted-foreground hover:text-primary hover:bg-sidebar-hover rounded-md transition-colors"
+                title="Theme Settings"
+              >
+                <Palette className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => setIsCollapsed(true)}
+                className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-sidebar-hover rounded-md transition-colors"
+                title="Collapse Sidebar"
+              >
+                <FoldHorizontal className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -212,7 +225,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }: SidebarProps) => {
                 <item.icon className="w-5 h-5 flex-shrink-0" />
                 {!isCollapsed && <span>{item.title}</span>}
                 {isCollapsed && (
-                  <div className="absolute left-full ml-2 px-2 py-1 bg-popover text-popover-foreground text-xs rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none bg-zinc-900 border border-border">
+                  <div className="absolute left-full ml-2 px-2 py-1 bg-popover text-popover-foreground text-xs rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none border border-border">
                     {item.title} (Disabled)
                   </div>
                 )}
@@ -230,7 +243,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }: SidebarProps) => {
                   'flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-md transition-colors relative group',
                   isActive
                     ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                    : 'text-muted-foreground hover:bg-sidebar-hover hover:text-foreground',
                   isCollapsed && 'justify-center px-2',
                 )
               }
@@ -257,13 +270,22 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }: SidebarProps) => {
       >
         {/* Unfold button at the bottom for collapsed state */}
         {isCollapsed && (
-          <button
-            onClick={() => setIsCollapsed(false)}
-            className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md transition-colors"
-            title="Expand Sidebar"
-          >
-            <UnfoldHorizontal className="w-5 h-5" />
-          </button>
+          <div className="flex flex-col items-center gap-2">
+            <button
+              onClick={() => setIsThemeDrawerOpen(true)}
+              className="p-2 text-muted-foreground hover:text-primary hover:bg-sidebar-hover rounded-md transition-colors"
+              title="Theme Settings"
+            >
+              <Palette className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => setIsCollapsed(false)}
+              className="p-2 text-muted-foreground hover:text-foreground hover:bg-sidebar-hover rounded-md transition-colors"
+              title="Expand Sidebar"
+            >
+              <UnfoldHorizontal className="w-5 h-5" />
+            </button>
+          </div>
         )}
 
         {!isCollapsed && !isConnected && (
@@ -335,6 +357,8 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }: SidebarProps) => {
           )
         )}
       </div>
+
+      <ThemeDrawer isOpen={isThemeDrawerOpen} onClose={() => setIsThemeDrawerOpen(false)} />
     </div>
   );
 };

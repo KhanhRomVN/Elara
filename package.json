@@ -74,6 +74,7 @@
     "electron-updater": "^6.1.7",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
+    "framer-motion": "^12.29.0",
     "fs-extra": "^11.3.3",
     "fuse.js": "^7.1.0",
     "helmet": "^8.1.0",

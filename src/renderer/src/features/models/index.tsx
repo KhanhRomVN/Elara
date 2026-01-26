@@ -305,6 +305,42 @@ export const ModelsPage = () => {
     setActiveDropdownId(null);
   };
 
+  // Metric Color Helpers
+  const getSuccessRateClass = (rate: number) => {
+    if (rate >= 95) return 'text-emerald-400 font-bold drop-shadow-[0_0_8px_rgba(52,211,153,0.3)]';
+    if (rate >= 80) return 'text-emerald-500/80';
+    if (rate >= 50) return 'text-amber-500/80';
+    if (rate > 0) return 'text-red-500/70';
+    return 'text-muted-foreground/50';
+  };
+
+  const getSequenceClass = (seq: number, maxSeq: number) => {
+    if (maxSeq <= 1) return 'text-primary';
+    const intensity = seq / maxSeq;
+    if (intensity >= 0.8)
+      return 'text-primary font-bold drop-shadow-[0_0_8px_rgba(var(--primary),0.4)]';
+    if (intensity >= 0.5) return 'text-primary/90 font-semibold';
+    if (intensity >= 0.2) return 'text-primary/70';
+    return 'text-primary/50';
+  };
+
+  const getMaxReqClass = (val: number) => {
+    if (val >= 100) return 'text-blue-400 font-bold';
+    if (val >= 50) return 'text-blue-500/80';
+    if (val >= 20) return 'text-zinc-300';
+    if (val > 0) return 'text-zinc-500';
+    return 'text-muted-foreground/50';
+  };
+
+  const getMaxTokenClass = (val: number) => {
+    if (val >= 128000)
+      return 'text-purple-400 font-bold drop-shadow-[0_0_8px_rgba(192,132,252,0.3)]';
+    if (val >= 32000) return 'text-purple-500/80';
+    if (val >= 8000) return 'text-zinc-300';
+    if (val > 0) return 'text-zinc-500';
+    return 'text-muted-foreground/50';
+  };
+
   // Sorting Handler
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -494,7 +530,7 @@ export const ModelsPage = () => {
                   </div>
                 </th>
                 <th className="h-12 px-4 align-middle font-medium text-muted-foreground w-[100px] text-center">
-                  SEQUENCE
+                  Sequence
                 </th>
                 <th className="h-12 px-4 align-middle font-medium text-muted-foreground w-[100px] text-center">
                   Actions
@@ -544,19 +580,32 @@ export const ModelsPage = () => {
                       </div>
                     </td>
                     <td className="px-4 py-1.5 align-middle text-center">
-                      <span className="text-sm">{model.success_rate || 0}%</span>
+                      <span className={cn('text-sm', getSuccessRateClass(model.success_rate || 0))}>
+                        {model.success_rate || 0}%
+                      </span>
                     </td>
                     <td className="px-4 py-1.5 align-middle text-center">
-                      <span className="text-sm">{model.max_req_conversation || 0}</span>
+                      <span
+                        className={cn('text-sm', getMaxReqClass(model.max_req_conversation || 0))}
+                      >
+                        {model.max_req_conversation || 0}
+                      </span>
                     </td>
                     <td className="px-4 py-1.5 align-middle text-center">
-                      <span className="text-sm">
+                      <span
+                        className={cn(
+                          'text-sm',
+                          getMaxTokenClass(model.max_token_conversation || 0),
+                        )}
+                      >
                         {(model.max_token_conversation || 0).toLocaleString()}
                       </span>
                     </td>
                     <td className="px-4 py-1.5 align-middle text-center">
                       {hasSequence ? (
-                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
+                        <span
+                          className={cn('text-sm font-bold', getSequenceClass(sequence, maxSeq))}
+                        >
                           {sequence}
                         </span>
                       ) : (
