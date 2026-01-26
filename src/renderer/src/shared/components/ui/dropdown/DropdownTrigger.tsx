@@ -1,6 +1,6 @@
 import React, { useContext } from 'react';
 import { DropdownTriggerProps } from './Dropdown.types';
-import { DropdownContext } from './Dropdown';
+import { DropdownContext } from './DropdownContext';
 import { cn } from '../../../lib/utils';
 
 const DropdownTrigger: React.FC<DropdownTriggerProps> = ({

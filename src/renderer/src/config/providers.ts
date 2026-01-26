@@ -69,23 +69,28 @@ export async function fetchProviders(port: number = 11434): Promise<ProviderConf
     const apiProviders = Array.isArray(data) ? data : data.data || [];
 
     // Transform API response to ProviderConfig format
-    cachedProviders = apiProviders.map((p: any) => ({
-      id: p.provider_id,
-      provider_id: p.provider_id,
-      name: p.provider_name,
-      provider_name: p.provider_name,
-      icon: getFaviconUrl(p.website),
-      active: p.is_enabled ?? false,
-      is_enabled: p.is_enabled ?? false,
-      website: p.website,
-      is_search: p.is_search,
-      is_upload: p.is_upload,
-      auth_methods: p.auth_methods || (p.auth_method ? [p.auth_method] : []),
-      detail_fetch_required: p.detail_fetch_required ?? false,
-      color: p.color,
-      conflict_search_with_upload: p.conflict_search_with_upload,
-      is_temperature: p.is_temperature ?? false,
-    }));
+    cachedProviders = apiProviders.map((p: any) => {
+      const originalIcon = getFaviconUrl(p.website);
+      const proxyIconUrl = `${baseUrl}/v1/accounts/proxy-icon?url=${encodeURIComponent(originalIcon)}`;
+
+      return {
+        id: p.provider_id,
+        provider_id: p.provider_id,
+        name: p.provider_name,
+        provider_name: p.provider_name,
+        icon: proxyIconUrl,
+        active: p.is_enabled ?? false,
+        is_enabled: p.is_enabled ?? false,
+        website: p.website,
+        is_search: p.is_search,
+        is_upload: p.is_upload,
+        auth_methods: p.auth_methods || (p.auth_method ? [p.auth_method] : []),
+        detail_fetch_required: p.detail_fetch_required ?? false,
+        color: p.color,
+        conflict_search_with_upload: p.conflict_search_with_upload,
+        is_temperature: p.is_temperature ?? false,
+      };
+    });
 
     return cachedProviders || [];
   } catch (e) {

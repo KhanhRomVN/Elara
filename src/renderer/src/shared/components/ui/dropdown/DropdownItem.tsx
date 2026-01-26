@@ -1,6 +1,6 @@
 import React, { useContext } from 'react';
 import { DropdownItemProps } from './Dropdown.types';
-import { DropdownContext } from './Dropdown';
+import { DropdownContext } from './DropdownContext';
 import { cn } from '../../../lib/utils';
 import { getIconSize } from './Dropdown.utils';
 

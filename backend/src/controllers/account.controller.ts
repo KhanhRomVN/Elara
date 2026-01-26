@@ -380,3 +380,33 @@ export const deleteAccount = async (
     });
   }
 };
+
+export const proxyIcon = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const url = req.query.url as string;
+    if (!url) {
+      res.status(400).send('URL is required');
+      return;
+    }
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      res.status(response.status).send('Failed to fetch icon');
+      return;
+    }
+
+    const contentType = response.headers.get('content-type');
+    if (contentType) {
+      res.setHeader('Content-Type', contentType);
+    }
+
+    // Cache icons for 1 hour
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+
+    const buffer = await response.arrayBuffer();
+    res.send(Buffer.from(buffer));
+  } catch (error) {
+    logger.error('Error in proxyIcon', error);
+    res.status(500).send('Internal Server Error');
+  }
+};
