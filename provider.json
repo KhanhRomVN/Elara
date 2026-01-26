@@ -94,7 +94,7 @@
   {
     "provider_id": "groq",
     "provider_name": "Groq",
-    "is_enabled": false,
+    "is_enabled": true,
     "website": "https://groq.com",
     "is_search": false,
     "is_upload": false,
@@ -134,7 +134,7 @@
   {
     "provider_id": "mistral",
     "provider_name": "Mistral",
-    "is_enabled": false,
+    "is_enabled": true,
     "website": "https://mistral.ai/",
     "is_search": false,
     "is_upload": false,
@@ -144,7 +144,7 @@
   {
     "provider_id": "perplexity",
     "provider_name": "Perplexity",
-    "is_enabled": false,
+    "is_enabled": true,
     "website": "https://www.perplexity.ai/",
     "is_search": false,
     "is_upload": false,
