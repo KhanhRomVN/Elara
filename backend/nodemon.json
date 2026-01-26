@@ -2,7 +2,7 @@
   "watch": ["src"],
   "ext": "ts,js,json",
   "ignore": ["node_modules", "src/**/*.spec.ts", "coverage", "dist"],
-  "exec": "ts-node -r tsconfig-paths/register ./src/start.ts",
+  "exec": "ts-node -r tsconfig-paths/register -r dotenv/config ./src/start.ts",
   "env": {
     "NODE_ENV": "development"
   }

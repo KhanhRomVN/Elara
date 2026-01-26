@@ -1,8 +1,11 @@
 import { ipcMain } from 'electron';
-import { statsManager } from '../core/stats';
+import { getAllAccountStats, getAllProviderModelStats } from '@backend/services/stats.service';
 
 export const setupStatsHandlers = () => {
   ipcMain.handle('stats:get', () => {
-    return statsManager.getStats();
+    return {
+      accounts: getAllAccountStats(),
+      models: getAllProviderModelStats(),
+    };
   });
 };

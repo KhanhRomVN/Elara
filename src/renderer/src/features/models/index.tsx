@@ -12,10 +12,13 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 import { cn } from '../../shared/lib/utils';
 import { getApiBaseUrl } from '../../utils/apiUrl';
 import { CustomSelect } from '../playground/components/CustomSelect';
+import { Favicon } from '../../shared/utils/faviconUtils';
 
 interface Model {
   id: string;
@@ -28,6 +31,7 @@ interface Provider {
   provider_id: string;
   provider_name: string;
   is_enabled: boolean;
+  website?: string;
   models?: Model[];
 }
 
@@ -38,6 +42,10 @@ interface FlatModel {
   provider_name: string;
   is_enabled: boolean;
   sequence?: number;
+  success_rate?: number;
+  max_req_conversation?: number;
+  max_token_conversation?: number;
+  website?: string; // Cache website for favicon
 }
 
 interface ModelSequence {
@@ -45,6 +53,9 @@ interface ModelSequence {
   provider_id: string;
   sequence: number;
 }
+
+type SortKey = 'success_rate' | 'max_req_conversation' | 'max_token_conversation' | '';
+type SortDirection = 'asc' | 'desc' | 'none';
 
 export const ModelsPage = () => {
   const [flatModels, setFlatModels] = useState<FlatModel[]>([]);
@@ -65,6 +76,10 @@ export const ModelsPage = () => {
   const [maxHeight, setMaxHeight] = useState<number | string>('600px');
   const tableContainerRef = useRef<HTMLDivElement>(null);
 
+  // Sorting state
+  const [sortKey, setSortKey] = useState<SortKey>('');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('none');
+
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -76,7 +91,7 @@ export const ModelsPage = () => {
       // Constants for heights
       const headerHeight = 48; // h-12
       const footerHeight = 65; // Pagination footer height
-      const rowHeight = 41; // Height of py-1.5 row
+      const rowHeight = 50; // Increased for favicon
       const padding = 16; // Safety padding
 
       // Calculate available height within the container
@@ -155,13 +170,17 @@ export const ModelsPage = () => {
 
         providersList.forEach((provider) => {
           if (provider.models && provider.models.length > 0) {
-            provider.models.forEach((model) => {
+            provider.models.forEach((model: any) => {
               models.push({
                 model_id: model.id || model.name,
                 model_name: model.name,
                 provider_id: provider.provider_id,
                 provider_name: provider.provider_name,
                 is_enabled: provider.is_enabled !== false, // Default to true if undefined
+                success_rate: model.success_rate, // Updated mapping
+                max_req_conversation: model.max_req_conversation,
+                max_token_conversation: model.max_token_conversation,
+                website: provider.website,
               });
             });
           }
@@ -195,12 +214,15 @@ export const ModelsPage = () => {
   }, [searchQuery, selectedProviderId]);
 
   const getModelSequence = (modelId: string, providerId: string): number | undefined => {
-    const seq = sequences.find((s) => s.model_id === modelId && s.provider_id === providerId);
+    const seq = sequences.find(
+      (s) =>
+        s.model_id.toLowerCase() === modelId.toLowerCase() &&
+        s.provider_id.toLowerCase() === providerId.toLowerCase(),
+    );
     return seq?.sequence;
   };
 
   const getMaxSequence = (): number => {
-    if (sequences.length === 0) return 0;
     return Math.max(...sequences.map((s) => s.sequence));
   };
 
@@ -283,6 +305,33 @@ export const ModelsPage = () => {
     setActiveDropdownId(null);
   };
 
+  // Sorting Handler
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      // Toggle: asc -> desc -> none
+      if (sortDirection === 'asc') setSortDirection('desc');
+      else if (sortDirection === 'desc') setSortDirection('none');
+      else setSortDirection('asc'); // none -> asc
+    } else {
+      setSortKey(key);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortIcon = (key: SortKey) => {
+    if (sortKey !== key || sortDirection === 'none')
+      return <ArrowDownUp className="w-3 h-3 ml-1" />;
+    if (sortDirection === 'asc') return <ChevronUp className="w-3 h-3 ml-1" />;
+    return <ChevronDown className="w-3 h-3 ml-1" />;
+  };
+
+  const getSortColorClass = (key: SortKey) => {
+    if (sortKey !== key || sortDirection === 'none')
+      return 'text-muted-foreground hover:text-foreground';
+    if (sortDirection === 'asc') return 'text-green-500 hover:text-green-600';
+    return 'text-red-500 hover:text-red-600';
+  };
+
   // Filter models
   const filteredModels = flatModels.filter((model) => {
     // Search query filter
@@ -297,28 +346,31 @@ export const ModelsPage = () => {
     return matchesSearch && matchesProvider;
   });
 
-  // Sort models:
-  // 1. Sequence (ascending)
-  // 2. Provider Enabled (enabled first)
-  // 3. Model ID (alphabetical)
+  // Sort models
   const sortedModels = [...filteredModels].sort((a, b) => {
+    // 1. Custom Stats Sorting
+    if (sortDirection !== 'none' && sortKey) {
+      const valA = a[sortKey] || 0;
+      const valB = b[sortKey] || 0;
+
+      if (valA !== valB) {
+        return sortDirection === 'asc' ? valA - valB : valB - valA;
+      }
+    }
+
+    // 2. Default Prioritized Sorting
     const seqA = getModelSequence(a.model_id, a.provider_id);
     const seqB = getModelSequence(b.model_id, b.provider_id);
 
-    // 1. Priority: Sequence
-    if (seqA !== undefined && seqB !== undefined) {
-      return seqA - seqB;
-    }
-    // Items with sequence come first
+    // Sequence priority
+    if (seqA !== undefined && seqB !== undefined) return seqA - seqB;
     if (seqA !== undefined) return -1;
     if (seqB !== undefined) return 1;
 
-    // 2. Priority: Provider enabled status (disabled at bottom)
-    if (a.is_enabled !== b.is_enabled) {
-      return a.is_enabled ? -1 : 1;
-    }
+    // Enabled status priority
+    if (a.is_enabled !== b.is_enabled) return a.is_enabled ? -1 : 1;
 
-    // 3. Priority: Alphabetical
+    // Alphabetical
     return a.model_id.localeCompare(b.model_id);
   });
 
@@ -404,11 +456,42 @@ export const ModelsPage = () => {
                 <th className="h-12 px-4 align-middle font-medium text-muted-foreground w-[60px] text-center">
                   STT
                 </th>
-                <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
-                  MODEL ID
+                <th className="h-12 px-4 align-middle font-medium text-muted-foreground">Model</th>
+                <th
+                  className={cn(
+                    'h-12 px-4 align-middle font-medium cursor-pointer text-center select-none transition-colors',
+                    getSortColorClass('success_rate'),
+                  )}
+                  onClick={() => handleSort('success_rate')}
+                >
+                  <div className="flex items-center justify-center">
+                    Success Rate
+                    {getSortIcon('success_rate')}
+                  </div>
                 </th>
-                <th className="h-12 px-4 align-middle font-medium text-muted-foreground">
-                  PROVIDER ID
+                <th
+                  className={cn(
+                    'h-12 px-4 align-middle font-medium cursor-pointer text-center select-none transition-colors',
+                    getSortColorClass('max_req_conversation'),
+                  )}
+                  onClick={() => handleSort('max_req_conversation')}
+                >
+                  <div className="flex items-center justify-center">
+                    Max Req/Conv
+                    {getSortIcon('max_req_conversation')}
+                  </div>
+                </th>
+                <th
+                  className={cn(
+                    'h-12 px-4 align-middle font-medium cursor-pointer text-center select-none transition-colors',
+                    getSortColorClass('max_token_conversation'),
+                  )}
+                  onClick={() => handleSort('max_token_conversation')}
+                >
+                  <div className="flex items-center justify-center">
+                    Max Token/Conv
+                    {getSortIcon('max_token_conversation')}
+                  </div>
                 </th>
                 <th className="h-12 px-4 align-middle font-medium text-muted-foreground w-[100px] text-center">
                   SEQUENCE
@@ -421,7 +504,7 @@ export const ModelsPage = () => {
             <tbody className="[&_tr:last-child]:border-0">
               {paginatedModels.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="h-24 text-center text-muted-foreground">
+                  <td colSpan={7} className="h-24 text-center text-muted-foreground">
                     No models available.
                   </td>
                 </tr>
@@ -445,10 +528,27 @@ export const ModelsPage = () => {
                       {absoluteIndex}
                     </td>
                     <td className="px-4 py-1.5 align-middle">
-                      <span className="font-mono text-sm">{model.model_id}</span>
+                      <div className="flex items-center gap-3">
+                        <Favicon url={model.website} size={24} className="rounded-sm" />
+                        <div className="flex flex-col">
+                          <div className="text-sm font-medium">
+                            <span className="text-primary/70">{model.provider_id}</span>
+                            <span className="mx-1 text-muted-foreground">|</span>
+                            <span>{model.model_id}</span>
+                          </div>
+                        </div>
+                      </div>
                     </td>
-                    <td className="px-4 py-1.5 align-middle">
-                      <span className="text-sm text-muted-foreground">{model.provider_id}</span>
+                    <td className="px-4 py-1.5 align-middle text-center">
+                      <span className="text-sm">{model.success_rate || 0}%</span>
+                    </td>
+                    <td className="px-4 py-1.5 align-middle text-center">
+                      <span className="text-sm">{model.max_req_conversation || 0}</span>
+                    </td>
+                    <td className="px-4 py-1.5 align-middle text-center">
+                      <span className="text-sm">
+                        {(model.max_token_conversation || 0).toLocaleString()}
+                      </span>
                     </td>
                     <td className="px-4 py-1.5 align-middle text-center">
                       {hasSequence ? (
@@ -498,11 +598,6 @@ export const ModelsPage = () => {
                                   <Trash2 className="mr-2 h-4 w-4" />
                                   Remove sequence
                                 </button>
-                              )}
-                              {!hasSequence && maxSeq === 0 && (
-                                <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                                  No actions available
-                                </div>
                               )}
                             </div>
                           </div>

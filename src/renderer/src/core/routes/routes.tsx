@@ -10,6 +10,8 @@ import MCPPage from '../../features/mcp';
 import ExtendedPage from '../../features/extended';
 import SettingsPage from '../../features/setting';
 
+import Dashboard from '../../features/dashboard';
+
 export const routes: RouteObject[] = [
   {
     path: '/',
@@ -17,7 +19,7 @@ export const routes: RouteObject[] = [
     children: [
       {
         path: '',
-        element: <AccountsPage />,
+        element: <Dashboard />,
       },
       {
         path: 'accounts',

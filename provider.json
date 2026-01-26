@@ -154,7 +154,7 @@
   {
     "provider_id": "qwen",
     "provider_name": "Qwen",
-    "is_enabled": false,
+    "is_enabled": true,
     "website": "https://qwenlm.ai/",
     "is_search": false,
     "is_upload": false,

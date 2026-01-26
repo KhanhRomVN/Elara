@@ -14,7 +14,7 @@ export interface ServerConfig {
 
 // Default configuration
 export const defaultConfig: ServerConfig = {
-  port: 11434,
+  port: parseInt(process.env.PORT || '11434', 10),
   host: '0.0.0.0',
   tls: {
     enable: false,

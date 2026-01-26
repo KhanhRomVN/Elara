@@ -36,148 +36,198 @@ function isStatsEnabled(): boolean {
   }
 }
 
-export async function recordRequest(accountId: string, providerId: string) {
-  if (!isStatsEnabled()) return;
+export async function recordRequest(
+  accountId: string,
+  providerId: string,
+  modelId: string,
+  conversationId?: string,
+) {
+  if (!isStatsEnabled()) {
+    console.log('[Stats] Stats collection disabled');
+    return;
+  }
+  console.log('[Stats] Recording request for', accountId, providerId, modelId);
   const db = getDb();
-  const components = getCurrentGMTComponents();
+  const now = Date.now();
 
   try {
-    // Update Account Stats
+    // 1. Update Account Stats
     db.prepare(
       `
-      INSERT INTO accounts_stats (account_id, total_requests, year_requests, month_requests, week_requests, day_requests, last_reset_year, last_reset_month, last_reset_week, last_reset_day)
-      VALUES (?, 1, 1, 1, 1, 1, ?, ?, ?, ?)
-      ON CONFLICT(account_id) DO UPDATE SET
-        year_requests = CASE WHEN last_reset_year != excluded.last_reset_year THEN 1 ELSE year_requests + 1 END,
-        month_requests = CASE WHEN last_reset_month != excluded.last_reset_month THEN 1 ELSE month_requests + 1 END,
-        week_requests = CASE WHEN last_reset_week != excluded.last_reset_week THEN 1 ELSE week_requests + 1 END,
-        day_requests = CASE WHEN last_reset_day != excluded.last_reset_day THEN 1 ELSE day_requests + 1 END,
-        total_requests = total_requests + 1,
-        last_reset_year = excluded.last_reset_year,
-        last_reset_month = excluded.last_reset_month,
-        last_reset_week = excluded.last_reset_week,
-        last_reset_day = excluded.last_reset_day
+      UPDATE accounts SET
+        total_requests = total_requests + 1
+      WHERE id = ?
     `,
-    ).run(
-      accountId,
-      components.year,
-      components.month,
-      components.week,
-      components.day,
-    );
+    ).run(accountId);
 
-    // Update Provider Stats
+    // 2. Upsert Provider Model Stats
     db.prepare(
       `
-      INSERT INTO providers_stats (provider_id, total_requests, year_requests, month_requests, week_requests, day_requests, last_reset_year, last_reset_month, last_reset_week, last_reset_day)
-      VALUES (?, 1, 1, 1, 1, 1, ?, ?, ?, ?)
-      ON CONFLICT(provider_id) DO UPDATE SET
-        year_requests = CASE WHEN last_reset_year != excluded.last_reset_year THEN 1 ELSE year_requests + 1 END,
-        month_requests = CASE WHEN last_reset_month != excluded.last_reset_month THEN 1 ELSE month_requests + 1 END,
-        week_requests = CASE WHEN last_reset_week != excluded.last_reset_week THEN 1 ELSE week_requests + 1 END,
-        day_requests = CASE WHEN last_reset_day != excluded.last_reset_day THEN 1 ELSE day_requests + 1 END,
+      INSERT INTO provider_models (
+        provider_id, model_id, model_name, updated_at, total_requests, successful_requests, max_req_conversation, max_token_conversation
+      ) VALUES (?, ?, ?, ?, 1, 0, 0, 0)
+      ON CONFLICT(provider_id, model_id) DO UPDATE SET
         total_requests = total_requests + 1,
-        last_reset_year = excluded.last_reset_year,
-        last_reset_month = excluded.last_reset_month,
-        last_reset_week = excluded.last_reset_week,
-        last_reset_day = excluded.last_reset_day
+        updated_at = excluded.updated_at
     `,
-    ).run(
-      providerId,
-      components.year,
-      components.month,
-      components.week,
-      components.day,
-    );
+    ).run(providerId, modelId, modelId, now);
+
+    // 3. Track Conversation Stats (Max Request Check)
+    if (conversationId) {
+      // Upsert conversation stats
+      db.prepare(
+        `
+         INSERT INTO conversation_stats (conversation_id, total_requests, total_tokens, updated_at)
+         VALUES (?, 1, 0, ?)
+         ON CONFLICT(conversation_id) DO UPDATE SET
+           total_requests = total_requests + 1,
+           updated_at = excluded.updated_at
+       `,
+      ).run(conversationId, now);
+
+      // Get current total requests for this conversation
+      const convStats = db
+        .prepare(
+          'SELECT total_requests FROM conversation_stats WHERE conversation_id = ?',
+        )
+        .get(conversationId) as any;
+
+      if (convStats) {
+        // Update max_req_conversation for provider_models if current is higher
+        db.prepare(
+          `
+           UPDATE provider_models SET
+             max_req_conversation = MAX(max_req_conversation, ?)
+           WHERE provider_id = ? AND model_id = ?
+         `,
+        ).run(convStats.total_requests, providerId, modelId);
+      }
+    }
   } catch (error) {
     logger.error('Error updating request stats:', error);
+  }
+}
+
+// Helper to record conversation stats (isolated for late-binding ID)
+export function recordConversationRequest(
+  conversationId: string,
+  providerId: string,
+  modelId: string,
+) {
+  if (!isStatsEnabled() || !conversationId) return;
+  const db = getDb();
+  const now = Date.now();
+
+  try {
+    // Upsert conversation stats
+    db.prepare(
+      `
+       INSERT INTO conversation_stats (conversation_id, total_requests, total_tokens, updated_at)
+       VALUES (?, 1, 0, ?)
+       ON CONFLICT(conversation_id) DO UPDATE SET
+         total_requests = total_requests + 1,
+         updated_at = excluded.updated_at
+     `,
+    ).run(conversationId, now);
+
+    // Get current total requests for this conversation
+    const convStats = db
+      .prepare(
+        'SELECT total_requests FROM conversation_stats WHERE conversation_id = ?',
+      )
+      .get(conversationId) as any;
+
+    if (convStats) {
+      // Update max_req_conversation for provider_models if current is higher
+      db.prepare(
+        `
+         UPDATE provider_models SET
+           max_req_conversation = MAX(max_req_conversation, ?)
+         WHERE provider_id = ? AND model_id = ?
+       `,
+      ).run(convStats.total_requests, providerId, modelId);
+    }
+  } catch (error) {
+    logger.error('Error updating conversation request stats:', error);
   }
 }
 
 export async function recordSuccess(
   accountId: string,
   providerId: string,
+  modelId: string,
   tokens: number,
+  conversationId?: string,
 ) {
   if (!isStatsEnabled()) return;
+  console.log('[Stats] Recording success for', accountId, tokens);
   const db = getDb();
-  const components = getCurrentGMTComponents();
+  const now = Date.now();
 
   try {
-    // Update Account Tokens and Successful Requests
+    // 1. Update Account Success Stats
     db.prepare(
       `
-      UPDATE accounts_stats SET
-        year_tokens = CASE WHEN last_reset_year != ? THEN ? ELSE year_tokens + ? END,
-        month_tokens = CASE WHEN last_reset_month != ? THEN ? ELSE month_tokens + ? END,
-        week_tokens = CASE WHEN last_reset_week != ? THEN ? ELSE week_tokens + ? END,
-        day_tokens = CASE WHEN last_reset_day != ? THEN ? ELSE day_tokens + ? END,
-        total_tokens = total_tokens + ?,
-        successful_requests = successful_requests + 1,
-        last_reset_year = ?,
-        last_reset_month = ?,
-        last_reset_week = ?,
-        last_reset_day = ?
-      WHERE account_id = ?
+      UPDATE accounts SET
+        successful_requests = successful_requests + 1
+      WHERE id = ?
     `,
-    ).run(
-      components.year,
-      tokens,
-      tokens,
-      components.month,
-      tokens,
-      tokens,
-      components.week,
-      tokens,
-      tokens,
-      components.day,
-      tokens,
-      tokens,
-      tokens,
-      components.year,
-      components.month,
-      components.week,
-      components.day,
-      accountId,
-    );
+    ).run(accountId);
 
-    // Update Provider Tokens and Successful Requests
+    // 2. Upsert Provider Models Success Stats
     db.prepare(
       `
-      UPDATE providers_stats SET
-        year_tokens = CASE WHEN last_reset_year != ? THEN ? ELSE year_tokens + ? END,
-        month_tokens = CASE WHEN last_reset_month != ? THEN ? ELSE month_tokens + ? END,
-        week_tokens = CASE WHEN last_reset_week != ? THEN ? ELSE week_tokens + ? END,
-        day_tokens = CASE WHEN last_reset_day != ? THEN ? ELSE day_tokens + ? END,
-        total_tokens = total_tokens + ?,
+      INSERT INTO provider_models (
+        provider_id, model_id, model_name, updated_at, total_requests, successful_requests, max_req_conversation, max_token_conversation
+      ) VALUES (?, ?, ?, ?, 0, 1, 0, 0)
+      ON CONFLICT(provider_id, model_id) DO UPDATE SET
         successful_requests = successful_requests + 1,
-        last_reset_year = ?,
-        last_reset_month = ?,
-        last_reset_week = ?,
-        last_reset_day = ?
-      WHERE provider_id = ?
+        updated_at = excluded.updated_at
     `,
-    ).run(
-      components.year,
-      tokens,
-      tokens,
-      components.month,
-      tokens,
-      tokens,
-      components.week,
-      tokens,
-      tokens,
-      components.day,
-      tokens,
-      tokens,
-      tokens,
-      components.year,
-      components.month,
-      components.week,
-      components.day,
-      providerId,
-    );
+    ).run(providerId, modelId, modelId, now);
+
+    // 3. Track Conversation Stats (Max Token Check)
+    if (conversationId) {
+      // Upsert conversation stats
+      db.prepare(
+        `
+         INSERT INTO conversation_stats (conversation_id, total_requests, total_tokens, updated_at)
+         VALUES (?, 0, ?, ?)
+         ON CONFLICT(conversation_id) DO UPDATE SET
+           total_tokens = total_tokens + ?,
+           updated_at = excluded.updated_at
+       `,
+      ).run(conversationId, tokens, now, tokens);
+
+      // Get current total tokens for this conversation
+      const convStats = db
+        .prepare(
+          'SELECT total_tokens FROM conversation_stats WHERE conversation_id = ?',
+        )
+        .get(conversationId) as any;
+
+      if (convStats) {
+        // Update max_token_conversation for provider_models if current is higher
+        db.prepare(
+          `
+           UPDATE provider_models SET
+             max_token_conversation = MAX(max_token_conversation, ?)
+           WHERE provider_id = ? AND model_id = ?
+         `,
+        ).run(convStats.total_tokens, providerId, modelId);
+      }
+    }
   } catch (error) {
     logger.error('Error updating success stats:', error);
   }
+}
+
+export function getAllAccountStats() {
+  const db = getDb();
+  return db.prepare('SELECT * FROM accounts').all();
+}
+
+export function getAllProviderModelStats() {
+  const db = getDb();
+  return db.prepare('SELECT * FROM provider_models').all();
 }

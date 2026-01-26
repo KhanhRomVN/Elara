@@ -25,6 +25,9 @@ export interface Provider {
     name: string;
     is_thinking?: boolean;
     context_length?: number | null;
+    success_rate?: number;
+    max_req_conversation?: number;
+    max_token_conversation?: number;
   }[];
 }
 
@@ -127,6 +130,16 @@ export const getAllProviders = async (): Promise<Provider[]> => {
     total_accounts: number;
   }[];
 
+  // Get model stats from DB
+  const dbModelStats = db
+    .prepare('SELECT * FROM provider_models')
+    .all() as any[];
+  const modelStatsMap = new Map<string, any>();
+  dbModelStats.forEach((stat) => {
+    // Key: provider_id:model_id (using lowercase for safer matching if needed, but IDs should be consistent)
+    modelStatsMap.set(`${stat.provider_id}:${stat.model_id}`, stat);
+  });
+
   // Use lowercase keys for case-insensitive matching
   const countsMap = new Map(
     dbProviders.map((p) => [p.id.toLowerCase(), p.total_accounts]),
@@ -157,10 +170,30 @@ export const getAllProviders = async (): Promise<Provider[]> => {
       }
     }
 
+    // Merge stats into models
+    let modelsWithStats: any[] | undefined = undefined;
+    if (models && Array.isArray(models)) {
+      modelsWithStats = models.map((m: any) => {
+        const stats =
+          modelStatsMap.get(`${p.provider_id}:${m.id || m.model_id}`) || {};
+        const total = stats.total_requests || 0;
+        const success = stats.successful_requests || 0;
+        const successRate = total > 0 ? Math.round((success / total) * 100) : 0;
+
+        // Filter out internal fields if necessary, or just spread
+        return {
+          ...m,
+          success_rate: successRate,
+          max_req_conversation: stats.max_req_conversation || 0,
+          max_token_conversation: stats.max_token_conversation || 0,
+        };
+      });
+    }
+
     providersWithModels.push({
       ...p,
       total_accounts: countsMap.get(p.provider_id.toLowerCase()) || 0,
-      models: models || undefined,
+      models: modelsWithStats,
     });
   }
 

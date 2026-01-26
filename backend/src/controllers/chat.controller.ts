@@ -7,7 +7,11 @@ import {
 } from '../services/chat.service';
 import { createLogger } from '../utils/logger';
 import crypto from 'crypto';
-import { recordRequest, recordSuccess } from '../services/stats.service';
+import {
+  recordRequest,
+  recordSuccess,
+  recordConversationRequest,
+} from '../services/stats.service';
 import { ChatRequest } from '../types';
 
 import {
@@ -279,7 +283,14 @@ export const completionController = async (
     }
 
     // Record request start
-    recordRequest(account.id, account.provider_id);
+    recordRequest(
+      account.id,
+      account.provider_id,
+      model || 'unknown',
+      conversation_id,
+    );
+
+    let activeConversationId = conversation_id;
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -314,10 +325,27 @@ export const completionController = async (
       onThinking: (content) => {
         res.write(`data: ${JSON.stringify({ thinking: content })}\n\n`);
       },
+      onSessionCreated: (sessionId) => {
+        if (!activeConversationId) {
+          recordConversationRequest(
+            sessionId,
+            account.provider_id,
+            model || 'unknown',
+          );
+        }
+        activeConversationId = sessionId;
+        res.write(`event: session_created\ndata: ${sessionId}\n\n`);
+      },
       onDone: () => {
         // Record success
         const tokens = accumulatedMetadata.total_token || 0;
-        recordSuccess(account.id, account.provider_id, tokens);
+        recordSuccess(
+          account.id,
+          account.provider_id,
+          model || 'unknown',
+          tokens,
+          activeConversationId,
+        );
 
         res.write('data: [DONE]\n\n');
         res.end();
@@ -329,9 +357,6 @@ export const completionController = async (
           );
           res.end();
         }
-      },
-      onSessionCreated: (sessionId) => {
-        res.write(`event: session_created\ndata: ${sessionId}\n\n`);
       },
     });
   } catch (error: any) {
@@ -483,6 +508,7 @@ export const sendMessageController = async (
 
     let accumulatedContent = '';
     let accumulatedMetadata: any = { accountId: account.id };
+    let activeConversationId = conversationId;
 
     try {
       const startTime = Date.now();
@@ -496,6 +522,7 @@ export const sendMessageController = async (
         }
       };
 
+      recordRequest(account.id, account.provider_id, model, conversationId);
       await sendMessage({
         credential: account.credential,
         provider_id: account.provider_id,
@@ -532,8 +559,22 @@ export const sendMessageController = async (
         },
         onDone: () => {
           // Record success
-          const tokens = (accumulatedMetadata as any).total_token || 0;
-          recordSuccess(account.id, account.provider_id, tokens);
+          let tokens = (accumulatedMetadata as any).total_token || 0;
+
+          // Fallback: Calculate tokens manually if provider didn't return usage
+          if (tokens === 0) {
+            const inputTokens = countMessagesTokens(messages);
+            const outputTokens = countTokens(accumulatedContent);
+            tokens = inputTokens + outputTokens;
+          }
+
+          recordSuccess(
+            account.id,
+            account.provider_id,
+            model,
+            tokens,
+            activeConversationId,
+          );
 
           if (stream !== false) {
             res.write('data: [DONE]\n\n');
@@ -552,6 +593,11 @@ export const sendMessageController = async (
           }
         },
         onSessionCreated: (sessionId) => {
+          if (!activeConversationId) {
+            recordConversationRequest(sessionId, account.provider_id, model);
+          }
+          activeConversationId = sessionId;
+
           if (stream !== false) {
             res.write(`event: session_created\ndata: ${sessionId}\n\n`);
           } else {
@@ -746,6 +792,7 @@ export const claudeMessagesController = async (
         })}\n\n`,
       );
 
+      recordRequest(account.id, account.provider_id, finalModel, undefined);
       await sendMessage({
         credential: account.credential,
         provider_id: account.provider_id,
@@ -787,6 +834,7 @@ export const claudeMessagesController = async (
         },
       });
     } else {
+      recordRequest(account.id, account.provider_id, finalModel, undefined);
       await sendMessage({
         credential: account.credential,
         provider_id: account.provider_id,

@@ -11,8 +11,6 @@ const main = async (options?: { dbPath?: string }) => {
   // Kill any existing process on port 11434
   await killPort(11434);
 
-  // We can load environment variables here if needed
-
   // Initialize database (synchronous)
   try {
     initDatabase(options?.dbPath);
