@@ -96,10 +96,12 @@ const ToolBlock = React.memo(
     tagName,
     tagContent,
     status = 'success',
+    additionalMetadata,
   }: {
     tagName: string;
     tagContent: string;
     status?: string;
+    additionalMetadata?: string;
   }) => {
     const args = parseTagArguments(tagContent);
 
@@ -180,6 +182,9 @@ const ToolBlock = React.memo(
         const blocks = tagContent.match(/<<<<<<< SEARCH[\s\S]*?>>>>>>> REPLACE/g);
         return `Update ${blocks?.length || 0} blocks`;
       }
+      if (tagName === 'read_file') {
+        if (additionalMetadata) return additionalMetadata;
+      }
       return null;
     };
 
@@ -224,20 +229,28 @@ const ToolBlock = React.memo(
                     key={idx}
                     flexDirection="column"
                     marginBottom={1}
-                    paddingX={1}
-                    backgroundColor="#262626"
+                    paddingX={0}
+                    backgroundColor="#1e1e1e"
                   >
                     {searchLines.map((line, i) => (
-                      <Box key={`search-${i}`} flexDirection="row">
-                        <Text color="red">- </Text>
-                        <CLIHighlighter code={line} language={args.path} />
-                      </Box>
+                      <CodeLine
+                        key={`search-${i}`}
+                        code={line}
+                        lineNumber={i + 1}
+                        language={args.path}
+                        bgColor="#220505"
+                        paddingX={0}
+                      />
                     ))}
                     {replaceLines.map((line, i) => (
-                      <Box key={`replace-${i}`} flexDirection="row">
-                        <Text color="green">+ </Text>
-                        <CLIHighlighter code={line} language={args.path} />
-                      </Box>
+                      <CodeLine
+                        key={`replace-${i}`}
+                        code={line}
+                        lineNumber={i + 1}
+                        language={args.path}
+                        bgColor="#072322"
+                        paddingX={0}
+                      />
                     ))}
                   </Box>
                 );
@@ -247,20 +260,35 @@ const ToolBlock = React.memo(
 
         {tagName === 'write_to_file' && args.content && (
           <Box marginLeft={2} marginTop={1}>
-            <Box flexDirection="column" paddingX={1} paddingY={0} backgroundColor="#262626">
-              <Box justifyContent="space-between" marginBottom={0}>
+            <Box flexDirection="column" paddingX={0} paddingY={0} backgroundColor="#1e1e1e">
+              <Box justifyContent="space-between" marginBottom={0} paddingX={1}>
                 <Text> </Text>
                 <Text color="gray" dimColor italic>
                   {getIconForFile(args.path || '')} {args.path || 'file'}
                 </Text>
               </Box>
-              <CLIHighlighter
-                code={
-                  args.content.split('\n').slice(0, 15).join('\n') +
-                  (args.content.split('\n').length > 15 ? '\n...' : '')
-                }
-                language={args.path}
-              />
+              <Box flexDirection="column" paddingX={0}>
+                {args.content
+                  .split('\n')
+                  .slice(0, 15)
+                  .map((line, i) => (
+                    <CodeLine
+                      key={`write-${i}`}
+                      code={line}
+                      lineNumber={i + 1}
+                      language={args.path}
+                      bgColor="#1e1e1e"
+                      paddingX={0}
+                    />
+                  ))}
+                {args.content.split('\n').length > 15 && (
+                  <Box paddingX={1} paddingY={0.5}>
+                    <Text color="gray" italic>
+                      ...
+                    </Text>
+                  </Box>
+                )}
+              </Box>
             </Box>
           </Box>
         )}
@@ -279,44 +307,96 @@ const ToolBlock = React.memo(
 
 const CLIHighlighter = React.memo(({ code, language }: { code: string; language?: string }) => {
   const keywords =
-    /\b(function|const|let|var|return|if|else|for|while|do|class|export|import|from|static|async|await|try|catch|type|interface|enum|public|private|protected|readonly|new|implements|extends)\b/g;
-  const strings = /(['"`])[\s\S]*?\1/g;
+    /\b(function|const|let|var|return|if|else|for|while|do|class|export|import|from|static|async|await|try|catch|type|interface|enum|public|private|protected|readonly|new|implements|extends|as|of|in|yield|await|break|continue|default|switch|case|throw|finally)\b/g;
+  const types = /\b(string|number|boolean|any|void|unknown|never|object|Symbol|bigint)\b/g;
+  const booleans = /\b(true|false|null|undefined)\b/g;
   const numbers = /\b\d+(\.\d+)?\b/g;
-  const comments = /(\/\/.*)/g;
+  const operators = /([\+\-\*\/\=%&\|\^!<> \?\:\[\]\{\}]+)/g;
 
-  // Split by keywords, strings, comments to apply colors
-  const parts = code.split(/(\/\/.*|['"`][\s\S]*?['"`]|\b\w+\b)/g);
+  // Split logic needs to be more robust to handle overlapping patterns
+  // We'll use a single regex with groups to capture everything in order
+  const tokens = code.split(/(\/\/.*|['"`][\s\S]*?['"`]|\b\w+\b|[^\w\s])/g);
 
   try {
     return (
-      <Text color="white">
-        {parts.map((part, i) => {
-          if (!part) return null;
-          if (part.startsWith('//'))
+      <Text color="#d4d4d4">
+        {tokens.map((token, i) => {
+          if (!token) return null;
+
+          // Comments - Gray
+          if (token.startsWith('//')) {
             return (
-              <Text key={i} color="gray" italic>
-                {part}
+              <Text key={i} color="#6a9955" italic>
+                {token}
               </Text>
             );
-          if (/^['"`]/.test(part))
+          }
+
+          // Strings - Orange/Brownish
+          if (/^['"`]/.test(token)) {
             return (
-              <Text key={i} color="green">
-                {part}
+              <Text key={i} color="#ce9178">
+                {token}
               </Text>
             );
-          if (keywords.test(part))
+          }
+
+          // Keywords - Blue
+          if (new RegExp(`^${keywords.source}$`).test(token)) {
             return (
-              <Text key={i} color="cyan" bold>
-                {part}
+              <Text key={i} color="#569cd6" bold>
+                {token}
               </Text>
             );
-          if (numbers.test(part))
+          }
+
+          // Types - Teal/Cyan
+          if (new RegExp(`^${types.source}$`).test(token)) {
             return (
-              <Text key={i} color="yellow">
-                {part}
+              <Text key={i} color="#4ec9b0">
+                {token}
               </Text>
             );
-          return part;
+          }
+
+          // Booleans/Null - Purple/Blue
+          if (new RegExp(`^${booleans.source}$`).test(token)) {
+            return (
+              <Text key={i} color="#569cd6">
+                {token}
+              </Text>
+            );
+          }
+
+          // Numbers - Light Green/Yellow
+          if (new RegExp(`^${numbers.source}$`).test(token)) {
+            return (
+              <Text key={i} color="#b5cea8">
+                {token}
+              </Text>
+            );
+          }
+
+          // Function calls - Yellow
+          const nextToken = tokens[i + 1] || '';
+          if (/^\w+$/.test(token) && nextToken.trim().startsWith('(')) {
+            return (
+              <Text key={i} color="#dcdcaa">
+                {token}
+              </Text>
+            );
+          }
+
+          // Operators & Symbols - White/Cyanish
+          if (/^[^\w\s]$/.test(token)) {
+            return (
+              <Text key={i} color="#808080">
+                {token}
+              </Text>
+            );
+          }
+
+          return token;
         })}
       </Text>
     );
@@ -325,6 +405,33 @@ const CLIHighlighter = React.memo(({ code, language }: { code: string; language?
     return <Text>{code}</Text>;
   }
 });
+
+const CodeLine = React.memo(
+  ({
+    code,
+    lineNumber,
+    language,
+    bgColor,
+    paddingX = 0,
+  }: {
+    code: string;
+    lineNumber: number | string;
+    language?: string;
+    bgColor?: string;
+    paddingX?: number;
+  }) => (
+    <Box flexDirection="row" paddingX={paddingX}>
+      <Box width={4} marginRight={1} justifyContent="flex-end">
+        <Text color="gray" dimColor>
+          {lineNumber}
+        </Text>
+      </Box>
+      <Box flexGrow={1} backgroundColor={bgColor}>
+        <CLIHighlighter code={code} language={language} />
+      </Box>
+    </Box>
+  ),
+);
 
 const ContentWithCodeBlocks = React.memo(({ content }: { content: string }) => {
   try {
@@ -354,7 +461,18 @@ const ContentWithCodeBlocks = React.memo(({ content }: { content: string }) => {
                       {getIconForFile(lang)} {lang || 'text'}
                     </Text>
                   </Box>
-                  <CLIHighlighter code={code} language={lang} />
+                  <Box flexDirection="column" paddingX={0}>
+                    {code.split('\n').map((line, idx) => (
+                      <CodeLine
+                        key={`code-${idx}`}
+                        code={line}
+                        lineNumber={idx + 1}
+                        language={lang}
+                        bgColor="#262626"
+                        paddingX={0}
+                      />
+                    ))}
+                  </Box>
                 </Box>
               );
             }
@@ -377,10 +495,12 @@ const ToolCallRenderer = ({
   content,
   msgIndex,
   toolStatuses,
+  messages,
 }: {
   content: string;
   msgIndex: number;
   toolStatuses: Record<string, string>;
+  messages?: Message[];
 }) => {
   const parts = content.split(
     /(<read_file>[\s\S]*?<\/read_file>|<write_to_file>[\s\S]*?<\/write_to_file>|<execute_command>[\s\S]*?<\/execute_command>|<list_files>[\s\S]*?<\/list_files>|<replace_in_file>[\s\S]*?<\/replace_in_file>|<text>[\s\S]*?<\/text>|<temp>[\s\S]*?<\/temp>|<comment>[\s\S]*?<\/comment>|<code>[\s\S]*?<\/code>)/g,
@@ -395,7 +515,43 @@ const ToolCallRenderer = ({
             const match = part.match(/<([\w_]+)>([\s\S]*?)<\/\1>/);
             if (match) {
               const status = toolStatuses[`${msgIndex}:${i}`] || 'success';
-              return <ToolBlock key={i} tagName={match[1]} tagContent={match[2]} status={status} />;
+              let additionalMetadata: string | undefined;
+
+              if (match[1] === 'read_file' && messages) {
+                // Try to find the result in the next message
+                const nextMsg = messages[msgIndex + 1];
+                if (nextMsg && nextMsg.role === 'user') {
+                  const resultRegex = new RegExp(
+                    `\\[read_file\\]\\n\`\`\`\\n([\\s\\S]*?)\\n\`\`\``,
+                  );
+                  const resultMatch = nextMsg.content.match(resultRegex);
+                  if (resultMatch) {
+                    // Check if this result matches the path?
+                    // Assuming sequential single tool use for now or consistent order
+                    const lines = resultMatch[1].split('\n').length;
+                    additionalMetadata = `Read ${lines} lines`;
+                  }
+                }
+                // Fallback: check current content if result is appended
+                if (!additionalMetadata) {
+                  const resultRegex = /\[read_file\]\n```\n([\s\S]*?)\n```/;
+                  const resultMatch = content.match(resultRegex);
+                  if (resultMatch) {
+                    const lines = resultMatch[1].split('\n').length;
+                    additionalMetadata = `Read ${lines} lines`;
+                  }
+                }
+              }
+
+              return (
+                <ToolBlock
+                  key={i}
+                  tagName={match[1]}
+                  tagContent={match[2]}
+                  status={status}
+                  additionalMetadata={additionalMetadata}
+                />
+              );
             }
           }
 
@@ -411,11 +567,25 @@ const ToolCallRenderer = ({
                   <Text color="gray" dimColor>
                     ⎿ Read {lineCount} lines
                   </Text>
-                  <Box paddingX={1} marginTop={1} backgroundColor="#262626" paddingY={0.5}>
-                    <CLIHighlighter
-                      code={result.length > 1000 ? result.slice(0, 1000) + '\n...' : result}
-                      language={tagName}
-                    />
+                  <Box flexDirection="column" marginTop={1} backgroundColor="#262626" paddingY={0}>
+                    {result
+                      .split('\n')
+                      .slice(0, 50)
+                      .map((line, idx) => (
+                        <CodeLine
+                          key={`read-${idx}`}
+                          code={line}
+                          lineNumber={idx + 1}
+                          language={tagName}
+                          bgColor="#262626"
+                          paddingX={0}
+                        />
+                      ))}
+                    {result.split('\n').length > 50 && (
+                      <Box paddingX={1} paddingY={0.5}>
+                        <Text color="gray">...</Text>
+                      </Box>
+                    )}
                   </Box>
                 </Box>
               );
@@ -466,6 +636,7 @@ const MessageList = React.memo(
                   content={msg.content}
                   msgIndex={messages.indexOf(msg)}
                   toolStatuses={toolStatuses}
+                  messages={messages}
                 />
               </Box>
             )}
