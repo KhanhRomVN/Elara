@@ -289,6 +289,28 @@ const createTables = (): void => {
   `;
   db.exec(activeConversationStatsQuery);
   logger.info('Conversation stats table initialized');
+
+  // Table to store detailed usage metrics
+  const metricsQuery = `
+    CREATE TABLE IF NOT EXISTS metrics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      provider_id TEXT NOT NULL,
+      model_id TEXT NOT NULL,
+      account_id TEXT NOT NULL,
+      total_tokens INTEGER DEFAULT 0,
+      timestamp INTEGER NOT NULL
+    )
+  `;
+  try {
+    db.exec(metricsQuery);
+    // Create index on timestamp for optimized time-based queries
+    db.exec(
+      'CREATE INDEX IF NOT EXISTS idx_metrics_timestamp ON metrics(timestamp)',
+    );
+    logger.info('Metrics table initialized with index');
+  } catch (err) {
+    logger.error('Error initializing metrics table', err);
+  }
 };
 
 export const getDb = (): Database.Database => {

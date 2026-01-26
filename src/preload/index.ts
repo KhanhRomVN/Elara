@@ -26,7 +26,8 @@ const api = {
   commands: commandsAPI,
   extendedTools: extendedToolsAPI,
   stats: {
-    getStats: (): Promise<any> => ipcRenderer.invoke('stats:get'),
+    getStats: (period?: string, offset?: number): Promise<any> =>
+      ipcRenderer.invoke('stats:get', period, offset),
   },
   ide: {
     openWindow: (folderPath: string) => ipcRenderer.invoke('ide:open-window', folderPath),

@@ -1,4 +1,4 @@
-import { ActionFunction } from 'react-router-dom';
+import { memo } from 'react';
 
 interface MiniTableProps {
   title: string;
@@ -6,11 +6,12 @@ interface MiniTableProps {
   columns: {
     header: string;
     accessorKey: string;
+    className?: string;
     cell?: (item: any) => React.ReactNode;
   }[];
 }
 
-export const MiniTable = ({ title, data, columns }: MiniTableProps) => {
+export const MiniTable = memo(({ title, data, columns }: MiniTableProps) => {
   return (
     <div className="rounded-xl border border-border/50 bg-card text-card-foreground shadow-sm">
       <div className="p-6 pb-4">
@@ -22,7 +23,7 @@ export const MiniTable = ({ title, data, columns }: MiniTableProps) => {
             <thead>
               <tr className="border-b border-border/50 text-left text-muted-foreground hover:bg-muted/50">
                 {columns.map((col, i) => (
-                  <th key={i} className="px-6 py-3 font-medium">
+                  <th key={i} className={`px-6 py-3 font-medium ${col.className || ''}`}>
                     {col.header}
                   </th>
                 ))}
@@ -35,7 +36,7 @@ export const MiniTable = ({ title, data, columns }: MiniTableProps) => {
                   className="border-b border-border/50 transition-colors hover:bg-muted/50"
                 >
                   {columns.map((col, j) => (
-                    <td key={j} className="px-6 py-3">
+                    <td key={j} className={`px-6 py-3 ${col.className || ''}`}>
                       {col.cell ? col.cell(item) : item[col.accessorKey]}
                     </td>
                   ))}
@@ -57,4 +58,4 @@ export const MiniTable = ({ title, data, columns }: MiniTableProps) => {
       </div>
     </div>
   );
-};
+});

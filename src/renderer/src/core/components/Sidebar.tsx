@@ -4,7 +4,6 @@ import {
   LayoutDashboard,
   Users,
   MessageSquare,
-  Terminal,
   BookOpen,
   Boxes,
   Cloud as CloudSync,
@@ -46,7 +45,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }: SidebarProps) => {
       title: 'Dashboard',
       href: '/',
       icon: LayoutDashboard,
-      disabled: true,
+      disabled: false,
     },
     {
       title: 'Accounts',
@@ -62,11 +61,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }: SidebarProps) => {
       title: 'Playground',
       href: '/playground',
       icon: MessageSquare,
-    },
-    {
-      title: 'Commands',
-      href: '/commands',
-      icon: Terminal,
     },
     {
       title: 'Tutorial',
