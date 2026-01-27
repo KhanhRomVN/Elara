@@ -1,4 +1,4 @@
-export const RULES = `CRITICAL RULES
+export const buildRulesPrompt = (language: string) => `CRITICAL RULES
 
 R0: BATCH OPERATIONS (Minimize Messages)
 

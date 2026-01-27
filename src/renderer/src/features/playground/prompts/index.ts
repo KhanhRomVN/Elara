@@ -1,16 +1,43 @@
-import { CORE } from './core';
+import { buildCorePrompt } from './core';
 import { TOOLS } from './tools';
-import { RULES } from './rules';
-import { SYSTEM } from './system';
+import { buildRulesPrompt } from './rules';
+import { buildSystemPrompt, SystemInfo } from './system';
 
 // Export individual modules
-export { CORE } from './core';
+export { buildCorePrompt } from './core';
 export { TOOLS } from './tools';
-export { RULES } from './rules';
-export { SYSTEM } from './system';
+export { buildRulesPrompt } from './rules';
+export { buildSystemPrompt } from './system';
 
-export const combinePrompts = (): string => {
-  return [CORE, TOOLS, RULES, SYSTEM].join('\n\n');
+interface PromptConfig {
+  language: string;
+  systemInfo: SystemInfo;
+}
+
+export const combinePrompts = (config: PromptConfig): string => {
+  const { language, systemInfo } = config;
+
+  const core = buildCorePrompt(language);
+  const rules = buildRulesPrompt(language);
+  const system = buildSystemPrompt(systemInfo);
+
+  return [core, TOOLS, rules, system].join('\n\n');
 };
 
-export const DEFAULT_RULE_PROMPT = combinePrompts();
+/**
+ * This is primarily for fallback.
+ * Real values should be passed from usePlaygroundLogic using window.api.app.getSystemInfo()
+ */
+export const getDefaultPrompt = (language: string = 'English'): string => {
+  return combinePrompts({
+    language,
+    systemInfo: {
+      os: 'Unknown OS',
+      ide: 'Elara IDE',
+      shell: 'unknown',
+      homeDir: '~',
+      cwd: '.',
+      language,
+    },
+  });
+};

@@ -11,6 +11,7 @@ import { setupEventHandlers } from './core/events';
 import { setupAccountsHandlers } from './ipc/accounts';
 import { setupServerHandlers } from './ipc/server';
 import { setupVersionHandlers } from './ipc/version';
+import { setupAppHandlers } from './ipc/app';
 import { startServer } from './server';
 import type { ServerStartResult } from './server';
 
@@ -139,43 +140,63 @@ if (!gotTheLock) {
     });
 
     // Setup IPC event handlers
-    setupEventHandlers();
-    setupAccountsHandlers();
-    setupServerHandlers();
-    setupVersionHandlers();
+    try {
+      setupEventHandlers();
+      setupAccountsHandlers();
+      setupServerHandlers();
+      setupVersionHandlers();
+      setupAppHandlers();
+      setupCommandsHandlers();
+      setupStatsHandlers();
+      setupDialogHandlers();
+      setupExtendedToolsHandlers();
 
-    setupCommandsHandlers();
-    setupStatsHandlers();
-    setupDialogHandlers();
-    setupExtendedToolsHandlers();
-    import('./ipc/ide').then(({ setupIDEHandlers }) => {
-      setupIDEHandlers();
-    });
+      import('./ipc/ide').then(({ setupIDEHandlers }) => {
+        try {
+          setupIDEHandlers();
+        } catch (err) {
+          console.error('[Main] Failed to setup IDE handlers:', err);
+        }
+      });
 
-    // Import and register proxy handlers
-    import('./ipc/proxy').then(({ registerProxyIpcHandlers }) => {
-      console.log('[Main] Registering proxy handlers...');
-      registerProxyIpcHandlers();
-      console.log('[Main] Proxy handlers registered.');
-      console.log('[Main] All initialization complete, app should stay running.');
-    });
+      // Import and register proxy handlers
+      import('./ipc/proxy').then(({ registerProxyIpcHandlers }) => {
+        try {
+          console.log('[Main] Registering proxy handlers...');
+          registerProxyIpcHandlers();
+          console.log('[Main] Proxy handlers registered.');
+        } catch (err) {
+          console.error('[Main] Failed to setup proxy handlers:', err);
+        }
+      });
+    } catch (err) {
+      console.error('[Main] Error setting up IPC handlers:', err);
+    }
 
     // Start API server with embedded database
     console.log('[Main] Starting API server...');
-    startServer()
-      .then((result: ServerStartResult) => {
-        if (result.success) {
-          console.log(`[Main] Server started successfully on port ${result.port}`);
-        } else {
-          console.error('[Main] Server failed to start:', result.error);
-        }
-      })
-      .catch((err) => {
-        console.error('[Main] Unexpected error starting server:', err);
-      });
+    try {
+      startServer()
+        .then((result: ServerStartResult) => {
+          if (result.success) {
+            console.log(`[Main] Server started successfully on port ${result.port}`);
+          } else {
+            console.error('[Main] Server failed to start:', result.error);
+          }
+        })
+        .catch((err) => {
+          console.error('[Main] Unexpected error starting server:', err);
+        });
+    } catch (err) {
+      console.error('[Main] Failed to initiate server start:', err);
+    }
 
     // Start CLI server
-    startCLIServer();
+    try {
+      startCLIServer();
+    } catch (err) {
+      console.error('[Main] Failed to start CLI server:', err);
+    }
 
     // Create system tray
     createSystemTray();

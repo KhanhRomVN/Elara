@@ -26,10 +26,14 @@ interface WelcomeScreenProps {
   supportsThinking?: boolean;
   agentMode?: boolean;
   setAgentMode?: (enabled: boolean) => void;
+  indexingEnabled?: boolean;
+  setIndexingEnabled?: (enabled: boolean) => void;
   selectedWorkspacePath?: string;
   handleSelectWorkspace?: () => void;
   recentWorkspaces?: string[];
   handleQuickSelectWorkspace?: (path: string) => void;
+  language?: string | null;
+  setLanguage?: (lang: string | null) => void;
   temperature?: number;
   setTemperature?: (val: number) => void;
   isTemperatureSupported?: boolean;
@@ -69,10 +73,14 @@ export const WelcomeScreen = ({
   supportsThinking,
   agentMode,
   setAgentMode,
+  indexingEnabled,
+  setIndexingEnabled,
   selectedWorkspacePath,
   handleSelectWorkspace,
   recentWorkspaces,
   handleQuickSelectWorkspace,
+  language,
+  setLanguage,
   temperature,
   setTemperature,
   isTemperatureSupported,
@@ -118,6 +126,10 @@ export const WelcomeScreen = ({
           supportsThinking={supportsThinking}
           agentMode={agentMode}
           setAgentMode={setAgentMode}
+          indexingEnabled={indexingEnabled}
+          setIndexingEnabled={setIndexingEnabled}
+          language={language}
+          setLanguage={setLanguage}
           selectedWorkspacePath={selectedWorkspacePath}
           handleSelectWorkspace={handleSelectWorkspace}
           recentWorkspaces={recentWorkspaces}

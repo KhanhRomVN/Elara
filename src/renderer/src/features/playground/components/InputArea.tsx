@@ -15,6 +15,7 @@ import {
   Database,
   RefreshCw,
 } from 'lucide-react';
+import { LanguageSelector } from './LanguageSelector';
 import {
   ChangeEvent,
   KeyboardEvent,
@@ -56,10 +57,14 @@ interface InputAreaProps {
   supportsThinking?: boolean;
   agentMode?: boolean;
   setAgentMode?: (enabled: boolean) => void;
+  indexingEnabled?: boolean;
+  setIndexingEnabled?: (enabled: boolean) => void;
   selectedWorkspacePath?: string;
   handleSelectWorkspace?: () => void;
   recentWorkspaces?: string[];
   handleQuickSelectWorkspace?: (path: string) => void;
+  language?: string | null;
+  setLanguage?: (lang: string | null) => void;
   isConversationActive?: boolean;
   temperature?: number;
   setTemperature?: (val: number) => void;
@@ -104,10 +109,14 @@ export const InputArea = ({
   supportsThinking,
   agentMode,
   setAgentMode,
+  indexingEnabled,
+  setIndexingEnabled,
   selectedWorkspacePath,
   handleSelectWorkspace,
   recentWorkspaces = [],
   handleQuickSelectWorkspace,
+  language,
+  setLanguage,
   isConversationActive,
   temperature: _temperature,
   setTemperature: _setTemperature,
@@ -405,6 +414,30 @@ export const InputArea = ({
                   <span>Search</span>
                 </button>
               )}
+              {selectedWorkspacePath && setIndexingEnabled && (
+                <button
+                  onClick={() => setIndexingEnabled(!indexingEnabled)}
+                  className={cn(
+                    'px-3 py-1.5 flex items-center gap-1.5 text-xs font-medium rounded-md transition-colors',
+                    indexingEnabled
+                      ? indexingStatus?.indexed
+                        ? 'bg-blue-500/10 text-blue-500 hover:bg-blue-500/20'
+                        : 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20'
+                      : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+                  )}
+                  title={indexingEnabled ? 'Codebase Indexing On' : 'Codebase Indexing Off'}
+                >
+                  <Database className="h-4 w-4" />
+                  <span>Index</span>
+                </button>
+              )}
+              {setLanguage && (
+                <LanguageSelector
+                  value={language || null}
+                  onChange={setLanguage}
+                  className="scale-90 origin-left"
+                />
+              )}
             </div>
 
             <div className="flex items-center gap-2">
@@ -536,7 +569,7 @@ export const InputArea = ({
         </div>
 
         {/* Indexing Warning Box */}
-        {agentMode &&
+        {indexingEnabled &&
           selectedWorkspacePath &&
           !isConversationActive &&
           indexingStatus &&

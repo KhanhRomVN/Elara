@@ -14,7 +14,7 @@ import {
   parseConversationList,
 } from '../utils/conversation-utils';
 import { getCachedModels, fetchAndCacheModels } from '../../../utils/model-cache';
-import { DEFAULT_RULE_PROMPT } from '../prompts';
+import { combinePrompts } from '../prompts';
 import { FuzzyMatcher } from '../../../utils/FuzzyMatcher';
 import { getApiBaseUrl } from '../../../utils/apiUrl';
 
@@ -49,6 +49,7 @@ export const usePlaygroundLogic = ({
   const [thinkingEnabled, setThinkingEnabled] = useState(() => activeTab?.thinkingEnabled ?? true);
   const [searchEnabled, setSearchEnabled] = useState(() => activeTab?.searchEnabled ?? false);
   const [agentMode, setAgentMode] = useState(() => activeTab?.agentMode ?? false);
+  const [indexingEnabled, setIndexingEnabled] = useState(() => activeTab?.indexingEnabled ?? true);
   const [attachments, setAttachments] = useState<PendingAttachment[]>(
     () => activeTab?.attachments || [],
   );
@@ -60,6 +61,10 @@ export const usePlaygroundLogic = ({
     () => activeTab?.selectedWorkspacePath,
   );
   const [temperature, setTemperature] = useState<number>(() => activeTab?.temperature ?? 0.7);
+  const [language, setLanguage] = useState<string | null>(() => {
+    if (activeTab?.language) return activeTab.language;
+    return localStorage.getItem('elara_preferred_language');
+  });
 
   const [recentWorkspaces, setRecentWorkspaces] = useState<string[]>(() => {
     try {
@@ -69,6 +74,21 @@ export const usePlaygroundLogic = ({
       return [];
     }
   });
+
+  const [systemInfo, setSystemInfo] = useState<any>(null);
+
+  // Fetch system info on mount
+  useEffect(() => {
+    const fetchSystemInfo = async () => {
+      try {
+        const info = await window.api.app.getSystemInfo();
+        setSystemInfo(info);
+      } catch (error) {
+        console.error('Failed to fetch system info:', error);
+      }
+    };
+    fetchSystemInfo();
+  }, []);
 
   // Verify recent workspaces on mount
   useEffect(() => {
@@ -703,6 +723,7 @@ export const usePlaygroundLogic = ({
     thinkingEnabled,
     searchEnabled,
     agentMode,
+    indexingEnabled,
     attachments,
     tokenCount,
     accumulatedUsage,
@@ -712,6 +733,7 @@ export const usePlaygroundLogic = ({
     conversationTitle,
     selectedWorkspacePath,
     temperature,
+    language,
   });
 
   useEffect(() => {
@@ -725,6 +747,7 @@ export const usePlaygroundLogic = ({
       thinkingEnabled,
       searchEnabled,
       agentMode,
+      indexingEnabled,
       attachments,
       tokenCount,
       accumulatedUsage,
@@ -734,6 +757,7 @@ export const usePlaygroundLogic = ({
       conversationTitle,
       selectedWorkspacePath,
       temperature,
+      language,
     };
   }, [
     messages,
@@ -1033,27 +1057,71 @@ export const usePlaygroundLogic = ({
         return cached && cached.length > 0 ? cached[0].id : '';
       };
 
-      // Build first message content for agent mode
+      // Build first message content with codebase context if enabled
       let firstMessageContent = hiddenContent ?? finalInput;
-      if (messages.length === 0 && agentMode && !overrideContent) {
-        // Read ELARA.md content
-        const elaraContent = await readElaraContent();
-
-        // Search for relevant files
-        const relevantFiles = await searchRelevantFiles(finalInput);
-
-        // Build enhanced first message
+      if (messages.length === 0 && !overrideContent) {
         let contextSection = '';
+        let agentPrompt = '';
 
-        if (elaraContent.trim()) {
-          contextSection += `\n\n## ELARA.md (Project Context)\n\`\`\`\n${elaraContent}\n\`\`\``;
+        if (indexingEnabled) {
+          // Read ELARA.md content
+          const elaraContent = await readElaraContent();
+
+          // Search for relevant files
+          const relevantFiles = await searchRelevantFiles(finalInput);
+
+          if (elaraContent.trim()) {
+            contextSection += `\n\n## ELARA.md (Project Context)\n\`\`\`\n${elaraContent}\n\`\`\``;
+          }
+
+          if (relevantFiles.length > 0) {
+            contextSection += `\n\n## Relevant Files (from codebase index)\n${relevantFiles.map((f) => `- ${f}`).join('\n')}`;
+          }
         }
 
-        if (relevantFiles.length > 0) {
-          contextSection += `\n\n## Relevant Files (from codebase index)\n${relevantFiles.map((f) => `- ${f}`).join('\n')}`;
+        if (agentMode) {
+          // Get language name for prompt
+          let langName = 'English';
+          if (language) {
+            try {
+              const displayNames = new Intl.DisplayNames(['en'], { type: 'language' });
+              langName = displayNames.of(language) || 'English';
+            } catch (e) {
+              // Fallback
+            }
+          }
+
+          agentPrompt = combinePrompts({
+            language: langName,
+            systemInfo: {
+              os: systemInfo?.os || 'Linux',
+              ide: 'Elara IDE',
+              shell: systemInfo?.shell || '/bin/bash',
+              homeDir: systemInfo?.homeDir || '/home/user',
+              cwd: selectedWorkspacePath || systemInfo?.cwd || process.env.CWD || '',
+              language: langName,
+            },
+          });
         }
 
-        firstMessageContent = `${DEFAULT_RULE_PROMPT}${contextSection}\n\n## User Request\n${finalInput}`;
+        if (agentPrompt || contextSection) {
+          firstMessageContent = `${agentPrompt}${contextSection}\n\n## User Request\n${finalInput}`;
+        }
+      }
+
+      // Add language constraint if selected
+      if (language) {
+        let langName = language;
+        try {
+          const displayNames = new Intl.DisplayNames(['en'], { type: 'language' });
+          langName = displayNames.of(language) || language;
+        } catch (e) {
+          // Fallback to code if DisplayNames fails
+        }
+        const langPrompt = `\n\nIMPORTANT: Please respond to the user using ${langName} language.`;
+        if (messages.length === 0) {
+          firstMessageContent += langPrompt;
+        }
       }
 
       const response = await fetch(url, {
@@ -1370,6 +1438,8 @@ export const usePlaygroundLogic = ({
     setSearchEnabled,
     agentMode,
     setAgentMode,
+    indexingEnabled,
+    setIndexingEnabled,
     selectedWorkspacePath,
     handleSelectWorkspace,
     attachments,
@@ -1400,6 +1470,15 @@ export const usePlaygroundLogic = ({
     loadConversation,
     temperature,
     setTemperature,
+    language,
+    setLanguage: (lang: string | null) => {
+      setLanguage(lang);
+      if (lang) {
+        localStorage.setItem('elara_preferred_language', lang);
+      } else {
+        localStorage.removeItem('elara_preferred_language');
+      }
+    },
     indexingStatus,
     handleStartIndexing,
   };

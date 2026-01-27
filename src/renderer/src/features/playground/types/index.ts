@@ -84,6 +84,8 @@ export interface ConversationTab {
   searchEnabled: boolean;
   temperature?: number;
   agentMode?: boolean;
+  indexingEnabled?: boolean;
+  language?: string | null;
   selectedWorkspacePath?: string;
   groqSettings: {
     temperature: number;

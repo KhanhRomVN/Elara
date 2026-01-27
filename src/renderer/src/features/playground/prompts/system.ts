@@ -4,6 +4,7 @@ export interface SystemInfo {
   shell: string;
   homeDir: string;
   cwd: string;
+  language: string;
 }
 
 export const buildSystemPrompt = (info: SystemInfo): string => {
@@ -164,7 +165,7 @@ def fib(n):
 <temp>Sử dụng đệ quy.</temp>
 
 REMINDERS
-✓ Vietnamese explanations
+✓ ${info.language} explanations
 ✓ Batch operations (saves messages)
 ✓  for ALL code
 ✓ Preserve exact indentation
@@ -172,11 +173,3 @@ REMINDERS
 ✓ Use <text> for critical explanations, <temp> for status/minimal info, <code> for code snippets (read-only)
 ✓ Use <file>path/to/file</file> to cite files (renders as clickable chip)`;
 };
-
-export const SYSTEM = buildSystemPrompt({
-  os: 'Linux 6.14',
-  ide: 'Visual Studio Code',
-  shell: '/bin/bash',
-  homeDir: '/home/khanhromvn',
-  cwd: '/home/khanhromvn/Documents/Coding/ZenTab',
-});

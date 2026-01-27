@@ -13,6 +13,7 @@ import { TabBar } from './components/TabBar';
 import { SettingsSidebar } from './components/SettingsSidebar';
 import { ConversationTab } from './types';
 import { usePlaygroundLogic } from './hooks/usePlaygroundLogic';
+import { LanguageSelector } from './components/LanguageSelector';
 
 export const PlaygroundPage = ({
   tabs,
@@ -77,6 +78,10 @@ export const PlaygroundPage = ({
     handleQuickSelectWorkspace,
     temperature,
     setTemperature,
+    indexingEnabled,
+    setIndexingEnabled,
+    language,
+    setLanguage,
     indexingStatus,
     handleStartIndexing,
   } = usePlaygroundLogic({ activeTab, activeTabId, onUpdateTab });
@@ -280,20 +285,24 @@ export const PlaygroundPage = ({
               )?.is_temperature
             }
             onToggleSettings={() => setIsSettingsOpen(!isSettingsOpen)}
+            indexingEnabled={indexingEnabled}
+            setIndexingEnabled={setIndexingEnabled}
+            language={language}
+            setLanguage={setLanguage}
             indexingStatus={indexingStatus}
             onStartIndexing={handleStartIndexing}
             onNavigateToSettings={() => navigate('/settings')}
           />
         ) : (
           <>
-            <div className="h-14 border-b flex items-center justify-between px-4 bg-background/50 backdrop-blur-sm sticky top-0 z-10">
-              <div className="max-w-[200px] text-xs font-medium text-muted-foreground mr-2 flex items-center gap-1 truncate">
+            <div className="h-10 border-b flex items-center justify-between px-4 bg-background/50 backdrop-blur-sm sticky top-0 z-10">
+              <div className="max-w-[150px] text-[10px] font-medium text-muted-foreground mr-2 flex items-center gap-1 truncate uppercase tracking-tight">
                 {providerModels[selectedProvider.toLowerCase()]}
               </div>
-              <div className="font-medium truncate flex-1 text-center">
+              <div className="text-sm font-semibold truncate flex-1 text-center">
                 {conversationTitle || 'New Chat'}
               </div>
-              <div className="w-24 text-right text-xs text-muted-foreground mr-2">
+              <div className="w-24 text-right text-[10px] text-muted-foreground mr-2 font-mono">
                 {(tokenCount + accumulatedUsage + inputTokenCount).toLocaleString()} tokens
               </div>
             </div>
@@ -360,6 +369,10 @@ export const PlaygroundPage = ({
                 )?.is_temperature
               }
               onToggleSettings={() => setIsSettingsOpen(!isSettingsOpen)}
+              indexingEnabled={indexingEnabled}
+              setIndexingEnabled={setIndexingEnabled}
+              language={language}
+              setLanguage={setLanguage}
               indexingStatus={indexingStatus}
               onStartIndexing={handleStartIndexing}
             />

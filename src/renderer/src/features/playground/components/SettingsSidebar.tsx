@@ -20,9 +20,9 @@ export const SettingsSidebar = ({
 
   return (
     <div className="flex flex-col h-full border-l bg-muted/10 shrink-0 w-[260px] animate-in slide-in-from-right duration-300">
-      <div className="flex flex-col h-full p-4 gap-6 overflow-hidden">
+      <div className="flex flex-col h-full gap-6 overflow-hidden overflow-x-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-2 pb-4 border-b shrink-0 h-14">
+        <div className="flex items-center justify-between px-4 pt-4 pb-4 border-b shrink-0 h-14">
           <div className="flex items-center gap-2">
             <Thermometer className="w-5 h-5 text-primary" />
             <span className="font-bold text-lg">Settings</span>
@@ -33,7 +33,7 @@ export const SettingsSidebar = ({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto space-y-6">
+        <div className="flex-1 overflow-y-auto px-4 space-y-6 font-ui">
           <div className="space-y-4 px-2">
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
@@ -78,7 +78,7 @@ export const SettingsSidebar = ({
         </div>
 
         {/* Footer */}
-        <div className="mt-auto border-t pt-4 text-center">
+        <div className="mt-auto border-t p-4 text-center">
           <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">
             Elara Playground
           </p>
