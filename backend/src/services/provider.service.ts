@@ -51,33 +51,16 @@ const fetchProviderConfig = async (forceRefresh = false): Promise<any[]> => {
   }
 
   const tryFetch = async (): Promise<any[]> => {
-    // 1. Local Fallback (Preferred for development)
+    // 1. Try GitHub (Remote) first
     try {
-      const fs = require('fs');
-      const path = require('path');
-      const possiblePaths = [
-        path.join(process.cwd(), 'provider.json'),
-        path.join(process.cwd(), 'resources', 'provider.json'),
-        path.join(__dirname, '../../../../resources', 'provider.json'),
-      ];
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
 
-      for (const p of possiblePaths) {
-        if (fs.existsSync(p)) {
-          const data = fs.readFileSync(p, 'utf-8');
-          const parsed = JSON.parse(data);
-          const config = Array.isArray(parsed) ? parsed : parsed.data || [];
-          if (config.length > 0) {
-            return config;
-          }
-        }
-      }
-    } catch (error) {
-      logger.error('Failed to load local provider.json', error);
-    }
+      const response = await fetch(PROVIDERS_URL, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
 
-    // 2. Try GitHub (Remote)
-    try {
-      const response = await fetch(PROVIDERS_URL);
       if (response.ok) {
         const data: any = await response.json();
         let parsed: any[] = [];
@@ -85,6 +68,7 @@ const fetchProviderConfig = async (forceRefresh = false): Promise<any[]> => {
         else if (data && data.data) parsed = data.data;
 
         if (parsed.length > 0) {
+          logger.info('Successfully updated providers from remote.');
           return parsed;
         }
       } else {
@@ -94,25 +78,58 @@ const fetchProviderConfig = async (forceRefresh = false): Promise<any[]> => {
       logger.error('Error fetching from GitHub', error);
     }
 
+    // 2. If remote fails, fallback to local file
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const possiblePaths = [
+        path.join(process.cwd(), 'provider.json'),
+        path.join(process.cwd(), 'resources', 'provider.json'),
+      ];
+
+      for (const p of possiblePaths) {
+        if (fs.existsSync(p)) {
+          const data = fs.readFileSync(p, 'utf-8');
+          const parsed = JSON.parse(data);
+          const config = Array.isArray(parsed) ? parsed : parsed.data || [];
+          if (config.length > 0) {
+            logger.info(`Loaded providers from local fallback: ${p}`);
+            return config;
+          }
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to load local provider.json fallback', error);
+    }
+
+    // 3. Last resort: Return existing cache if available (even if expired)
+    if (cachedConfig && cachedConfig.length > 0) {
+      logger.warn('Using expired cache as fallback due to fetch failure.');
+      return cachedConfig;
+    }
+
     return [];
   };
 
   let result = await tryFetch();
 
-  // If still empty and not forcing refresh, try forcing refresh
-  if (result.length === 0 && !forceRefresh) {
-    result = await tryFetch();
+  // If still empty and empty result, we might return empty array but that causes "disabled" errors.
+  // We can try to constructing a minimal default config if absolutely everything fails?
+  // But preferably local provider.json should exist.
+
+  if (result.length > 0) {
+    // Sanitize: Remove legacy id and name fields if they exist in the source JSON
+    const sanitized = result.map((p: any) => {
+      const { id, name, ...rest } = p;
+      return rest;
+    });
+
+    cachedConfig = sanitized;
+    cacheTime = Date.now();
+    return sanitized;
   }
 
-  // Sanitize: Remove legacy id and name fields if they exist in the source JSON
-  const sanitized = result.map((p: any) => {
-    const { id, name, ...rest } = p;
-    return rest;
-  });
-
-  cachedConfig = sanitized;
-  cacheTime = Date.now();
-  return sanitized;
+  return [];
 };
 
 export const getAllProviders = async (): Promise<Provider[]> => {

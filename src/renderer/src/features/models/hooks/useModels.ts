@@ -72,6 +72,8 @@ export const useModels = () => {
                   provider_id: provider.provider_id,
                   provider_name: provider.provider_name,
                   is_enabled: provider.is_enabled !== false,
+                  is_thinking: model.is_thinking,
+                  context_length: model.context_length,
                   success_rate: model.success_rate,
                   max_req_conversation: model.max_req_conversation,
                   max_token_conversation: model.max_token_conversation,

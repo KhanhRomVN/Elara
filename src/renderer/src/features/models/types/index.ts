@@ -19,6 +19,8 @@ export interface FlatModel {
   provider_id: string;
   provider_name: string;
   is_enabled: boolean;
+  is_thinking?: boolean;
+  context_length?: number | null;
   sequence?: number;
   success_rate?: number;
   max_req_conversation?: number;

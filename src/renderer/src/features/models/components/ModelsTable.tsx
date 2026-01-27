@@ -1,4 +1,4 @@
-import { MoreHorizontal, Plus, ArrowDownUp, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Plus, ArrowDownUp, Trash2, Check, X } from 'lucide-react';
 import { Favicon } from '../../../shared/utils/faviconUtils';
 import { cn } from '../../../shared/lib/utils';
 import { FlatModel, SortKey, SortDirection } from '../types';
@@ -53,6 +53,12 @@ export const ModelsTable = ({
               STT
             </th>
             <th className="h-12 px-4 align-middle font-medium text-muted-foreground">Model</th>
+            <th className="h-12 px-4 align-middle font-medium text-muted-foreground w-[80px] text-center">
+              Thinking
+            </th>
+            <th className="h-12 px-4 align-middle font-medium text-muted-foreground w-[80px] text-center">
+              Context
+            </th>
             <th
               className={cn(
                 'h-12 px-4 align-middle font-medium cursor-pointer text-center select-none transition-colors',
@@ -91,7 +97,7 @@ export const ModelsTable = ({
         <tbody className="[&_tr:last-child]:border-0">
           {models.length === 0 && (
             <tr>
-              <td colSpan={7} className="h-24 text-center text-muted-foreground">
+              <td colSpan={9} className="h-24 text-center text-muted-foreground">
                 No models available.
               </td>
             </tr>
@@ -124,6 +130,18 @@ export const ModelsTable = ({
                     <span className="text-zinc-700 font-light shrink-0">|</span>
                     <span className="truncate flex-1 font-medium">{model.model_id}</span>
                   </div>
+                </td>
+                <td className="px-4 py-1.5 align-middle text-center">
+                  {model.is_thinking ? (
+                    <Check className="w-4 h-4 text-emerald-500 mx-auto" />
+                  ) : (
+                    <X className="w-4 h-4 text-muted-foreground/30 mx-auto" />
+                  )}
+                </td>
+                <td className="px-4 py-1.5 align-middle text-center">
+                  <span className="text-xs font-mono text-muted-foreground">
+                    {model.context_length ? formatNumber(model.context_length) : '-'}
+                  </span>
                 </td>
                 <td className="px-4 py-1.5 align-middle text-center">
                   <span
