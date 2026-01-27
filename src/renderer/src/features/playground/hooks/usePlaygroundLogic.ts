@@ -976,7 +976,14 @@ export const usePlaygroundLogic = ({
       const port = serverStatus.port;
 
       const account = accounts.find((acc) => acc.id === selectedAccount);
-      if (!account) throw new Error('Account not found');
+
+      // Check if provider requires account
+      const providerConfig = providersList.find(
+        (p) => p.provider_id.toLowerCase() === selectedProvider.toLowerCase(),
+      );
+      const requiresAccount = providerConfig?.auth_method && providerConfig.auth_method.length > 0;
+
+      if (!account && requiresAccount) throw new Error('Account not found');
 
       // Use new unified endpoint
       const baseUrl = getApiBaseUrl(port);
@@ -1176,7 +1183,10 @@ export const usePlaygroundLogic = ({
         conversationTitle === 'Untitled'
       ) {
         try {
-          const endpoint = getHistoryEndpoint(account.provider_id, port || 11434, account.id);
+          const providerId = account?.provider_id || selectedProvider;
+          const accountId = account?.id || 'public'; // Fallback for no-auth providers
+
+          const endpoint = getHistoryEndpoint(providerId, port || 11434, accountId);
           const historyRes = await fetch(`${endpoint}?page=1&limit=30`);
           if (historyRes.ok) {
             const resultData = await historyRes.json();

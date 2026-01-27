@@ -220,21 +220,32 @@ router.all(/^\/([^/]+)(?:\/(.*))?$/, async (req: Request, res: Response) => {
 
     // 1. Models (GET /models)
     if (action === 'models' && req.method === 'GET') {
+      console.log(`[ProvidersRouter] Handling models request for ${providerId}`);
       const providerInfo = await getProviderById(providerId);
       if (providerInfo?.models && Array.isArray(providerInfo.models)) {
+        console.log(`[ProvidersRouter] Returning static models for ${providerId}`);
         return res.json({ success: true, data: providerInfo.models, source: 'static' });
       }
 
       if (module.getModels) {
+        console.log(`[ProvidersRouter] Calling dynamic getModels for ${providerId}`);
         let result;
         if (providerId.toLowerCase() === 'lmarena') {
           result = await module.getModels(account);
         } else {
           // Default assume credential/cookies
+          console.log(
+            `[ProvidersRouter] Invoking module.getModels with credential length: ${account.credential?.length}`,
+          );
           result = await module.getModels(account.credential);
+          console.log(
+            `[ProvidersRouter] Got result from getModels:`,
+            Array.isArray(result) ? result.length : result,
+          );
         }
         return res.json({ success: true, data: result, source: 'dynamic' });
       }
+      console.warn(`[ProvidersRouter] No getModels found on module for ${providerId}`);
       return res.status(404).json({ error: 'Models not supported' });
     }
 

@@ -260,6 +260,7 @@ export const getProviderModels = async (
   }
 
   // 3. Fallback to direct provider registry call
+  // 3. Fallback to direct provider registry call
   const dynamicProvider = providerRegistry.getProvider(providerId);
   if (dynamicProvider && dynamicProvider.getModels) {
     const db = getDb();
@@ -267,19 +268,22 @@ export const getProviderModels = async (
       .prepare('SELECT * FROM accounts WHERE LOWER(provider_id) = ? LIMIT 1')
       .get(providerId.toLowerCase()) as any;
 
-    if (account) {
-      try {
-        const dynamicModels = await dynamicProvider.getModels(
-          account.credential,
-          account.id,
-        );
+    try {
+      const credential = account ? account.credential : '';
+      const accountId = account ? account.id : undefined;
+
+      const dynamicModels = await dynamicProvider.getModels(
+        credential,
+        accountId,
+      );
+      if (dynamicModels && dynamicModels.length > 0) {
         return dynamicModels;
-      } catch (e) {
-        logger.error(
-          `[DEBUG] Failed to fetch dynamic models for ${providerId}:`,
-          e,
-        );
       }
+    } catch (e) {
+      logger.error(
+        `[DEBUG] Failed to fetch dynamic models for ${providerId}:`,
+        e,
+      );
     }
   }
 

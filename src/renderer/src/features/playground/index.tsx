@@ -203,8 +203,6 @@ export const PlaygroundPage = ({
                       disabled={!selectedProvider || filteredAccounts.length === 0}
                     />
                     {(() => {
-                      if (!selectedAccount) return null;
-
                       const providerKey = selectedProvider.toLowerCase();
                       const models = providerModelsList[providerKey] || [];
                       const selectedModel = providerModels[providerKey] || '';
