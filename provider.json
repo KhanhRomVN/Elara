@@ -162,6 +162,16 @@
     "is_temperature": false
   },
   {
+    "provider_id": "qwq",
+    "provider_name": "QWQ",
+    "is_enabled": true,
+    "website": "https://qwq32.com",
+    "is_search": false,
+    "is_upload": false,
+    "auth_method": [],
+    "is_temperature": false
+  },
+  {
     "provider_id": "stepfun",
     "provider_name": "StepFun",
     "is_enabled": false,
