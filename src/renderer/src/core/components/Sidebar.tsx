@@ -46,57 +46,67 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }: SidebarProps) => {
       href: '/',
       icon: LayoutDashboard,
       disabled: false,
+      color: '#0ea5e9',
     },
     {
       title: 'Accounts',
       href: '/accounts',
       icon: Users,
+      color: '#10b981',
     },
     {
       title: 'Models',
       href: '/models',
       icon: Boxes,
+      color: '#f59e0b',
     },
     {
       title: 'Playground',
       href: '/playground',
       icon: MessageSquare,
+      color: '#8b5cf6',
     },
     {
       title: 'Tutorial',
       href: '/tutorial',
       icon: BookOpen,
       disabled: false,
+      color: '#f97316',
     },
     {
       title: 'Skills',
       href: '/skills',
       icon: Cpu,
       disabled: true,
+      color: '#64748b',
     },
     {
       title: 'MCP',
       href: '/mcp',
       icon: Share2,
       disabled: true,
+      color: '#f43f5e',
     },
     {
       title: 'Agents',
       href: '/agents',
       icon: Bot,
       disabled: true,
+      color: '#14b8a6',
     },
     {
       title: 'Extended',
       href: '/extended',
       icon: Layers,
       disabled: false,
+      color: '#6366f1',
     },
     {
       title: 'Settings',
       href: '/settings',
       icon: Settings,
       disabled: false,
+      color: '#94a3b8',
     },
   ];
 
@@ -234,22 +244,43 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }: SidebarProps) => {
               end={item.href === '/'}
               className={({ isActive }) =>
                 cn(
-                  'flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-md transition-colors relative group',
-                  isActive
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:bg-sidebar-hover hover:text-foreground',
+                  'flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-r-none rounded-l-md transition-all relative group',
+                  isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
                   isCollapsed && 'justify-center px-2',
                 )
               }
+              style={({ isActive }) => ({
+                borderRight: isActive ? `3px solid ${item.color}` : '3px solid transparent',
+                background: isActive
+                  ? `linear-gradient(to right, ${item.color}15, transparent)`
+                  : undefined,
+              })}
             >
-              <item.icon className="w-5 h-5 flex-shrink-0" />
-              {!isCollapsed && <span>{item.title}</span>}
+              {({ isActive }) => (
+                <>
+                  <item.icon
+                    className="w-5 h-5 flex-shrink-0 transition-colors"
+                    style={{ color: isActive ? item.color : undefined }}
+                  />
+                  {!isCollapsed && <span>{item.title}</span>}
 
-              {/* Tooltip for collapsed state */}
-              {isCollapsed && (
-                <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-2 py-1 bg-popover border border-border text-popover-foreground text-xs font-medium rounded shadow-md bg-zinc-900 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none">
-                  {item.title}
-                </div>
+                  {/* Gradient on hover for non-active items */}
+                  {!isActive && (
+                    <div
+                      className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none rounded-l-md"
+                      style={{
+                        background: `linear-gradient(to right, ${item.color}08, transparent)`,
+                      }}
+                    />
+                  )}
+
+                  {/* Tooltip for collapsed state */}
+                  {isCollapsed && (
+                    <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-2 py-1 bg-popover border border-border text-popover-foreground text-xs font-medium rounded shadow-md bg-zinc-900 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none">
+                      {item.title}
+                    </div>
+                  )}
+                </>
               )}
             </NavLink>
           );

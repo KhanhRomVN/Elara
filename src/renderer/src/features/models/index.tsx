@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { AnimatedPage } from '../../shared/components/AnimatedPage';
 import { Loader2 } from 'lucide-react';
 import { useModels } from './hooks/useModels';
 import { ModelsHeader } from './components/ModelsHeader';
@@ -99,7 +100,7 @@ export const ModelsPage = () => {
   }
 
   return (
-    <div className="flex-1 flex flex-col space-y-6 p-6 min-h-0">
+    <AnimatedPage className="flex-1 flex flex-col space-y-6 p-6 min-h-0">
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Models</h2>
         <p className="text-muted-foreground">Manage model sequences for priority ordering.</p>
@@ -150,6 +151,6 @@ export const ModelsPage = () => {
         maxSequence={getMaxSequence()}
         onInsert={handleInsert}
       />
-    </div>
+    </AnimatedPage>
   );
 };

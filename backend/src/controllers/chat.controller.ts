@@ -441,6 +441,24 @@ export const sendMessageController = async (
     }
 
     if (!account) {
+      // Exception for QWQ: and deepseek/deepseek-r1-0528:free
+      const isQwq =
+        providerId?.toLowerCase() === 'qwq' ||
+        modelId?.toLowerCase().includes('qwq') ||
+        modelId?.toLowerCase() === 'deepseek/deepseek-r1-0528:free';
+
+      if (isQwq) {
+        account = {
+          id: 'qwq-anonymous',
+          provider_id: 'qwq',
+          email: 'anonymous@qwq32.com',
+          credential: '{}',
+        };
+        logger.info('[Chat] Using anonymous account for QWQ');
+      }
+    }
+
+    if (!account) {
       res.status(401).json({
         success: false,
         message:

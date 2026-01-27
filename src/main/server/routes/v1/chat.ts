@@ -11,6 +11,9 @@ import { ChatRequestSchema, ChatRequest } from '@backend/types';
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
+const USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
 // Provider module cache
 const providerModuleCache: Map<string, any> = new Map();
 // @ts-ignore
@@ -219,7 +222,11 @@ async function handleSendMessage(req: Request, res: Response) {
       }
     }
 
-    if (!account) {
+    const isNoAuthRequired =
+      providerId?.toLowerCase() === 'qwq' ||
+      (modelId && providerRegistry.getProviderForModel(modelId)?.name === 'QWQ');
+
+    if (!account && !isNoAuthRequired) {
       res.status(401).json({
         success: false,
         message:
@@ -227,6 +234,16 @@ async function handleSendMessage(req: Request, res: Response) {
         error: { code: 'UNAUTHORIZED' },
       });
       return;
+    }
+
+    // Create a dummy account object if none exists for no-auth providers
+    if (!account && isNoAuthRequired) {
+      account = {
+        id: 'public',
+        provider_id: providerId || 'qwq',
+        credential: '',
+        user_agent: USER_AGENT,
+      };
     }
 
     // Set up SSE headers if streaming (default true)
@@ -392,9 +409,23 @@ router.post('/completions', async (req, res) => {
       account = accounts.find((a) => a.provider_id.toLowerCase() === targetProvider!.toLowerCase());
     }
 
-    if (!account) {
+    const isNoAuthRequired =
+      providerQuery?.toLowerCase() === 'qwq' ||
+      (modelId && providerRegistry.getProviderForModel(modelId)?.name === 'QWQ');
+
+    if (!account && !isNoAuthRequired) {
       res.status(401).json({ error: 'No valid account found for this request' });
       return;
+    }
+
+    // Create a dummy account object if none exists for no-auth providers
+    if (!account && isNoAuthRequired) {
+      account = {
+        id: 'public',
+        provider_id: providerQuery || 'qwq',
+        credential: '',
+        user_agent: USER_AGENT,
+      };
     }
 
     // Validate capabilities
@@ -454,9 +485,6 @@ router.post('/completions', async (req, res) => {
         res.write(`data: ${JSON.stringify({ choices: [{ delta: { thinking: content } }] })}\n\n`);
       },
     };
-
-    const userAgent =
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
     // Call chat function with various signatures
     // Different providers have different signatures, we try common ones

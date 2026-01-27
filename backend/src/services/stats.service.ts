@@ -52,13 +52,15 @@ export async function recordRequest(
 
   try {
     // 1. Update Account Stats
-    db.prepare(
-      `
-      UPDATE accounts SET
-        total_requests = total_requests + 1
-      WHERE id = ?
-    `,
-    ).run(accountId);
+    if (accountId !== 'qwq-anonymous') {
+      db.prepare(
+        `
+        UPDATE accounts SET
+          total_requests = total_requests + 1
+        WHERE id = ?
+      `,
+      ).run(accountId);
+    }
 
     // 2. Upsert Provider Model Stats
     db.prepare(
@@ -166,13 +168,15 @@ export async function recordSuccess(
 
   try {
     // 1. Update Account Success Stats
-    db.prepare(
-      `
-      UPDATE accounts SET
-        successful_requests = successful_requests + 1
-      WHERE id = ?
-    `,
-    ).run(accountId);
+    if (accountId !== 'qwq-anonymous') {
+      db.prepare(
+        `
+        UPDATE accounts SET
+          successful_requests = successful_requests + 1
+        WHERE id = ?
+      `,
+      ).run(accountId);
+    }
 
     // 2. Upsert Provider Models Success Stats
     db.prepare(

@@ -210,11 +210,8 @@ router.all(/^\/([^/]+)(?:\/(.*))?$/, async (req: Request, res: Response) => {
       return res.status(404).json({ error: `Provider module not found: ${providerId}` });
     }
 
-    // Get Account
+    // Get Account (optional for some actions like fetching models)
     const account = findAccount(req, providerId);
-    if (!account) {
-      return res.status(401).json({ error: `No valid account found for ${providerId}` });
-    }
 
     // MAP ACTIONS TO FUNCTIONS
 
@@ -231,13 +228,14 @@ router.all(/^\/([^/]+)(?:\/(.*))?$/, async (req: Request, res: Response) => {
         console.log(`[ProvidersRouter] Calling dynamic getModels for ${providerId}`);
         let result;
         if (providerId.toLowerCase() === 'lmarena') {
+          // LM Arena getModels takes the whole account object or null
           result = await module.getModels(account);
         } else {
-          // Default assume credential/cookies
+          // Default: pass the credential (string) or undefined if no account
           console.log(
-            `[ProvidersRouter] Invoking module.getModels with credential length: ${account.credential?.length}`,
+            `[ProvidersRouter] Invoking module.getModels with account found: ${!!account}`,
           );
-          result = await module.getModels(account.credential);
+          result = await module.getModels(account?.credential);
           console.log(
             `[ProvidersRouter] Got result from getModels:`,
             Array.isArray(result) ? result.length : result,
@@ -247,6 +245,11 @@ router.all(/^\/([^/]+)(?:\/(.*))?$/, async (req: Request, res: Response) => {
       }
       console.warn(`[ProvidersRouter] No getModels found on module for ${providerId}`);
       return res.status(404).json({ error: 'Models not supported' });
+    }
+
+    // For all other actions, a valid account is MANDATORY
+    if (!account) {
+      return res.status(401).json({ error: `No valid account found for ${providerId}` });
     }
 
     // 2. Chat Sessions / Conversations (GET /sessions or /conversations)

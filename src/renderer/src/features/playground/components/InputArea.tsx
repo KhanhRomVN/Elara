@@ -522,28 +522,13 @@ export const InputArea = ({
                 </div>
               )}
 
-              {(loading || isStreaming) && handleStop ? (
+              {(loading || isStreaming) && handleStop && (
                 <button
                   onClick={handleStop}
                   className="h-8 w-8 text-white flex items-center justify-center rounded-lg bg-red-600 hover:bg-red-700 transition-all"
                   title="Stop generating"
                 >
                   <StopCircle className="h-4 w-4" />
-                </button>
-              ) : (
-                <button
-                  onClick={handleSend}
-                  disabled={
-                    !input.trim() || !selectedAccount || (agentMode && !selectedWorkspacePath)
-                  }
-                  className={cn(
-                    'h-8 w-8 flex items-center justify-center rounded-lg transition-all',
-                    input.trim() && selectedAccount && (!agentMode || selectedWorkspacePath)
-                      ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'
-                      : 'bg-muted text-muted-foreground/50 cursor-not-allowed',
-                  )}
-                >
-                  <ArrowUpFromDot className="h-5 w-5" />
                 </button>
               )}
             </div>

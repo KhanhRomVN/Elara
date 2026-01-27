@@ -6,8 +6,55 @@ const USER_AGENT =
 export const getModels = async (_credential?: string) => {
   console.log('[QWQ] getModels called');
   const models: any[] = [];
-  console.log('[QWQ] Returning models:', JSON.stringify(models));
+
+  try {
+    // Fetch the static JS file containing model definitions
+    const jsUrl = 'https://qwq32.com/_next/static/chunks/8908-9588eff3feac75ec.js';
+    const response = await fetch(jsUrl, {
+      headers: {
+        'user-agent': USER_AGENT,
+      },
+    });
+
+    if (!response.ok) {
+      console.warn(`[QWQ] Failed to fetch static JS: ${response.status}`);
+      return [];
+    }
+
+    const text = await response.text();
+
+    // Look for JSON-like objects with id and name properties
+    // Pattern: {"id":"some-id","name":"Some Name"
+    const regex = /\{"id":"([^"]+)","name":"([^"]+)"/g;
+    let match;
+
+    while ((match = regex.exec(text)) !== null) {
+      const id = match[1];
+      const name = match[2];
+
+      // Only include free models or deepseek models as seemingly intended
+      if (id.includes('free') || id.includes('deepseek')) {
+        models.push({
+          id: id,
+          name: name,
+          // Default values since we can't easily parse specific attributes from regex without more complex parsing
+          context_length: 32000,
+          is_thinking: true,
+        });
+      }
+    }
+
+    console.log(`[QWQ] Extracted ${models.length} models from static JS`);
+  } catch (error) {
+    console.error('[QWQ] Error fetching/parsing models from JS:', error);
+  }
+
+  console.log(`[QWQ] Returning models: ${JSON.stringify(models)}`);
   return models;
+};
+
+export const isModelSupported = (model: string): boolean => {
+  return model.includes(':free') || model.includes('deepseek-r1-0528');
 };
 
 export const chatCompletionStream = async (

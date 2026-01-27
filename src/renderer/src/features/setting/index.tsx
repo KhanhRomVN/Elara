@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { AnimatedPage } from '../../shared/components/AnimatedPage';
 import {
   Save,
   Plus,
@@ -272,7 +273,7 @@ const SettingsPage = () => {
   ];
 
   return (
-    <div className="h-full flex overflow-hidden">
+    <AnimatedPage className="h-full flex overflow-hidden">
       {/* Sidebar */}
       <div className="w-56 border-r bg-muted/20 flex flex-col">
         <div className="p-4 border-b">
@@ -704,7 +705,7 @@ const SettingsPage = () => {
           )}
         </div>
       </div>
-    </div>
+    </AnimatedPage>
   );
 };
 

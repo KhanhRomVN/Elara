@@ -1,6 +1,8 @@
 import { memo } from 'react';
 import { LucideIcon } from 'lucide-react';
 import { cn } from '../../../shared/lib/utils';
+import { motion } from 'framer-motion';
+import { staggerItem } from '../../../shared/components/AnimatedPage';
 
 interface SummaryCardProps {
   title: string;
@@ -26,9 +28,11 @@ export const SummaryCard = memo(
     color = 'text-primary',
   }: SummaryCardProps) => {
     return (
-      <div
+      <motion.div
+        variants={staggerItem}
+        whileHover={{ scale: 1.02, y: -2 }}
         className={cn(
-          'relative overflow-hidden rounded-xl border bg-card/50 text-card-foreground shadow-sm transition-all hover:shadow-md hover:bg-card/80 group',
+          'relative overflow-hidden rounded-xl border bg-card/50 text-card-foreground shadow-sm transition-all hover:shadow-md hover:bg-card/80 group cursor-default',
           className,
         )}
       >
@@ -81,7 +85,7 @@ export const SummaryCard = memo(
             color.replace('text-', 'bg-'),
           )}
         />
-      </div>
+      </motion.div>
     );
   },
 );

@@ -852,8 +852,22 @@ export const usePlaygroundLogic = ({
         const status = await window.api.server.start();
         const port = status.port || 11434;
 
+        // Find the correct provider ID from the list
+        // selectedProvider currently holds the provider NAME (e.g. "QwQ")
+        // but we need the ID (e.g. "qwq") for the API call
+        const providerConfig = providersList.find(
+          (p) => p.provider_name === selectedProvider || p.provider_id === selectedProvider,
+        );
+        const providerId = providerConfig?.provider_id || selectedProvider;
+
         const updateModels = (models: any[]) => {
+          // maintain compatibility with UI which uses selectedProvider (name) as key
+          // or we should consistently use the same key.
+          // looking at index.tsx: providerModels[selectedProvider.toLowerCase()]
+          // so we should probably stick to lowercased selectedProvider for the key
+          // ensuring it matches what index.tsx expects.
           const providerKey = selectedProvider.toLowerCase();
+
           setProviderModelsList((prev) => ({
             ...prev,
             [providerKey]: models,
@@ -868,13 +882,13 @@ export const usePlaygroundLogic = ({
         };
 
         // Try cache first
-        const cached = getCachedModels(selectedProvider);
+        const cached = getCachedModels(providerId);
         if (cached && cached.length > 0) {
           updateModels(cached);
         }
 
         // Fetch and update
-        const models = await fetchAndCacheModels(selectedProvider, '', port);
+        const models = await fetchAndCacheModels(providerId, '', port);
         if (models.length > 0) {
           updateModels(models);
         }
@@ -883,7 +897,7 @@ export const usePlaygroundLogic = ({
       }
     };
     fetchModels();
-  }, [selectedProvider]);
+  }, [selectedProvider, providersList]);
 
   // Fetch History
   useEffect(() => {
@@ -933,6 +947,20 @@ export const usePlaygroundLogic = ({
     uiHidden?: boolean,
   ) => {
     const finalInput = overrideContent ?? input;
+    if (!finalInput.trim()) return;
+
+    if (!selectedProvider) {
+      console.warn('[Chat] No provider selected');
+      return;
+    }
+
+    const providerKey = selectedProvider.toLowerCase();
+    const modelId = providerModels[providerKey];
+    if (!modelId) {
+      console.warn('[Chat] No model selected for provider:', selectedProvider);
+      return;
+    }
+
     setTokenCount((prev) => prev + accumulatedUsage);
     setAccumulatedUsage(0);
 

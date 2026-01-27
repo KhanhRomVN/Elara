@@ -13,6 +13,8 @@ import {
   DropdownContent,
   DropdownItem,
 } from '../../shared/components/ui/dropdown';
+import { motion } from 'framer-motion';
+import { AnimatedPage, staggerContainer, staggerItem } from '../../shared/components/AnimatedPage';
 
 interface StatsData {
   accounts: any[];
@@ -166,19 +168,24 @@ const Dashboard = () => {
   );
 
   return (
-    <div className="h-full overflow-y-auto p-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+    <AnimatedPage className="h-full overflow-y-auto p-6 pb-20">
       <div className="mb-8 flex justify-between items-end">
-        <div>
+        <motion.div variants={staggerItem} initial="hidden" animate="show">
           <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/50 bg-clip-text text-transparent">
             Analytics Dashboard
           </h1>
           <p className="text-muted-foreground mt-2">
             Real-time overview of your AI infrastructure performance.
           </p>
-        </div>
+        </motion.div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
+      <motion.div
+        variants={staggerContainer}
+        initial="hidden"
+        animate="show"
+        className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8"
+      >
         <SummaryCard
           title="Total Requests"
           value={totalRequests.toLocaleString()}
@@ -209,7 +216,7 @@ const Dashboard = () => {
           description="Peak total tokens"
           color="text-amber-500"
         />
-      </div>
+      </motion.div>
 
       <div className="grid gap-6 md:grid-cols-7 mb-8">
         <UsageChart
@@ -336,7 +343,7 @@ const Dashboard = () => {
           />
         </div>
       </div>
-    </div>
+    </AnimatedPage>
   );
 };
 

@@ -112,8 +112,6 @@ async function fetchModelsFromAPI(providerId: string, port: number): Promise<Mod
     const baseUrl = getApiBaseUrl(port);
     const endpoint = `${baseUrl}/v1/providers/${normalizedProviderId}/models`;
 
-    console.log(`[Model Cache] Fetching models from: ${endpoint}`);
-
     const response = await fetch(endpoint);
 
     if (!response.ok) {

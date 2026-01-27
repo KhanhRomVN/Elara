@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { AnimatedPage } from '../../shared/components/AnimatedPage';
 import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAccounts } from './hooks/useAccounts';
 import { AccountsHeader } from './components/AccountsHeader';
@@ -70,7 +71,7 @@ export const Accounts = () => {
   }
 
   return (
-    <div className="flex-1 flex flex-col space-y-6 p-6 min-h-0">
+    <AnimatedPage className="flex-1 flex flex-col space-y-6 p-6 min-h-0">
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Accounts</h2>
         <p className="text-muted-foreground">
@@ -152,7 +153,7 @@ export const Accounts = () => {
         title={deleteItem ? `Delete account ${deleteItem.email}?` : 'Delete accounts'}
         count={deleteItem ? 1 : selectedAccounts.size}
       />
-    </div>
+    </AnimatedPage>
   );
 };
 

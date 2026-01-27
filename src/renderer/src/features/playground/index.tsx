@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { AnimatedPage } from '../../shared/components/AnimatedPage';
 import { useNavigate } from 'react-router-dom';
 import { ModelSelector } from './components/ModelSelector';
 import { CustomSelect } from './components/CustomSelect';
@@ -382,10 +383,22 @@ export const PlaygroundPage = ({
   );
 
   if (tabs) {
-    return innerContent;
+    return (
+      <AnimatedPage
+        className="flex-1 flex flex-col min-w-0"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+      >
+        {innerContent}
+      </AnimatedPage>
+    );
   }
 
-  return <div className="h-full flex flex-col bg-background p-4 gap-4">{innerContent}</div>;
+  return (
+    <AnimatedPage className="h-full flex flex-col bg-background p-4 gap-4">
+      {innerContent}
+    </AnimatedPage>
+  );
 };
 
 export default PlaygroundPage;

@@ -347,6 +347,7 @@ export class HuggingChatProvider implements Provider {
   isModelSupported(model: string): boolean {
     const m = model.toLowerCase();
     // HuggingChat models are often repo/model-name or just 'omni'
-    return m.includes('/') || m === 'omni';
+    // We exclude models with ':free' as they usually belong to other providers like QWQ
+    return (m.includes('/') && !m.includes(':free')) || m === 'omni';
   }
 }

@@ -130,7 +130,7 @@ export class QwqProvider implements Provider {
             name: name,
             // Default values since we can't easily parse specific attributes from regex without more complex parsing
             context_length: 32000,
-            is_thinking: true,
+            is_thinking: false,
           });
         }
       }
