@@ -18,3 +18,4 @@ njsscan.sarif
 !.env.example
 # temp
 backend/database.sqlite
+# simple_backend

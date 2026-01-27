@@ -507,7 +507,6 @@ router.post('/completions', async (req, res) => {
           ref_file_ids,
           chatId: conversation_id,
         },
-        userAgent,
         callbacks,
       );
     } catch (error: any) {
