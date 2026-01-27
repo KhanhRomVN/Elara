@@ -1,18 +1,10 @@
 import { useState, useEffect } from 'react';
-import {
-  AlertCircle,
-  X,
-  Copy,
-  Check,
-  ExternalLink,
-  RefreshCw,
-  Key,
-  Mail,
-  ShieldCheck,
-} from 'lucide-react';
+import { AlertCircle, X, RefreshCw, Key, Mail, ShieldCheck } from 'lucide-react';
 import { cn } from '../../../shared/lib/utils';
 import { getApiBaseUrl } from '../../../utils/apiUrl';
 import googleIcon from '../../../assets/auth_icons/google.svg';
+import appleIcon from '../../../assets/auth_icons/apple.svg';
+import githubIcon from '../../../assets/auth_icons/github.svg';
 
 // Fallback providers just in case API fails
 import { providers as staticProviders, fetchProviders } from '../../../config/providers';
@@ -187,7 +179,7 @@ export function AddAccountDialog({
                   type="text"
                   value={pendingAccount.email}
                   readOnly
-                  className="flex h-10 w-full rounded-md border border-input bg-muted/50 px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed opacity-100 dark:text-foreground"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed opacity-100 text-foreground"
                 />
                 <div className="absolute right-3 top-2.5">
                   <ShieldCheck className="h-4 w-4 text-green-500" />
@@ -210,7 +202,7 @@ export function AddAccountDialog({
                       : 'N/A'
                   }
                   readOnly
-                  className="flex h-10 w-full rounded-md border border-input bg-muted/50 px-3 py-2 text-sm font-mono ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed opacity-100 dark:text-foreground"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed opacity-100 text-foreground"
                 />
                 <div className="absolute right-3 top-2.5">
                   <Key className="h-4 w-4 text-muted-foreground" />
@@ -304,7 +296,7 @@ export function AddAccountDialog({
                       )}
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-md overflow-hidden bg-background border flex items-center justify-center p-1 relative shrink-0">
+                        <div className="w-6 h-6 rounded-md overflow-hidden flex items-center justify-center p-0 relative shrink-0">
                           <img
                             src={p.icon}
                             alt={p.provider_name}
@@ -330,78 +322,58 @@ export function AddAccountDialog({
 
                           {/* Badges Section */}
                           <div className="flex items-center gap-1.5 mt-1">
-                            {p.auth_method?.map((method: string) => {
-                              // Special interactive badges for providers with multiple methods
-                              if (p.auth_methods && p.auth_methods.length > 1) {
-                                if (method === 'basic') {
-                                  return (
-                                    <div
-                                      key="basic"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setProvider(p.provider_id);
-                                        setLoginMethod('basic');
-                                      }}
-                                      className={cn(
-                                        'flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium cursor-pointer transition-colors',
-                                        loginMethod === 'basic' && provider === p.provider_id
-                                          ? 'bg-primary/20 text-primary border-primary/30'
-                                          : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted',
-                                      )}
-                                    >
-                                      <Mail className="w-3 h-3" />
-                                      <span>Basic</span>
-                                    </div>
-                                  );
-                                }
-                                if (method === 'google') {
-                                  return (
-                                    <div
-                                      key="google"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setProvider(p.provider_id);
-                                        setLoginMethod('google');
-                                      }}
-                                      className={cn(
-                                        'flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium cursor-pointer transition-colors',
-                                        loginMethod === 'google' && provider === p.provider_id
-                                          ? 'bg-blue-500/20 text-blue-500 border-blue-500/30'
-                                          : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted',
-                                      )}
-                                    >
-                                      <img src={googleIcon} alt="Google" className="w-3 h-3" />
-                                      <span>Google</span>
-                                    </div>
-                                  );
-                                }
-                              }
+                            {(p.auth_methods || p.auth_method || []).map((method: string) => {
+                              const isSelected =
+                                loginMethod === method && provider === p.provider_id;
+                              const isInteractive = (p.auth_methods || []).length > 1;
 
-                              // Static badges for other providers
+                              let icon = null;
+                              const methodStr = String(method);
+                              let label = methodStr.charAt(0).toUpperCase() + methodStr.slice(1);
+                              let customStyle = 'bg-muted/50 text-muted-foreground border-border';
+
                               if (method === 'basic') {
-                                return (
-                                  <div
-                                    key="basic-static"
-                                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium bg-muted/50 text-muted-foreground border-border"
-                                  >
-                                    <Mail className="w-3 h-3" />
-                                    <span>Basic</span>
-                                  </div>
-                                );
-                              }
-                              if (method === 'google') {
-                                return (
-                                  <div
-                                    key="google-static"
-                                    className="flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium bg-muted/50 text-muted-foreground border-border"
-                                  >
-                                    <img src={googleIcon} alt="Google" className="w-3 h-3" />
-                                    <span>Google</span>
-                                  </div>
-                                );
+                                icon = <Mail className="w-3 h-3" />;
+                                if (isSelected)
+                                  customStyle = 'bg-primary/20 text-primary border-primary/30';
+                              } else if (method === 'google') {
+                                icon = <img src={googleIcon} alt="Google" className="w-3 h-3" />;
+                                if (isSelected)
+                                  customStyle = 'bg-blue-500/20 text-blue-500 border-blue-500/30';
+                              } else if (method === 'apple') {
+                                icon = <img src={appleIcon} alt="Apple" className="w-3 h-3" />;
+                                if (isSelected)
+                                  customStyle =
+                                    'bg-foreground/10 text-foreground border-foreground/20';
+                              } else if (method === 'github') {
+                                icon = <img src={githubIcon} alt="GitHub" className="w-3 h-3" />;
+                                if (isSelected)
+                                  customStyle =
+                                    'bg-foreground/10 text-foreground border-foreground/20';
                               }
 
-                              return null;
+                              return (
+                                <div
+                                  key={method}
+                                  onClick={
+                                    isInteractive
+                                      ? (e) => {
+                                          e.stopPropagation();
+                                          setProvider(p.provider_id);
+                                          setLoginMethod(method);
+                                        }
+                                      : undefined
+                                  }
+                                  className={cn(
+                                    'flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium transition-colors',
+                                    isInteractive && 'cursor-pointer hover:bg-muted',
+                                    customStyle,
+                                  )}
+                                >
+                                  {icon}
+                                  <span>{label}</span>
+                                </div>
+                              );
                             })}
                           </div>
                         </div>
@@ -430,12 +402,7 @@ export function AddAccountDialog({
                   </div>
                 ) : (
                   <div className="flex flex-col h-full items-center justify-center text-center space-y-6">
-                    <div
-                      className={cn(
-                        'p-4 rounded-full bg-opacity-20',
-                        selectedProviderData?.color || 'bg-muted',
-                      )}
-                    >
+                    <div className="p-0 rounded-full">
                       <img src={selectedProviderData?.icon} className="w-12 h-12" alt={provider} />
                     </div>
                     <div className="space-y-2">

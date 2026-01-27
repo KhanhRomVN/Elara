@@ -43,7 +43,6 @@ class VersionManager {
         const versionInfo: VersionInfo = JSON.parse(data);
         this.currentVersion = versionInfo.version;
         this.lastCheckTime = versionInfo.lastChecked;
-        logger.info(`Loaded cached version: ${this.currentVersion}`);
       }
     } catch (error) {
       logger.warn('Failed to load cached version:', error);
@@ -63,7 +62,6 @@ class VersionManager {
         this.versionFilePath,
         JSON.stringify(versionInfo, null, 2),
       );
-      logger.info(`Saved version to cache: ${version}`);
     } catch (error) {
       logger.error('Failed to save version to cache:', error);
     }
@@ -109,7 +107,6 @@ class VersionManager {
     }
 
     // Fetch new version
-    logger.info('Checking for new version...');
     const newVersion = await this.fetchVersion();
 
     if (!newVersion) {
@@ -121,7 +118,6 @@ class VersionManager {
     const hasChanged = newVersion !== this.currentVersion;
 
     if (hasChanged) {
-      logger.info(`Version changed: ${this.currentVersion} -> ${newVersion}`);
       this.currentVersion = newVersion;
     } else {
       logger.debug(`Version unchanged: ${newVersion}`);
@@ -141,7 +137,6 @@ class VersionManager {
     version: string | null;
     hasChanged: boolean;
   }> {
-    logger.info('Forcing version refresh...');
     this.lastCheckTime = 0; // Reset last check time
     return this.checkVersion();
   }

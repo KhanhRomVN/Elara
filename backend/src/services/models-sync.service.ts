@@ -13,6 +13,7 @@ const DYNAMIC_PROVIDERS = [
   'antigravity',
   'cerebras',
   'gemini',
+  'qwen',
 ];
 
 /**
@@ -40,9 +41,6 @@ export const getMsUntilNextGmtMidnight = (): number => {
 export const scheduleNextGmtSync = (callback: () => Promise<void>): void => {
   const msUntilMidnight = getMsUntilNextGmtMidnight();
   const hoursUntil = (msUntilMidnight / (1000 * 60 * 60)).toFixed(2);
-  logger.info(
-    `Scheduling next models sync at GMT midnight (in ${hoursUntil} hours)`,
-  );
 
   setTimeout(async () => {
     try {
@@ -116,10 +114,6 @@ export const saveCachedModels = (
     ON CONFLICT(provider_id) DO UPDATE SET last_sync_at = ?, is_dynamic = ?
   `,
   ).run(providerId, now, isDynamic ? 1 : 0, now, isDynamic ? 1 : 0);
-
-  logger.info(
-    `Saved ${models.length} models for provider ${providerId} (dynamic: ${isDynamic})`,
-  );
 };
 
 export const shouldSyncProvider = (providerId: string): boolean => {
@@ -132,8 +126,9 @@ export const shouldSyncProvider = (providerId: string): boolean => {
 
   if (!row) return true;
 
-  // Only auto-sync dynamic providers
   if (!row.is_dynamic) return false;
+
+  if (providerId.toLowerCase() === 'qwen') return true;
 
   const elapsed = Date.now() - row.last_sync_at;
   return elapsed > SYNC_INTERVAL_MS;
@@ -142,11 +137,8 @@ export const shouldSyncProvider = (providerId: string): boolean => {
 export const syncProviderModels = async (
   providerId: string,
 ): Promise<CachedModel[]> => {
-  logger.info(`Syncing models for provider: ${providerId}`);
-
   const dynamicProvider = providerRegistry.getProvider(providerId);
   if (!dynamicProvider || !dynamicProvider.getModels) {
-    logger.warn(`Provider ${providerId} does not support getModels`);
     return [];
   }
 
@@ -156,7 +148,6 @@ export const syncProviderModels = async (
     .get(providerId.toLowerCase()) as any;
 
   if (!account) {
-    logger.warn(`No account found for provider ${providerId}, cannot sync`);
     return [];
   }
 
@@ -181,8 +172,6 @@ export const syncProviderModels = async (
 };
 
 export const syncAllDynamicProviders = async (): Promise<void> => {
-  logger.info('Starting sync for all dynamic providers...');
-
   for (const providerId of DYNAMIC_PROVIDERS) {
     if (shouldSyncProvider(providerId)) {
       try {
@@ -194,8 +183,6 @@ export const syncAllDynamicProviders = async (): Promise<void> => {
       logger.debug(`Provider ${providerId} does not need sync yet`);
     }
   }
-
-  logger.info('Dynamic providers sync completed');
 };
 
 export const getModelsForProvider = async (

@@ -11,7 +11,6 @@ export const initDatabase = (customPath?: string): void => {
   try {
     db = new Database(dbPath, { timeout: 10000 }); // Wait up to 10s for lock
     db.pragma('journal_mode = WAL'); // Enable WAL mode for better concurrency
-    logger.info(`Connected to SQLite database at ${dbPath}`);
     createTables();
   } catch (err) {
     logger.error('Could not connect to database', err);
@@ -35,13 +34,11 @@ const createTables = (): void => {
 
   try {
     db.exec(accountsQuery);
-    logger.info('Accounts table initialized');
 
     // Migration: Refactor Accounts Schema (Remove accumulated tokens/requests)
     const accountInfo = db.pragma('table_info(accounts)') as any[];
     const accountColumns = accountInfo.map((c) => c.name);
     if (accountColumns.includes('year_tokens')) {
-      logger.info('Migrating accounts table to new stats schema...');
       db.exec('BEGIN TRANSACTION');
       try {
         db.exec(`
@@ -62,7 +59,6 @@ const createTables = (): void => {
         db.exec('DROP TABLE accounts');
         db.exec('ALTER TABLE accounts_new RENAME TO accounts');
         db.exec('COMMIT');
-        logger.info('Accounts table migration complete.');
       } catch (e) {
         db.exec('ROLLBACK');
         logger.error('Failed to migrate accounts table', e);
@@ -74,7 +70,6 @@ const createTables = (): void => {
         db.exec(
           'ALTER TABLE accounts ADD COLUMN successful_requests INTEGER DEFAULT 0',
         );
-        logger.info('Added successful_requests to accounts');
       } catch (e) {
         logger.warn('Failed to add successful_requests to accounts', e);
       }
@@ -91,7 +86,6 @@ const createTables = (): void => {
     ) {
       try {
         db.exec('ALTER TABLE accounts RENAME COLUMN provider to provider_id');
-        logger.info('Renamed provider to provider_id in accounts');
       } catch (e) {
         logger.warn('Failed to rename provider to provider_id');
       }
@@ -111,7 +105,6 @@ const createTables = (): void => {
 
   try {
     db.exec(providersQuery);
-    logger.info('Providers table initialized');
 
     // Migration: Add total_accounts column if it doesn't exist
     const providersInfo = db.pragma('table_info(providers)') as any[];
@@ -121,7 +114,6 @@ const createTables = (): void => {
         db.exec(
           'ALTER TABLE providers ADD COLUMN total_accounts INTEGER DEFAULT 0',
         );
-        logger.info('Added total_accounts column to providers');
       } catch (e) {
         logger.warn('Failed to add total_accounts to providers');
       }
@@ -146,7 +138,6 @@ const createTables = (): void => {
   try {
     db.exec('DROP TABLE IF EXISTS accounts_stats');
     db.exec('DROP TABLE IF EXISTS providers_stats');
-    logger.info('Dropped old stats tables');
   } catch (e) {
     logger.warn('Failed to drop old stats tables', e);
   }
@@ -182,14 +173,12 @@ const createTables = (): void => {
 
   try {
     db.exec(providerModelsQuery);
-    logger.info('Provider models table initialized');
 
     // Migration: Refactor Provider Models Schema
     const pmInfo = db.pragma('table_info(provider_models)') as any[];
     const pmColumns = pmInfo.map((c) => c.name);
 
     if (pmColumns.includes('year_tokens')) {
-      logger.info('Migrating provider_models table to new stats schema...');
       db.exec('BEGIN TRANSACTION');
       try {
         db.exec(`
@@ -222,7 +211,6 @@ const createTables = (): void => {
         db.exec('DROP TABLE provider_models');
         db.exec('ALTER TABLE provider_models_new RENAME TO provider_models');
         db.exec('COMMIT');
-        logger.info('Provider models migration complete.');
       } catch (e) {
         db.exec('ROLLBACK');
         logger.error('Failed to migrate provider_models', e);
@@ -245,7 +233,6 @@ const createTables = (): void => {
             db.exec(
               `ALTER TABLE provider_models ADD COLUMN ${col} INTEGER DEFAULT 0`,
             );
-            logger.info(`Added ${col} to provider_models`);
           } catch (e) {
             logger.warn(`Failed to add ${col} to provider_models`, e);
           }
@@ -288,7 +275,6 @@ const createTables = (): void => {
     )
   `;
   db.exec(activeConversationStatsQuery);
-  logger.info('Conversation stats table initialized');
 
   // Table to store detailed usage metrics
   const metricsQuery = `
@@ -307,7 +293,6 @@ const createTables = (): void => {
     db.exec(
       'CREATE INDEX IF NOT EXISTS idx_metrics_timestamp ON metrics(timestamp)',
     );
-    logger.info('Metrics table initialized with index');
   } catch (err) {
     logger.error('Error initializing metrics table', err);
   }
@@ -324,6 +309,5 @@ export const closeDatabase = (): void => {
   if (db) {
     db.close();
     db = null;
-    logger.info('Database connection closed');
   }
 };

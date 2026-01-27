@@ -42,7 +42,6 @@ class ProviderSyncService {
   private ensureTempDirectory(): void {
     if (!fs.existsSync(this.tempStoragePath)) {
       fs.mkdirSync(this.tempStoragePath, { recursive: true });
-      logger.info(`Created temp storage directory: ${this.tempStoragePath}`);
     }
   }
 
@@ -66,7 +65,6 @@ class ProviderSyncService {
    * Download provider.json from GitHub
    */
   private async downloadProviderJson(): Promise<Provider[] | null> {
-    logger.info('Downloading provider.json...');
     const content = await this.downloadFile(PROVIDER_JSON_URL);
 
     if (!content) {
@@ -82,7 +80,6 @@ class ProviderSyncService {
       // Save to temp storage
       const filePath = path.join(this.tempStoragePath, 'provider.json');
       fs.writeFileSync(filePath, content, 'utf-8');
-      logger.info(`Saved provider.json to ${filePath}`);
 
       return providers;
     } catch (error) {
@@ -117,10 +114,6 @@ class ProviderSyncService {
           WHERE LOWER(accounts.provider_id) = LOWER(providers.id)
         )
       `);
-
-      logger.info(
-        `Ensured ${providers.length} providers exist in DB with correct account counts`,
-      );
     } catch (error) {
       logger.error('Failed to ensure providers in DB:', error);
     }
@@ -140,28 +133,9 @@ class ProviderSyncService {
           WHERE LOWER(accounts.provider_id) = LOWER(providers.id)
         )
       `);
-      logger.info('Synchronized provider account counts');
     } catch (error) {
       logger.error('Failed to sync provider account counts:', error);
     }
-  }
-
-  /**
-   * Download provider implementation files
-   * Note: For now, we'll focus on provider.json. Provider implementation files
-   * are TypeScript modules that need to be compiled, so we'll use bundled versions
-   */
-  private async downloadProviderFiles(providers: Provider[]): Promise<void> {
-    logger.info('Checking provider implementation files...');
-
-    // For enabled providers, we could download additional config files if needed
-    // For now, we'll just log which providers are enabled
-    const enabledProviders = providers.filter((p) => p.is_enabled);
-    logger.info(
-      `Found ${enabledProviders.length} enabled providers: ${enabledProviders.map((p) => p.provider_id).join(', ')}`,
-    );
-
-    // Future enhancement: download provider-specific config files
   }
 
   /**
@@ -171,29 +145,21 @@ class ProviderSyncService {
     try {
       const { version, hasChanged } = await versionManager.checkVersion();
 
-      logger.info(`Current version: ${version}, Changed: ${hasChanged}`);
-
       // If version hasn't changed and we have cached data, skip download
       if (!hasChanged && this.hasCachedProviders()) {
-        logger.debug('Version unchanged and cache exists, skipping download');
         return true;
       }
 
       // Download provider.json
       const providers = await this.downloadProviderJson();
       if (!providers) {
-        logger.warn('Failed to download provider.json, using existing cache');
         return false;
       }
-
-      // Download provider files (if needed)
-      await this.downloadProviderFiles(providers);
 
       // Ensure all providers exist in the DB for total_accounts tracking
       this.ensureProvidersInDb(providers);
 
       this.isInitialized = true;
-      logger.info('Provider sync completed successfully');
       return true;
     } catch (error) {
       logger.error('Provider sync failed:', error);
@@ -223,11 +189,8 @@ class ProviderSyncService {
           const { id, name, ...rest } = p;
           return rest;
         });
-        logger.debug(`Loaded ${sanitized.length} providers from temp storage`);
         return sanitized;
-      } catch (error) {
-        logger.warn('Failed to load providers from temp storage:', error);
-      }
+      } catch (error) {}
     }
 
     // Fallback to bundled provider.json
@@ -240,14 +203,11 @@ class ProviderSyncService {
           const { id, name, ...rest } = p;
           return rest;
         });
-        logger.debug(`Loaded ${sanitized.length} providers from bundled file`);
         return sanitized;
       }
     } catch (error) {
       logger.error('Failed to load bundled providers:', error);
     }
-
-    logger.warn('No provider data available');
     return [];
   }
 
@@ -255,7 +215,6 @@ class ProviderSyncService {
    * Initialize provider sync (call on startup)
    */
   async initialize(): Promise<void> {
-    logger.info('Initializing provider sync service...');
     await this.syncProviders();
 
     // Always sync provider account counts on startup
@@ -266,10 +225,8 @@ class ProviderSyncService {
     }
 
     // Sync dynamic provider models on startup
-    logger.info('Syncing dynamic provider models...');
     try {
       await syncAllDynamicProviders();
-      logger.info('Dynamic provider models sync completed');
     } catch (error) {
       logger.error('Failed to sync dynamic provider models on startup:', error);
     }
@@ -287,7 +244,6 @@ class ProviderSyncService {
 
     // Set up periodic models sync at GMT midnight every 24 hours
     scheduleNextGmtSync(async () => {
-      logger.info('Running scheduled GMT midnight models sync...');
       await syncAllDynamicProviders();
     });
   }
@@ -296,7 +252,6 @@ class ProviderSyncService {
    * Force sync (ignore cache)
    */
   async forceSync(): Promise<boolean> {
-    logger.info('Forcing provider sync...');
     await versionManager.forceRefresh();
     return this.syncProviders();
   }

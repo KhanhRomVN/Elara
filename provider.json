@@ -158,7 +158,7 @@
     "website": "https://qwenlm.ai/",
     "is_search": false,
     "is_upload": false,
-    "auth_method": ["basic"],
+    "auth_method": ["basic", "google"],
     "is_temperature": false
   },
   {

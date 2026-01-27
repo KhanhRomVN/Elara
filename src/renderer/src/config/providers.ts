@@ -84,7 +84,9 @@ export async function fetchProviders(port: number = 11434): Promise<ProviderConf
         website: p.website,
         is_search: p.is_search,
         is_upload: p.is_upload,
-        auth_methods: p.auth_methods || (p.auth_method ? [p.auth_method] : []),
+        auth_methods:
+          p.auth_methods ||
+          (Array.isArray(p.auth_method) ? p.auth_method : p.auth_method ? [p.auth_method] : []),
         detail_fetch_required: p.detail_fetch_required ?? false,
         color: p.color,
         conflict_search_with_upload: p.conflict_search_with_upload,
