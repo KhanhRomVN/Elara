@@ -114,7 +114,7 @@
   {
     "provider_id": "kimi",
     "provider_name": "Kimi",
-    "is_enabled": false,
+    "is_enabled": true,
     "website": "https://www.kimi.com/",
     "is_search": false,
     "is_upload": false,

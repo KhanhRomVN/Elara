@@ -10,6 +10,12 @@ const KimiProxy: ProxyHandler = {
       if (reqCookies && reqCookies.includes('kimi-auth=')) {
         proxyEvents.emit('kimi-cookies', reqCookies);
       }
+
+      // Also capture Authorization header if present
+      const authHeader = ctx.clientToProxyRequest.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        proxyEvents.emit('kimi-auth-token', authHeader);
+      }
     }
     callback();
   },

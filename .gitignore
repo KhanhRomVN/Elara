@@ -16,5 +16,5 @@ njsscan.sarif
 .env.production.local
 .env.*
 !.env.example
-temp
+# temp
 backend/database.sqlite
