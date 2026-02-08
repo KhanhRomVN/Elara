@@ -141,7 +141,14 @@ export const usePlaygroundLogic = ({
       },
   );
 
-  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [history, setHistory] = useState<HistoryItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('elara_playground_history_cache');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
 
   // Indexing status state
   const [indexingStatus, setIndexingStatus] = useState<{

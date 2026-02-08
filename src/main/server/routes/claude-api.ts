@@ -1,7 +1,6 @@
 import express, { Request, Response } from 'express';
 import { getDb } from '@backend/services/db';
 import { sendMessage } from '@backend/services/chat.service';
-import { extendedToolService } from '@backend/services/extended-tool.service';
 import * as crypto from 'crypto';
 
 const router = express.Router();
@@ -125,7 +124,8 @@ function resolveClaudeModelMapping(originalModel: string): {
 } | null {
   const db = getDb();
   const getConfig = (key: string) =>
-    db.prepare('SELECT value FROM config WHERE key = ?').get(key)?.value;
+    (db.prepare('SELECT value FROM config WHERE key = ?').get(key) as { value: string } | undefined)
+      ?.value;
 
   let preferredModel: string | undefined;
 
@@ -186,7 +186,7 @@ function generateSessionFingerprint(apiKey: string, messages: any[]): string {
  */
 router.post(['/messages', '/message'], async (req: Request, res: Response) => {
   try {
-    const { model, messages, stream, max_tokens, temperature } = req.body;
+    const { model, messages, stream, temperature } = req.body;
 
     // 0. Handle Probe Request
     if (isProbeRequest(messages)) {
@@ -195,23 +195,9 @@ router.post(['/messages', '/message'], async (req: Request, res: Response) => {
       return;
     }
 
-    // 1. Get configuration for Claude Code
-    const config = extendedToolService.getByToolId('claude_code');
-
-    if (!config || !config.provider_id) {
-      // Fallback or error? The user said it might be "auto"
-      // We'll try to find any valid account if not configured
-    }
-
+    // 1. Tool configuration logic removed (extended_tools)
     const db = getDb();
     let account;
-
-    if (config?.provider_id && config.provider_id !== 'auto') {
-      // Find account by provider_id
-      account = db
-        .prepare('SELECT * FROM accounts WHERE provider_id = ?')
-        .get(config.provider_id) as any;
-    }
 
     // Priority: Mapping (from DB) > config.model (if not auto) > request.model
     let targetModel = model;
@@ -227,12 +213,7 @@ router.post(['/messages', '/message'], async (req: Request, res: Response) => {
       );
     }
 
-    // fallback to tool configuration if not mapped and configured
-    if (!mapped && config?.model_id && config.model_id !== 'auto') {
-      targetModel = config.model_id;
-      targetProviderId =
-        config?.provider_id && config.provider_id !== 'auto' ? config.provider_id : undefined;
-    }
+    // fallback check removed (config gone)
 
     // Parse "provider/model" format if extracted from config or request
     if (!mapped && targetModel && targetModel.includes('/')) {
@@ -376,7 +357,7 @@ router.post(['/messages', '/message'], async (req: Request, res: Response) => {
 /**
  * Endpoint for token counting (to avoid 404)
  */
-router.post('/count_tokens', async (req: Request, res: Response) => {
+router.post('/count_tokens', async (_req: Request, res: Response) => {
   res.json({
     input_tokens: 100, // Return a mock value to satisfy CLI
   });

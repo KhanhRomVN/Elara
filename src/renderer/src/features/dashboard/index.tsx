@@ -67,7 +67,7 @@ const Dashboard = () => {
   const handleNext = useCallback(() => setOffset((prev) => Math.max(0, prev - 1)), []);
 
   // Calculate Summary Metrics
-  const { totalRequests, successRate, maxReqConv, maxTokenConv } = useMemo(() => {
+  const { totalRequests, successRate } = useMemo(() => {
     const requests =
       data?.accounts.reduce((sum: number, acc: any) => sum + (acc.total_requests || 0), 0) || 0;
     const successful =
@@ -75,22 +75,11 @@ const Dashboard = () => {
       0;
     const rate = requests > 0 ? (successful / requests) * 100 : 0;
 
-    const maxReq =
-      data?.models.reduce((max: number, m: any) => Math.max(max, m.max_req_conversation || 0), 0) ||
-      0;
-    const maxToken =
-      data?.models.reduce(
-        (max: number, m: any) => Math.max(max, m.max_token_conversation || 0),
-        0,
-      ) || 0;
-
     return {
       totalRequests: requests,
       successRate: rate,
-      maxReqConv: maxReq,
-      maxTokenConv: maxToken,
     };
-  }, [data?.accounts, data?.models]);
+  }, [data?.accounts]);
 
   // Prepare Chart Data from history
   const displayChartData = useMemo(() => {
@@ -203,17 +192,24 @@ const Dashboard = () => {
           color="text-emerald-500"
         />
         <SummaryCard
-          title="Max Req/Conv"
-          value={maxReqConv.toLocaleString()}
+          title="Avg Tokens/Req"
+          value={
+            totalRequests > 0
+              ? (
+                  data?.accounts.reduce((sum: number, a: any) => sum + (a.total_tokens || 0), 0) /
+                  totalRequests
+                ).toFixed(0)
+              : '0'
+          }
           icon={Database}
-          description="Peak queries in chat"
+          description="Average model output"
           color="text-blue-500"
         />
         <SummaryCard
-          title="Max Tokens/Conv"
-          value={(maxTokenConv / 1000).toFixed(1) + 'k'}
+          title="Active Accounts"
+          value={(data?.accounts?.length || 0).toString()}
           icon={Box}
-          description="Peak total tokens"
+          description="Configured credentials"
           color="text-amber-500"
         />
       </motion.div>
@@ -299,29 +295,18 @@ const Dashboard = () => {
             {renderTableFilter(modelPeriod, setModelPeriod)}
           </div>
           <MiniTable
-            title="Model Performance"
+            title="Model Usage"
             data={modelData?.models || []}
             columns={[
               {
                 header: 'Model ID',
                 accessorKey: 'model_id',
-                className: 'max-w-[120px] truncate font-medium',
+                className: 'max-w-[150px] truncate font-medium',
               },
               {
-                header: 'Max Load (Req|Token)',
-                accessorKey: 'max_load',
-                className: 'text-center',
-                cell: (item) => (
-                  <div className="flex items-center gap-1.5 text-[11px] justify-center">
-                    <span className="text-blue-400 font-medium">
-                      {item.max_req_conversation || 0}
-                    </span>
-                    <span className="text-[var(--text-tertiary)] opacity-30">|</span>
-                    <span className="text-amber-400 font-medium">
-                      {(item.max_token_conversation / 1000).toFixed(1)}k
-                    </span>
-                  </div>
-                ),
+                header: 'Provider',
+                accessorKey: 'provider_id',
+                className: 'text-center uppercase text-[10px] font-bold opacity-60',
               },
               {
                 header: 'Totals (Req|Token)',

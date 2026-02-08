@@ -85,6 +85,94 @@ interface IndexingParams {
   geminiApiKeys: string[];
 }
 
+interface ApiKeyStatus {
+  key: string;
+  isActive: boolean;
+  cooldownUntil: number;
+  errorCount: number;
+}
+
+class ApiKeyManager {
+  private statuses: ApiKeyStatus[];
+  private currentIndex: number = 0;
+
+  constructor(keys: string[]) {
+    this.statuses = keys.map((key) => ({
+      key,
+      isActive: true,
+      cooldownUntil: 0,
+      errorCount: 0,
+    }));
+  }
+
+  async warmup(): Promise<void> {
+    const warmupPromises = this.statuses.map(async (status) => {
+      try {
+        await getEmbedding('warmup', status.key);
+        status.isActive = true;
+        logger.info(
+          `API Key ${status.key.slice(0, 8)}... warmed up successfully`,
+        );
+      } catch (error) {
+        status.isActive = false;
+        logger.warn(
+          `API Key ${status.key.slice(0, 8)}... failed warmup: ${error}`,
+        );
+      }
+    });
+
+    await Promise.all(warmupPromises);
+  }
+
+  getNextKey(): string | null {
+    const now = Date.now();
+    const availableStatuses = this.statuses.filter(
+      (s) => s.isActive && s.cooldownUntil < now,
+    );
+
+    if (availableStatuses.length === 0) {
+      // Check if any key is just in cooldown
+      const inCooldown = this.statuses.filter((s) => s.isActive);
+      if (inCooldown.length > 0) {
+        // Find one with earliest cooldown
+        const nextReady = inCooldown.sort(
+          (a, b) => a.cooldownUntil - b.cooldownUntil,
+        )[0];
+        return nextReady.key;
+      }
+      return null;
+    }
+
+    const status =
+      availableStatuses[this.currentIndex % availableStatuses.length];
+    this.currentIndex++;
+    return status.key;
+  }
+
+  markError(key: string, isRateLimit: boolean): void {
+    const status = this.statuses.find((s) => s.key === key);
+    if (!status) return;
+
+    status.errorCount++;
+    if (isRateLimit) {
+      // Cooldown for 1 minute on rate limit
+      status.cooldownUntil = Date.now() + 60 * 1000;
+      logger.warn(
+        `API Key ${key.slice(0, 8)}... rate limited. Cooldown until ${new Date(status.cooldownUntil).toLocaleTimeString()}`,
+      );
+    } else if (status.errorCount > 3) {
+      status.isActive = false;
+      logger.error(
+        `API Key ${key.slice(0, 8)}... deactivated due to repeated errors`,
+      );
+    }
+  }
+
+  hasActiveKeys(): boolean {
+    return this.statuses.some((s) => s.isActive);
+  }
+}
+
 interface SearchParams {
   workspacePath: string;
   query: string;
@@ -606,55 +694,96 @@ export async function indexCodebase(params: IndexingParams): Promise<void> {
 
   // Generate embeddings and upsert in batches
   const BATCH_SIZE = 10;
-  let currentKeyIndex = 0;
+  const keyManager = new ApiKeyManager(geminiApiKeys);
+
+  logger.info('Warming up API keys...');
+  await keyManager.warmup();
+
+  if (!keyManager.hasActiveKeys()) {
+    logger.error('No active API keys available after warmup');
+    throw new Error('All API keys failed to warmup');
+  }
+
   const points: Array<{ id: number; vector: number[]; payload: any }> = [];
 
   for (let i = 0; i < allChunks.length; i++) {
     const chunk = allChunks[i];
 
-    // Rotate API keys to avoid rate limits
-    const apiKey = geminiApiKeys[currentKeyIndex % geminiApiKeys.length];
-    currentKeyIndex++;
+    let success = false;
+    let retryCount = 0;
+    const MAX_RETRIES = 5;
 
-    try {
-      // Create text for embedding: include file path and content
-      const relativePath = path.relative(workspacePath, chunk.filePath);
-      const embeddingText = `File: ${relativePath}\n${chunk.name ? `Name: ${chunk.name}\n` : ''}${chunk.content}`;
-
-      const vector = await getEmbedding(embeddingText, apiKey);
-
-      points.push({
-        id: i + 1,
-        vector,
-        payload: {
-          file_path: relativePath,
-          full_path: chunk.filePath,
-          start_line: chunk.startLine,
-          end_line: chunk.endLine,
-          chunk_type: chunk.chunkType,
-          name: chunk.name,
-          content: chunk.content.slice(0, 1000), // Store first 1000 chars for context
-        },
-      });
-
-      // Upsert in batches
-      if (points.length >= BATCH_SIZE) {
-        await upsertPoints(
-          collectionName,
-          points,
-          qdrantEndpoint,
-          qdrantApiKey,
-        );
-        logger.info(`Indexed ${i + 1}/${allChunks.length} chunks`);
-        points.length = 0;
+    while (!success && retryCount < MAX_RETRIES) {
+      const apiKey = keyManager.getNextKey();
+      if (!apiKey) {
+        logger.warn('No available API keys, waiting 5 seconds...');
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        retryCount++;
+        continue;
       }
 
-      // Small delay to avoid rate limiting
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    } catch (error: any) {
-      logger.error(`Failed to embed chunk ${i}: ${error.message}`);
-      // Continue with next chunk
+      try {
+        const relativePath = path.relative(workspacePath, chunk.filePath);
+        const embeddingText = `File: ${relativePath}\n${chunk.name ? `Name: ${chunk.name}\n` : ''}${chunk.content}`;
+
+        const vector = await getEmbedding(embeddingText, apiKey);
+
+        points.push({
+          id: i + 1,
+          vector,
+          payload: {
+            file_path: relativePath,
+            full_path: chunk.filePath,
+            start_line: chunk.startLine,
+            end_line: chunk.endLine,
+            chunk_type: chunk.chunkType,
+            name: chunk.name,
+            content: chunk.content.slice(0, 1000),
+          },
+        });
+
+        if (points.length >= BATCH_SIZE) {
+          await upsertPoints(
+            collectionName,
+            points,
+            qdrantEndpoint,
+            qdrantApiKey,
+          );
+          logger.info(`Indexed ${i + 1}/${allChunks.length} chunks`);
+          points.length = 0;
+        }
+
+        success = true;
+      } catch (error: any) {
+        const isRateLimit = error.message.includes('429');
+        keyManager.markError(apiKey, isRateLimit);
+
+        if (isRateLimit) {
+          logger.warn(
+            `Rate limit hit for chunk ${i}, retrying with another key...`,
+          );
+          // Don't increment retryCount for rate limits if we have other keys
+          if (keyManager.hasActiveKeys()) {
+            continue;
+          }
+        }
+
+        retryCount++;
+        if (retryCount >= MAX_RETRIES) {
+          logger.error(
+            `Failed to embed chunk ${i} after ${MAX_RETRIES} retries: ${error.message}`,
+          );
+        } else {
+          // Exponential backoff
+          await new Promise((resolve) =>
+            setTimeout(resolve, Math.pow(2, retryCount) * 1000),
+          );
+        }
+      }
     }
+
+    // Optional: Small delay between successful embeddings to be safe
+    // await new Promise((resolve) => setTimeout(resolve, 50));
   }
 
   // Upsert remaining points

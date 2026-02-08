@@ -7,11 +7,7 @@ import {
 } from '../services/chat.service';
 import { createLogger } from '../utils/logger';
 import crypto from 'crypto';
-import {
-  recordRequest,
-  recordSuccess,
-  recordConversationRequest,
-} from '../services/stats.service';
+import { recordRequest, recordSuccess } from '../services/stats.service';
 import { ChatRequest } from '../types';
 
 import {
@@ -24,33 +20,7 @@ import { countTokens, countMessagesTokens } from '../utils/tokenizer';
 
 const logger = createLogger('ChatController');
 
-/**
- * Updates the average response time for a given model.
- */
-const updateModelPerformance = async (
-  modelId: string,
-  providerId: string,
-  responseTime: number,
-) => {
-  try {
-    const db = getDb();
-    // Use UPSERT to handle race conditions safely
-    db.prepare(
-      `
-      INSERT INTO models_performance (id, model_id, provider_id, avg_response_time, total_samples)
-      VALUES (?, ?, ?, ?, 1)
-      ON CONFLICT(model_id, provider_id) DO UPDATE SET
-        avg_response_time = (models_performance.avg_response_time * models_performance.total_samples + excluded.avg_response_time) / (models_performance.total_samples + 1),
-        total_samples = models_performance.total_samples + 1
-    `,
-    ).run(crypto.randomUUID(), modelId, providerId, responseTime);
-  } catch (error) {
-    logger.error(
-      `Error updating model performance for ${modelId} (${providerId}):`,
-      error,
-    );
-  }
-};
+// updateModelPerformance: removed
 
 // GET /v1/accounts/:accountId/conversations
 export const getAccountConversations = async (
@@ -326,13 +296,6 @@ export const completionController = async (
         res.write(`data: ${JSON.stringify({ thinking: content })}\n\n`);
       },
       onSessionCreated: (sessionId) => {
-        if (!activeConversationId) {
-          recordConversationRequest(
-            sessionId,
-            account.provider_id,
-            model || 'unknown',
-          );
-        }
         activeConversationId = sessionId;
         res.write(`event: session_created\ndata: ${sessionId}\n\n`);
       },
@@ -529,16 +492,7 @@ export const sendMessageController = async (
     let activeConversationId = conversationId;
 
     try {
-      const startTime = Date.now();
-      let firstResponseCaptured = false;
-
-      const captureFirstResponse = () => {
-        if (!firstResponseCaptured) {
-          firstResponseCaptured = true;
-          const duration = Date.now() - startTime;
-          updateModelPerformance(model, account.provider_id, duration);
-        }
-      };
+      // captureFirstResponse check removed
 
       recordRequest(account.id, account.provider_id, model, conversationId);
       await sendMessage({
@@ -553,7 +507,6 @@ export const sendMessageController = async (
         thinking,
         ref_file_ids,
         onContent: (content) => {
-          captureFirstResponse();
           if (stream !== false) {
             res.write(`data: ${JSON.stringify({ content })}\n\n`);
           } else {
@@ -561,7 +514,6 @@ export const sendMessageController = async (
           }
         },
         onMetadata: (meta) => {
-          captureFirstResponse();
           if (stream !== false) {
             res.write(`data: ${JSON.stringify({ meta })}\n\n`);
           } else {
@@ -569,7 +521,6 @@ export const sendMessageController = async (
           }
         },
         onThinking: (content) => {
-          captureFirstResponse();
           if (stream !== false) {
             res.write(`data: ${JSON.stringify({ thinking: content })}\n\n`);
           }
@@ -611,9 +562,6 @@ export const sendMessageController = async (
           }
         },
         onSessionCreated: (sessionId) => {
-          if (!activeConversationId) {
-            recordConversationRequest(sessionId, account.provider_id, model);
-          }
           activeConversationId = sessionId;
 
           if (stream !== false) {

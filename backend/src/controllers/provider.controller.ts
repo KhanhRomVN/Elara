@@ -41,28 +41,10 @@ export const getProviderModelsController = async (
     const { providerId } = req.params;
     const models = await getProviderModels(providerId);
 
-    // Get performance metrics from DB for this provider
-    const db = getDb();
-    const performanceRecords = db
-      .prepare(
-        'SELECT model_id, avg_response_time FROM models_performance WHERE provider_id = ?',
-      )
-      .all(providerId) as any[];
-
-    const performanceMap = new Map(
-      performanceRecords.map((r) => [r.model_id, r.avg_response_time]),
-    );
-
-    // Merge average response time into models
-    const modelsWithPerformance = models.map((model: any) => ({
-      ...model,
-      avg_response_time: performanceMap.get(model.id) || 0,
-    }));
-
     res.status(200).json({
       success: true,
       message: 'Provider models retrieved successfully',
-      data: modelsWithPerformance,
+      data: models,
       meta: { timestamp: new Date().toISOString() },
     });
   } catch (error: any) {

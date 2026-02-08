@@ -26,9 +26,7 @@ const createTables = (): void => {
       id TEXT PRIMARY KEY,
       provider_id TEXT NOT NULL,
       email TEXT NOT NULL,
-      credential TEXT NOT NULL,
-      total_requests INTEGER DEFAULT 0,
-      successful_requests INTEGER DEFAULT 0
+      credential TEXT NOT NULL
     )
   `;
 
@@ -46,12 +44,10 @@ const createTables = (): void => {
             id TEXT PRIMARY KEY,
             provider_id TEXT NOT NULL,
             email TEXT NOT NULL,
-            credential TEXT NOT NULL,
-            total_requests INTEGER DEFAULT 0,
-            successful_requests INTEGER DEFAULT 0
+            credential TEXT NOT NULL
           )
         `);
-        // Preserve credentials, reset stats
+        // Preserve credentials
         db.exec(`
           INSERT INTO accounts_new (id, provider_id, email, credential)
           SELECT id, provider_id, email, credential FROM accounts
@@ -64,14 +60,28 @@ const createTables = (): void => {
         logger.error('Failed to migrate accounts table', e);
         throw e;
       }
-    } else if (!accountColumns.includes('successful_requests')) {
-      // Migration: Add successful_requests if missing (intermediate state)
+    } else if (accountColumns.includes('total_requests')) {
+      // Migration: Remove stats columns
+      db.exec('BEGIN TRANSACTION');
       try {
-        db.exec(
-          'ALTER TABLE accounts ADD COLUMN successful_requests INTEGER DEFAULT 0',
-        );
+        db.exec(`
+          CREATE TABLE accounts_new (
+            id TEXT PRIMARY KEY,
+            provider_id TEXT NOT NULL,
+            email TEXT NOT NULL,
+            credential TEXT NOT NULL
+          )
+        `);
+        db.exec(`
+          INSERT INTO accounts_new (id, provider_id, email, credential)
+          SELECT id, provider_id, email, credential FROM accounts
+        `);
+        db.exec('DROP TABLE accounts');
+        db.exec('ALTER TABLE accounts_new RENAME TO accounts');
+        db.exec('COMMIT');
       } catch (e) {
-        logger.warn('Failed to add successful_requests to accounts', e);
+        db.exec('ROLLBACK');
+        logger.error('Failed to remove stats columns from accounts', e);
       }
     }
 
@@ -122,24 +132,15 @@ const createTables = (): void => {
     logger.error('Error initializing providers table', err);
   }
 
-  const modelsPerformanceQuery = `
-    CREATE TABLE IF NOT EXISTS models_performance (
-      id TEXT PRIMARY KEY,
-      model_id TEXT NOT NULL,
-      provider_id TEXT NOT NULL,
-      avg_response_time REAL DEFAULT 0,
-      total_samples INTEGER DEFAULT 0,
-      UNIQUE(model_id, provider_id)
-    )
-  `;
-  db.exec(modelsPerformanceQuery);
-
-  // Drop old stats tables if they exist
+  // Drop old unused tables
   try {
+    db.exec('DROP TABLE IF EXISTS models_performance');
+    db.exec('DROP TABLE IF EXISTS conversation_stats');
+    db.exec('DROP TABLE IF EXISTS extended_tools');
     db.exec('DROP TABLE IF EXISTS accounts_stats');
     db.exec('DROP TABLE IF EXISTS providers_stats');
   } catch (e) {
-    logger.warn('Failed to drop old stats tables', e);
+    logger.warn('Failed to drop unused tables', e);
   }
 
   const configQuery = `
@@ -163,10 +164,6 @@ const createTables = (): void => {
       is_thinking INTEGER DEFAULT 0,
       context_length INTEGER,
       updated_at INTEGER NOT NULL,
-      total_requests INTEGER DEFAULT 0,
-      successful_requests INTEGER DEFAULT 0,
-      max_req_conversation INTEGER DEFAULT 0,
-      max_token_conversation INTEGER DEFAULT 0,
       UNIQUE(provider_id, model_id)
     )
   `;
@@ -190,10 +187,6 @@ const createTables = (): void => {
                   is_thinking INTEGER DEFAULT 0,
                   context_length INTEGER,
                   updated_at INTEGER NOT NULL,
-                  total_requests INTEGER DEFAULT 0,
-                  successful_requests INTEGER DEFAULT 0,
-                  max_req_conversation INTEGER DEFAULT 0,
-                  max_token_conversation INTEGER DEFAULT 0,
                   UNIQUE(provider_id, model_id)
                 )
             `);
@@ -216,27 +209,36 @@ const createTables = (): void => {
         logger.error('Failed to migrate provider_models', e);
         throw e;
       }
-    } else {
-      // ensure columns exist
-      const colsToCheck = [
-        'successful_requests',
-        'max_req_conversation',
-        'max_token_conversation',
-        'total_requests',
-      ];
-      const updatedPmInfo = db.pragma('table_info(provider_models)') as any[];
-      const updatedPmColumns = updatedPmInfo.map((c) => c.name);
-
-      for (const col of colsToCheck) {
-        if (!updatedPmColumns.includes(col)) {
-          try {
-            db.exec(
-              `ALTER TABLE provider_models ADD COLUMN ${col} INTEGER DEFAULT 0`,
-            );
-          } catch (e) {
-            logger.warn(`Failed to add ${col} to provider_models`, e);
-          }
-        }
+    } else if (pmColumns.includes('max_req_conversation')) {
+      // Migration: Remove max stats columns from provider_models
+      db.exec('BEGIN TRANSACTION');
+      try {
+        db.exec(`
+          CREATE TABLE provider_models_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider_id TEXT NOT NULL,
+            model_id TEXT NOT NULL,
+            model_name TEXT NOT NULL,
+            is_thinking INTEGER DEFAULT 0,
+            context_length INTEGER,
+            updated_at INTEGER NOT NULL,
+            UNIQUE(provider_id, model_id)
+          )
+        `);
+        db.exec(`
+          INSERT INTO provider_models_new (
+            provider_id, model_id, model_name, is_thinking, context_length, updated_at
+          )
+          SELECT 
+            provider_id, model_id, model_name, is_thinking, context_length, updated_at
+          FROM provider_models
+        `);
+        db.exec('DROP TABLE provider_models');
+        db.exec('ALTER TABLE provider_models_new RENAME TO provider_models');
+        db.exec('COMMIT');
+      } catch (e) {
+        db.exec('ROLLBACK');
+        logger.error('Failed to remove stats columns from provider_models', e);
       }
     }
   } catch (err) {
@@ -265,16 +267,7 @@ const createTables = (): void => {
   `;
   db.exec(modelSequencesQuery);
 
-  // Table to track active conversation stats
-  const activeConversationStatsQuery = `
-    CREATE TABLE IF NOT EXISTS conversation_stats (
-      conversation_id TEXT PRIMARY KEY,
-      total_requests INTEGER DEFAULT 0,
-      total_tokens INTEGER DEFAULT 0,
-      updated_at INTEGER NOT NULL
-    )
-  `;
-  db.exec(activeConversationStatsQuery);
+  // Table to track active conversation stats: removed (conversation_stats)
 
   // Table to store detailed usage metrics
   const metricsQuery = `
@@ -283,15 +276,35 @@ const createTables = (): void => {
       provider_id TEXT NOT NULL,
       model_id TEXT NOT NULL,
       account_id TEXT NOT NULL,
+      conversation_id TEXT,
       total_tokens INTEGER DEFAULT 0,
       timestamp INTEGER NOT NULL
     )
   `;
   try {
     db.exec(metricsQuery);
-    // Create index on timestamp for optimized time-based queries
+    // Migration: Add conversation_id to metrics if missing
+    const metricsInfo = db.pragma('table_info(metrics)') as any[];
+    if (!metricsInfo.map((c) => c.name).includes('conversation_id')) {
+      try {
+        db.exec('ALTER TABLE metrics ADD COLUMN conversation_id TEXT');
+      } catch (e) {
+        logger.warn('Failed to add conversation_id to metrics', e);
+      }
+    }
+
+    // Optimization Indexes for fast metrics querying (< 1s)
     db.exec(
       'CREATE INDEX IF NOT EXISTS idx_metrics_timestamp ON metrics(timestamp)',
+    );
+    db.exec(
+      'CREATE INDEX IF NOT EXISTS idx_metrics_conversation_id ON metrics(conversation_id)',
+    );
+    db.exec(
+      'CREATE INDEX IF NOT EXISTS idx_metrics_account_time ON metrics(account_id, timestamp)',
+    );
+    db.exec(
+      'CREATE INDEX IF NOT EXISTS idx_metrics_provider_model_time ON metrics(provider_id, model_id, timestamp)',
     );
   } catch (err) {
     logger.error('Error initializing metrics table', err);
