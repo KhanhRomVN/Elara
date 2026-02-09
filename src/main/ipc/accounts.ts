@@ -3,19 +3,13 @@ import { ipcMain, dialog, app, session } from 'electron';
 import { getDb } from '@backend/services/db';
 import fs from 'fs';
 import path from 'path';
-import { getProviders } from '../server/provider-registry';
+// REMOVED: import { getProviders } from '../server/provider-registry';
 
 const crypto = require('crypto');
 
 // Backend API URL for providers
 const getBackendApiUrl = () => {
-  try {
-    const { getProxyConfig } = require('../server/config');
-    const config = getProxyConfig();
-    return `http://localhost:${config.port}`;
-  } catch (e) {
-    return process.env.BACKEND_API_URL || 'http://localhost:11434';
-  }
+  return process.env.BACKEND_API_URL || 'http://localhost:11434';
 };
 let cachedProviderIds: string[] = [];
 
@@ -67,28 +61,17 @@ if (!fs.existsSync(DATA_FILE)) {
 import type { Account } from '@backend/types';
 export type { Account };
 
-const providerModulesGlob = import.meta.glob('../server/provider/*/index.ts', { eager: true });
+// REMOVED: Provider modules glob - providers are now handled by backend
+// const providerModulesGlob = import.meta.glob('../server/provider/*/index.ts', { eager: true });
 
 /**
- * Dynamically load a provider module from the provider folder (using glob for bundler support)
+ * REMOVED: Provider modules are now handled by the backend service
+ * This function is kept as a stub to prevent breaking existing code
  */
 async function loadProviderModule(providerId: string): Promise<any | null> {
-  const normalizedId = providerId.toLowerCase();
-  const moduleKey = Object.keys(providerModulesGlob).find((key) => {
-    const parts = key.split('/');
-    const folderName = parts[parts.length - 2];
-    return (
-      folderName.toLowerCase() === normalizedId ||
-      folderName.toLowerCase().replace('-', '') === normalizedId
-    );
-  });
-
-  if (moduleKey) {
-    console.log(`[Accounts] Found provider module for ${providerId}: ${moduleKey}`);
-    return providerModulesGlob[moduleKey];
-  }
-
-  console.warn(`[Accounts] No module found for provider: ${providerId}`);
+  console.warn(
+    `[Accounts] loadProviderModule called for ${providerId} - providers are now handled by backend`,
+  );
   return null;
 }
 
@@ -420,10 +403,16 @@ export const setupAccountsHandlers = () => {
   });
 
   // Handler to get available providers (dynamic)
+  // REMOVED: getProviders is now handled by backend API
   ipcMain.handle('accounts:get-providers', async () => {
     try {
-      const providers = await getProviders();
-      return { success: true, providers };
+      const baseUrl = getBackendApiUrl();
+      const response = await fetch(`${baseUrl}/v1/providers`);
+      if (response.ok) {
+        const data = await response.json();
+        return { success: true, providers: data.data || [] };
+      }
+      throw new Error(`HTTP ${response.status}`);
     } catch (error: any) {
       return { success: false, error: error.message };
     }

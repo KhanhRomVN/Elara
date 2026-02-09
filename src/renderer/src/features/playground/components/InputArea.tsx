@@ -1,7 +1,6 @@
 import {
   Upload,
   StopCircle,
-  ArrowUpFromDot,
   Globe,
   Loader2,
   X,
@@ -85,7 +84,6 @@ export const InputArea = ({
   input,
   handleInput,
   handleKeyDown,
-  handleSend,
   handleStop,
   loading,
   isStreaming,

@@ -25,6 +25,7 @@ interface UsageChartProps {
   onPeriodChange: (period: 'day' | 'week' | 'month' | 'year') => void;
   onPrev: () => void;
   onNext: () => void;
+  className?: string;
 }
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -80,7 +81,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export const UsageChart = memo(
-  ({ data, title, period, offset, onPeriodChange, onPrev, onNext }: UsageChartProps) => {
+  ({ data, title, period, offset, onPeriodChange, onPrev, onNext, className }: UsageChartProps) => {
     const renderPeriodTitle = () => {
       const now = new Date();
       const months = [
@@ -149,7 +150,7 @@ export const UsageChart = memo(
 
     return (
       <div
-        className="col-span-4 rounded-xl bg-card text-card-foreground shadow-sm p-6 outline-none focus:outline-none usage-chart-container"
+        className={`col-span-4 rounded-xl bg-card text-card-foreground shadow-sm p-6 outline-none focus:outline-none usage-chart-container ${className || ''}`}
         onMouseDown={(e) => e.preventDefault()}
       >
         <style>{`

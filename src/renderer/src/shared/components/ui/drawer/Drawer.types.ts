@@ -51,6 +51,8 @@ export interface DrawerProps {
   enableBlur?: boolean;
   /** Hiển thị nút đóng */
   showCloseButton?: boolean;
+  /** Hiển thị overlay (mặc định true) */
+  showOverlay?: boolean;
   /** Độ mờ của overlay (0-1) */
   overlayOpacity?: number;
 }

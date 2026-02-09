@@ -90,7 +90,7 @@ export const WelcomeScreen = ({
   onNavigateToSettings,
 }: WelcomeScreenProps) => {
   return (
-    <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-6 animate-in fade-in zoom-in-95 duration-500">
+    <div className="h-full flex flex-col items-center justify-center text-center space-y-6 animate-in fade-in zoom-in-95 duration-500">
       <div className="space-y-2">
         <h1 className="text-4xl font-bold tracking-tight text-foreground">Elara</h1>
         <p className="text-xl font-medium text-muted-foreground/80">Feel Free Chat Free!!</p>

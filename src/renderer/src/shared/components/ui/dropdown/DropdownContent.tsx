@@ -1,33 +1,30 @@
 import React, { useContext, useRef, useEffect } from 'react';
 import { DropdownContentProps } from './Dropdown.types';
 import { DropdownContext } from './DropdownContext';
-import { cn } from '../../../lib/utils';
+import { cn } from '../../../../shared/utils/cn';
+
 import { getPositionStyles, getDropdownSizeStyles } from './Dropdown.utils';
 
 const DropdownContent: React.FC<DropdownContentProps> = ({
   children,
   className = '',
   maxHeight = '320px',
-  minWidth = '140px',
+  minWidth = '200px',
   ...props
 }) => {
   const context = useContext(DropdownContext);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  const {
-    isOpen = false,
-    setIsOpen = () => {},
-    position = 'bottom-left',
-    size = 'md',
-  } = context || {};
-  const sizeStyles = getDropdownSizeStyles(size as any);
-  const positionStyles = getPositionStyles(position as any);
+  const { isOpen, setIsOpen, position = 'bottom-left', size = 'md' } = context || {};
+  const sizeStyles = getDropdownSizeStyles(size);
+  const positionStyles = getPositionStyles(position);
 
   useEffect(() => {
-    if (!context || !isOpen) return;
+    if (!isOpen || !setIsOpen) return;
 
     const handleClickOutside = (event: MouseEvent) => {
       if (contentRef.current && !contentRef.current.contains(event.target as Node)) {
+        // Check if click is on trigger (let Dropdown handle it)
         const target = event.target as HTMLElement;
         if (target.closest('[data-dropdown-trigger]')) {
           return;
@@ -51,6 +48,11 @@ const DropdownContent: React.FC<DropdownContentProps> = ({
     };
   }, [isOpen, setIsOpen]);
 
+  if (!context) {
+    console.warn('DropdownContent must be used within Dropdown');
+    return null;
+  }
+
   if (!isOpen) return null;
 
   return (
@@ -59,9 +61,9 @@ const DropdownContent: React.FC<DropdownContentProps> = ({
       role="menu"
       className={cn(
         'absolute z-50',
-        'rounded-lg border border-[var(--divider)] bg-[var(--dropdown-background)] text-[var(--text-primary)] shadow-[var(--dropdown-shadow)]',
+        'rounded-lg shadow-lg',
         'overflow-auto',
-        'animate-in fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2',
+        'animate-in fade-in-0 zoom-in-95',
         className,
       )}
       style={{

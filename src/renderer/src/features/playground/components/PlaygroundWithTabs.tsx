@@ -102,8 +102,8 @@ export const PlaygroundWithTabs = () => {
   }, [activeTab.messages.length, activeTab.conversationTitle, activeTabId, activeTab.title]);
 
   return (
-    <div className="h-full flex flex-col bg-background p-4 gap-4">
-      <div className="flex-1 flex overflow-hidden border border-dashed border-zinc-500/25 rounded-lg">
+    <div className="h-full flex flex-col bg-background">
+      <div className="flex-1 flex overflow-hidden">
         <PlaygroundPage
           key={activeTabId}
           tabs={tabs}

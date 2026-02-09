@@ -1,7 +1,7 @@
 import React, { useContext } from 'react';
 import { DropdownItemProps } from './Dropdown.types';
 import { DropdownContext } from './DropdownContext';
-import { cn } from '../../../lib/utils';
+import { cn } from '../../../../shared/utils/cn';
 import { getIconSize } from './Dropdown.utils';
 
 const DropdownItem: React.FC<DropdownItemProps> = ({
@@ -23,11 +23,12 @@ const DropdownItem: React.FC<DropdownItemProps> = ({
   const { setIsOpen, closeOnSelect, size } = context;
   const iconSize = getIconSize(size);
 
-  const handleClick = () => {
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (disabled) return;
 
     if (onClick) {
-      onClick();
+      onClick(e);
     }
 
     if (closeOnSelect) {
@@ -38,13 +39,16 @@ const DropdownItem: React.FC<DropdownItemProps> = ({
   const renderIcon = (icon: React.ReactNode, iconSize: number) => {
     if (!icon) return null;
 
+    // Nếu icon là LucideIcon (function component)
     if (typeof icon === 'function') {
       const IconComponent = icon as React.ComponentType<{ size?: number }>;
       return <IconComponent size={iconSize} />;
     }
 
+    // Nếu icon là ReactNode (emoji, SVG, text, React element, etc.)
     return (
       <span
+        className="dropdown-icon-content"
         style={{
           fontSize: `${iconSize}px`,
           lineHeight: 1,
@@ -65,7 +69,6 @@ const DropdownItem: React.FC<DropdownItemProps> = ({
       className={cn(
         'flex items-center justify-between gap-3 cursor-pointer transition-colors',
         'px-3 py-2 rounded-md',
-        'hover:bg-[var(--dropdown-item-hover)] text-[var(--text-primary)]',
         disabled ? 'opacity-50 cursor-not-allowed' : '',
         className,
       )}
@@ -78,7 +81,7 @@ const DropdownItem: React.FC<DropdownItemProps> = ({
             {renderIcon(leftIcon, iconSize)}
           </div>
         )}
-        <div className="flex-1 min-w-0 font-medium">{children}</div>
+        <div className="flex-1 min-w-0">{children}</div>
       </div>
 
       {rightIcon && (

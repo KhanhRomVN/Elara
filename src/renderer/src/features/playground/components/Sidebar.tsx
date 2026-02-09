@@ -38,10 +38,7 @@ export const Sidebar = ({
   const faviconUrl = providerData?.website ? getFaviconUrl(providerData.website) : null;
 
   return (
-    <div
-      className="flex flex-col h-full border-r bg-muted/10 shrink-0"
-      style={{ width: sidebarWidth }}
-    >
+    <div className="flex flex-col h-full shrink-0" style={{ width: sidebarWidth }}>
       <div className="flex flex-col h-full gap-4 overflow-hidden overflow-x-hidden">
         {/* Top Sidebar: Provider Icon */}
         <div className="flex items-center gap-2 px-4 pt-4 pb-4 border-b shrink-0 h-20">

@@ -19,6 +19,13 @@ extraResources:
       - '**/*.wasm'
       - 'provider.json'
       - 'bin/*'
+  - from: cli
+    to: cli
+    filter:
+      - 'dist/**/*'
+      - 'package.json'
+      - 'node_modules/**/*'
+      - 'bin/**/*'
 
 # Windows Configuration
 win:
@@ -33,6 +40,11 @@ win:
         - arm64
   executableName: Elara
   icon: build/icon.png
+  extraResources:
+    - from: backend/dist-bin/backend-win.exe
+      to: backend/server.exe
+    - from: backend/dist-bin/better_sqlite3.node
+      to: backend/better_sqlite3.node
 
 # Windows NSIS Installer (.exe)
 nsis:
@@ -62,6 +74,11 @@ mac:
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
   notarize: false
   icon: build/icon.png
+  extraResources:
+    - from: backend/dist-bin/backend-macos
+      to: backend/server
+    - from: backend/dist-bin/better_sqlite3.node
+      to: backend/better_sqlite3.node
 
 # macOS DMG
 dmg:
@@ -91,6 +108,11 @@ linux:
   category: Utility
   executableName: elara
   icon: build/icons
+  extraResources:
+    - from: backend/dist-bin/backend-linux
+      to: backend/server
+    - from: backend/dist-bin/better_sqlite3.node
+      to: backend/better_sqlite3.node
 
 # Linux Debian Package
 deb:

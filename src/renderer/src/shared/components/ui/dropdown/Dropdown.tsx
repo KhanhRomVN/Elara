@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { DropdownProps, DropdownContextValue } from './Dropdown.types';
-import { cn } from '../../../lib/utils';
+import { cn } from '../../../../shared/utils/cn';
+
 import { DropdownContext } from './DropdownContext';
 
 const Dropdown: React.FC<DropdownProps> = ({
@@ -16,6 +17,7 @@ const Dropdown: React.FC<DropdownProps> = ({
 }) => {
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
 
+  // Determine if component is controlled or uncontrolled
   const isControlled = controlledOpen !== undefined;
   const isOpen = isControlled ? controlledOpen : internalOpen;
 
@@ -29,6 +31,7 @@ const Dropdown: React.FC<DropdownProps> = ({
     }
   };
 
+  // Sync internal state with controlled prop
   useEffect(() => {
     if (isControlled) {
       setInternalOpen(controlledOpen);

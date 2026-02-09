@@ -1,4 +1,4 @@
-import { Terminal, Save, Link, Key, ShieldAlert } from 'lucide-react';
+import { Save, Link, Key, ShieldAlert } from 'lucide-react';
 import { cn } from '../../../shared/lib/utils';
 import { useOpenCode } from '../hooks/useOpenCode';
 

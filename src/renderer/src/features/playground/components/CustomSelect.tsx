@@ -27,7 +27,7 @@ export const CustomSelect = ({
 }: CustomSelectProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [hoveredOption, setHoveredOption] = useState<{
+  const [, setHoveredOption] = useState<{
     value: string;
     label: string;
     subLabel?: string | React.ReactNode;
@@ -71,7 +71,7 @@ export const CustomSelect = ({
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
         className={cn(
-          'h-10 w-fit min-w-[140px] flex items-center justify-between gap-4 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-0 focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 transition-all hover:bg-accent/50',
+          'h-10 w-full flex items-center justify-between gap-4 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-0 focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 transition-all hover:bg-accent/50',
           !value && 'text-muted-foreground',
           disabled && 'opacity-50 cursor-not-allowed',
         )}
@@ -110,7 +110,7 @@ export const CustomSelect = ({
             )}
 
             {/* Options List */}
-            <div className="max-h-52 overflow-auto p-1 space-y-1">
+            <div className="max-h-52 overflow-auto p-1 space-y-1 custom-scrollbar">
               {filteredOptions.length === 0 ? (
                 <div className="px-2 py-6 text-center text-sm text-muted-foreground">
                   No results found

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { ChevronDown, Search, Globe } from 'lucide-react';
 import { cn } from '../../../shared/lib/utils';
 import * as Flags from 'country-flag-icons/react/3x2';

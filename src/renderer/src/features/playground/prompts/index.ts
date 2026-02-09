@@ -18,7 +18,7 @@ export const combinePrompts = (config: PromptConfig): string => {
   const { language, systemInfo } = config;
 
   const core = buildCorePrompt(language);
-  const rules = buildRulesPrompt(language);
+  const rules = buildRulesPrompt();
   const system = buildSystemPrompt(systemInfo);
 
   return [core, TOOLS, rules, system].join('\n\n');

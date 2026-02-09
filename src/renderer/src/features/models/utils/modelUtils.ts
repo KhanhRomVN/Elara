@@ -1,4 +1,3 @@
-import { cn } from '../../../shared/lib/utils';
 import { SortKey, SortDirection } from '../types';
 
 // Metric Color Helpers

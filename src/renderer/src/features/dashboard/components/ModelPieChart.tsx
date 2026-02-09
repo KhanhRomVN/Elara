@@ -5,6 +5,7 @@ import { getFaviconUrl } from '../../../shared/utils/faviconUtils';
 interface ModelPieChartProps {
   data: any[];
   title?: string;
+  className?: string;
 }
 
 const COLORS = [
@@ -20,7 +21,7 @@ const COLORS = [
   '#a855f7', // Purple
 ];
 
-export const ModelPieChart = memo(({ data, title }: ModelPieChartProps) => {
+export const ModelPieChart = memo(({ data, title, className }: ModelPieChartProps) => {
   // Transform data for Pie Chart: Top 9 + Others
   const chartData = useMemo(() => {
     const sorted = [...data].sort((a, b) => b.value - a.value);
@@ -99,7 +100,7 @@ export const ModelPieChart = memo(({ data, title }: ModelPieChartProps) => {
 
   return (
     <div
-      className="col-span-3 rounded-xl bg-card text-card-foreground shadow-sm p-6 outline-none focus:outline-none usage-chart-container"
+      className={`col-span-3 rounded-xl bg-card text-card-foreground shadow-sm p-6 outline-none focus:outline-none usage-chart-container ${className || ''}`}
       onMouseDown={(e) => e.preventDefault()}
     >
       <style>{`

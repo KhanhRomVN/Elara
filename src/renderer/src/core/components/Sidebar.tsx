@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -15,23 +15,23 @@ import {
   Bot,
   Layers,
   Settings,
-  Code2,
   Palette,
+  WifiOff,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import { cn } from '../../shared/lib/utils';
 import { toast } from 'sonner';
 import AppIcon from '../../assets/icon.png';
+import { useBackendConnection } from '../contexts/BackendConnectionContext';
+import ThemeDrawer from '../theme/components/ThemeDrawer';
 
 interface SidebarProps {
   isCollapsed: boolean;
   setIsCollapsed: (value: boolean) => void;
 }
 
-import { useBackendConnection } from '../contexts/BackendConnectionContext';
-import { WifiOff } from 'lucide-react';
-import ThemeDrawer from '../theme/components/ThemeDrawer';
-
-const Sidebar = ({ isCollapsed, setIsCollapsed }: SidebarProps) => {
+const Sidebar = memo(({ isCollapsed, setIsCollapsed }: SidebarProps) => {
   const { isConnected, currentUrl } = useBackendConnection();
   const [version, setVersion] = React.useState<string | null>(null);
   const [remoteVersion, setRemoteVersion] = React.useState<string | null>(null);
@@ -46,70 +46,73 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }: SidebarProps) => {
       href: '/',
       icon: LayoutDashboard,
       disabled: false,
-      color: '#0ea5e9',
+      color: '#0ea5e9', // Sky Blue
     },
     {
       title: 'Accounts',
       href: '/accounts',
       icon: Users,
-      color: '#10b981',
+      color: '#10b981', // Emerald
     },
     {
       title: 'Models',
       href: '/models',
       icon: Boxes,
-      color: '#f59e0b',
+      color: '#f59e0b', // Amber
     },
     {
       title: 'Playground',
       href: '/playground',
       icon: MessageSquare,
-      color: '#8b5cf6',
+      color: '#8b5cf6', // Violet
     },
     {
       title: 'Tutorial',
       href: '/tutorial',
       icon: BookOpen,
       disabled: false,
-      color: '#f97316',
+      color: '#f97316', // Orange
     },
     {
       title: 'Skills',
       href: '/skills',
       icon: Cpu,
       disabled: true,
-      color: '#64748b',
+      color: '#64748b', // Slate
     },
     {
       title: 'MCP',
       href: '/mcp',
       icon: Share2,
       disabled: true,
-      color: '#f43f5e',
+      color: '#f43f5e', // Rose
     },
     {
       title: 'Agents',
       href: '/agents',
       icon: Bot,
       disabled: true,
-      color: '#14b8a6',
+      color: '#14b8a6', // Teal
     },
     {
       title: 'Extended',
       href: '/extended',
       icon: Layers,
       disabled: false,
-      color: '#6366f1',
+      color: '#6366f1', // Indigo
     },
     {
       title: 'Settings',
       href: '/settings',
       icon: Settings,
       disabled: false,
-      color: '#94a3b8',
+      color: '#94a3b8', // Slate
     },
   ];
 
+  /* -------------------------------------------------------------------------------------------------
+   * Version Checking Logic
+   * -----------------------------------------------------------------------------------------------*/
   const fetchVersion = async () => {
     try {
       const {
@@ -140,7 +143,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }: SidebarProps) => {
     setIsChecking(true);
     try {
       await fetchVersion();
-      // Force check backend update too
       const { updateAvailable, remoteVersion, updateType } =
         await window.api.version.checkForUpdates();
       if (updateAvailable && remoteVersion) {
@@ -156,7 +158,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }: SidebarProps) => {
     if (!remoteVersion || isUpdating) return;
 
     if (version && remoteVersion <= version) {
-      console.log('Already on latest version or newer');
+      // Optional: show toast
     }
 
     const toastId = toast.loading('Updating provider resources...');
@@ -179,213 +181,265 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }: SidebarProps) => {
 
   const hasUpdate = version && remoteVersion && remoteVersion !== version;
 
+  /* -------------------------------------------------------------------------------------------------
+   * Render
+   * -----------------------------------------------------------------------------------------------*/
   return (
     <div
       className={cn(
-        'fixed left-0 top-0 h-full bg-sidebar-bg border-r border-border flex flex-col transition-all duration-300',
-        isCollapsed ? 'w-[60px] p-2' : 'w-72 p-4',
+        'flex flex-col h-screen fixed left-0 top-0 bg-card/50 backdrop-blur-xl border-r border-border transition-[width] duration-300 ease-in-out z-50 will-change-[width]',
+        isCollapsed ? 'w-[60px]' : 'w-72',
       )}
     >
-      <div className={cn('mb-8', isCollapsed ? 'px-0 py-4 flex justify-center' : 'px-4 py-2')}>
-        {isCollapsed ? (
-          <div className="flex justify-center w-full">
-            <img src={AppIcon} alt="Elara" className="w-10 h-10 object-contain" />
-          </div>
-        ) : (
-          <div className="flex items-center justify-between border-b border-border/50 pb-4 w-full">
-            <h1 className="text-3xl font-bold tracking-tight text-primary">Elara</h1>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setIsThemeDrawerOpen(true)}
-                className="p-1.5 text-muted-foreground hover:text-primary hover:bg-sidebar-hover rounded-md transition-colors"
-                title="Theme Settings"
-              >
-                <Palette className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => setIsCollapsed(true)}
-                className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-sidebar-hover rounded-md transition-colors"
-                title="Collapse Sidebar"
-              >
-                <FoldHorizontal className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <nav className="space-y-2 flex-1">
-        {navItems.map((item) => {
-          if (item.disabled) {
-            return (
-              <div
-                key={item.href}
-                className={cn(
-                  'flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-md relative group',
-                  'text-muted-foreground/50 cursor-not-allowed opacity-50',
-                  isCollapsed && 'justify-center px-2',
-                )}
-              >
-                <item.icon className="w-5 h-5 flex-shrink-0" />
-                {!isCollapsed && <span>{item.title}</span>}
-                {isCollapsed && (
-                  <div className="absolute left-full ml-2 px-2 py-1 bg-popover text-popover-foreground text-xs rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none border border-border">
-                    {item.title} (Disabled)
-                  </div>
-                )}
-              </div>
-            );
-          }
-
-          return (
-            <NavLink
-              key={item.href}
-              to={item.href}
-              end={item.href === '/'}
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-r-none rounded-l-md transition-all relative group',
-                  isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
-                  isCollapsed && 'justify-center px-2',
-                )
-              }
-              style={({ isActive }) => ({
-                borderRight: isActive ? `3px solid ${item.color}` : '3px solid transparent',
-                background: isActive
-                  ? `linear-gradient(to right, ${item.color}15, transparent)`
-                  : undefined,
-              })}
-            >
-              {({ isActive }) => (
-                <>
-                  <item.icon
-                    className="w-5 h-5 flex-shrink-0 transition-colors"
-                    style={{ color: isActive ? item.color : undefined }}
-                  />
-                  {!isCollapsed && <span>{item.title}</span>}
-
-                  {/* Gradient on hover for non-active items */}
-                  {!isActive && (
-                    <div
-                      className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none rounded-l-md"
-                      style={{
-                        background: `linear-gradient(to right, ${item.color}08, transparent)`,
-                      }}
-                    />
-                  )}
-
-                  {/* Tooltip for collapsed state */}
-                  {isCollapsed && (
-                    <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-2 py-1 bg-popover border border-border text-popover-foreground text-xs font-medium rounded shadow-md bg-zinc-900 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none">
-                      {item.title}
-                    </div>
-                  )}
-                </>
-              )}
-            </NavLink>
-          );
-        })}
-      </nav>
-
+      {/* Header */}
       <div
         className={cn(
-          'mt-auto border-t border-border/50',
-          isCollapsed ? 'pt-4 border-none flex flex-col items-center gap-4' : '',
+          'h-16 flex items-center border-b border-border/50 transition-[padding] duration-300 overflow-hidden shrink-0',
+          isCollapsed ? 'justify-center px-0' : 'px-4 justify-between',
         )}
       >
-        {/* Unfold button at the bottom for collapsed state */}
+        <div
+          className={cn(
+            'flex items-center gap-2 overflow-hidden whitespace-nowrap',
+            isCollapsed && 'hidden',
+          )}
+        >
+          {/* Logo container tailored to match Zentri's look but using Elara's icon */}
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
+            <img src={AppIcon} alt="Elara" className="w-full h-full object-cover" />
+          </div>
+          <span className="font-bold text-xl tracking-tight opacity-100 transition-opacity duration-300 text-foreground">
+            Elara
+          </span>
+        </div>
+
         {isCollapsed && (
-          <div className="flex flex-col items-center gap-2">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 animate-in fade-in zoom-in duration-300 overflow-hidden">
+            <img src={AppIcon} alt="Elara" className="w-full h-full object-cover" />
+          </div>
+        )}
+
+        {!isCollapsed && (
+          <div className="flex items-center gap-1 opacity-100 transition-opacity duration-300">
             <button
               onClick={() => setIsThemeDrawerOpen(true)}
-              className="p-2 text-muted-foreground hover:text-primary hover:bg-sidebar-hover rounded-md transition-colors"
+              className="p-1.5 text-muted-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
               title="Theme Settings"
             >
               <Palette className="w-5 h-5" />
             </button>
             <button
-              onClick={() => setIsCollapsed(false)}
-              className="p-2 text-muted-foreground hover:text-foreground hover:bg-sidebar-hover rounded-md transition-colors"
-              title="Expand Sidebar"
+              onClick={() => setIsCollapsed(true)}
+              className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
+              title="Collapse Sidebar"
             >
-              <UnfoldHorizontal className="w-5 h-5" />
+              <FoldHorizontal className="w-5 h-5" />
             </button>
           </div>
         )}
+      </div>
 
-        {!isCollapsed && !isConnected && (
-          <div className="flex flex-col gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20 animate-in slide-in-from-bottom-2">
-            <div className="flex flex-col gap-0.5">
-              <div className="flex items-center gap-2 text-destructive font-bold">
-                <WifiOff className="w-4 h-4" />
-                <span className="text-base">Connection Lost</span>
-              </div>
-              <span className="text-xs text-muted-foreground break-all">
-                Cannot reach {currentUrl}
-              </span>
-            </div>
-          </div>
+      {/* Navigation */}
+      <nav
+        className={cn(
+          'flex-1 py-4 space-y-1',
+          isCollapsed ? 'overflow-visible px-2' : 'overflow-y-auto custom-scrollbar',
         )}
-
-        {!isCollapsed && hasUpdate && updateType === 'app' ? (
-          <div className="flex flex-col gap-3 p-3 rounded-lg bg-primary/10 border border-primary/20 animate-in slide-in-from-bottom-2">
-            <div className="flex flex-col gap-0.5">
-              <span className="text-base font-bold text-primary">New Update Available</span>
-              <span className="text-xs text-muted-foreground">
-                Version {remoteVersion} is available.
-              </span>
-            </div>
-            <a
-              href="https://github.com/KhanhRomVN/Elara/releases"
-              target="_blank"
-              rel="noreferrer"
-              className="px-2 py-1.5 text-sm font-medium text-center text-primary-foreground bg-primary rounded-md hover:bg-primary/90 transition-colors"
-            >
-              Update App
-            </a>
-          </div>
-        ) : (
-          // Version/Icons Footer
-          !isCollapsed && (
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-bold text-muted-foreground hover:text-primary transition-colors cursor-default">
-                {version?.startsWith('v') ? version : `v${version || '...'}`}
-              </span>
-
-              <div className="flex items-center gap-1">
-                {hasUpdate && updateType === 'resource' && (
-                  <button
-                    onClick={handleUpdate}
-                    disabled={isUpdating}
-                    className={cn(
-                      'p-1.5 rounded-md text-primary hover:bg-primary/10 transition-all',
-                      isUpdating && 'animate-spin opacity-50',
-                    )}
-                    title={`Update resources to ${remoteVersion}`}
-                  >
-                    <ArrowDownToLine className="w-4 h-4" />
-                  </button>
+      >
+        {navItems.map((item) => (
+          <NavLink
+            key={item.href}
+            to={item.href}
+            onClick={(e) => item.disabled && e.preventDefault()}
+            end={item.href === '/'}
+            className={({ isActive }) =>
+              cn(
+                'flex items-center gap-3 py-3 text-sm font-medium rounded-none transition-all relative group',
+                isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+                isCollapsed ? 'justify-center px-0 mx-0 w-full mb-1' : 'px-4 mb-1',
+                item.disabled && 'opacity-50 cursor-not-allowed grayscale pointer-events-none',
+              )
+            }
+            style={({ isActive }) => ({
+              background: isActive
+                ? `linear-gradient(to right, ${item.color}15, transparent)`
+                : undefined,
+            })}
+          >
+            {({ isActive }) => (
+              <>
+                {/* Active Indicator Bar */}
+                {isActive && !isCollapsed && (
+                  <div
+                    className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-l-lg"
+                    style={{ backgroundColor: item.color }}
+                  />
                 )}
-                <button
-                  onClick={handleUpdateCheck}
-                  disabled={isChecking}
+
+                <item.icon
                   className={cn(
-                    'p-1.5 rounded-md text-muted-foreground hover:text-foreground transition-all',
-                    isChecking && 'animate-spin text-primary',
+                    'w-5 h-5 flex-shrink-0 transition-colors',
+                    isActive && isCollapsed && 'drop-shadow-md',
                   )}
-                  title={isChecking ? 'Checking...' : 'Check for updates'}
+                  style={{ color: isActive ? item.color : undefined }}
+                />
+
+                {!isCollapsed && (
+                  <span className="whitespace-nowrap overflow-hidden text-ellipsis">
+                    {item.title}
+                  </span>
+                )}
+
+                {/* Tooltip for Collapsed State */}
+                {isCollapsed && (
+                  <div className="absolute left-[calc(100%+10px)] top-1/2 -translate-y-1/2 px-2.5 py-1.5 bg-popover border border-border text-popover-foreground text-xs font-medium rounded-md shadow-lg z-[100] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    {item.title} {item.disabled && '(Disabled)'}
+                    <div className="absolute left-[-4px] top-1/2 -translate-y-1/2 w-2 h-2 bg-popover border-l border-b border-border rotate-45 transform" />
+                  </div>
+                )}
+              </>
+            )}
+          </NavLink>
+        ))}
+      </nav>
+
+      {/* Connection / Update Status Footer */}
+      {!isCollapsed && (!isConnected || (hasUpdate && updateType === 'app')) && (
+        <div className="px-4 mb-3">
+          {/* Connection Lost Alert */}
+          {!isConnected && (
+            <div className="p-3 rounded-xl border bg-destructive/5 border-destructive/20 shadow-lg shadow-destructive/5 animate-in slide-in-from-bottom-2">
+              <div className="flex items-center gap-2 text-destructive mb-1">
+                <WifiOff className="w-4 h-4" />
+                <span className="text-xs font-bold uppercase tracking-wider">Disconnected</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground break-all leading-tight">
+                Cannot reach {currentUrl}
+              </p>
+            </div>
+          )}
+
+          {/* App Update Available Alert */}
+          {hasUpdate && updateType === 'app' && isConnected && (
+            <div className="p-3 rounded-xl border bg-primary/5 border-primary/20 shadow-lg shadow-primary/5 animate-in slide-in-from-bottom-2">
+              <div className="flex items-center gap-2 text-primary mb-2">
+                <AlertCircle className="w-4 h-4" />
+                <span className="text-xs font-bold uppercase tracking-wider">New Version</span>
+              </div>
+              <div className="flex flex-col gap-2">
+                <span className="text-[10px] text-muted-foreground">
+                  v{remoteVersion} is available.
+                </span>
+                <a
+                  href="https://github.com/KhanhRomVN/Elara/releases"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full text-center py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all"
                 >
-                  <CloudSync className="w-4 h-4" />
-                </button>
+                  Update Now
+                </a>
               </div>
             </div>
-          )
+          )}
+        </div>
+      )}
+
+      {/* Collapsed Alert Indicators */}
+      {isCollapsed && !isConnected && (
+        <div className="mb-2 px-2 flex justify-center">
+          <div
+            className="w-10 h-10 rounded-md bg-destructive/10 text-destructive flex items-center justify-center animate-pulse"
+            title="Connection Lost"
+          >
+            <WifiOff className="w-5 h-5" />
+          </div>
+        </div>
+      )}
+
+      {isCollapsed && hasUpdate && updateType === 'app' && isConnected && (
+        <div className="mb-2 px-2 flex justify-center">
+          <a
+            href="https://github.com/KhanhRomVN/Elara/releases"
+            target="_blank"
+            rel="noreferrer"
+            className="w-10 h-10 rounded-md bg-primary/10 text-primary flex items-center justify-center animate-pulse"
+            title={`Update Available: v${remoteVersion}`}
+          >
+            <AlertCircle className="w-5 h-5" />
+          </a>
+        </div>
+      )}
+
+      {/* Settings/Collapse Footer (Only in Collapsed Mode OR Version info in Open Mode) */}
+      <div
+        className={cn(
+          'mt-auto transition-all duration-300',
+          isCollapsed
+            ? 'p-2 flex flex-col items-center gap-2'
+            : 'px-4 py-3 border-t border-border/50',
+        )}
+      >
+        {isCollapsed ? (
+          <>
+            <button
+              onClick={() => setIsThemeDrawerOpen(true)}
+              className="w-10 h-10 rounded-md border border-border flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-muted transition-all"
+            >
+              <Palette className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => setIsCollapsed(false)}
+              className="w-10 h-10 rounded-md border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
+            >
+              <UnfoldHorizontal className="w-5 h-5" />
+            </button>
+          </>
+        ) : (
+          // Full Footer with Version and Resource Updates
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-muted-foreground hover:text-primary transition-colors cursor-default select-none">
+              {version?.startsWith('v') ? version : `v${version || '...'}`}
+            </span>
+
+            <div className="flex items-center gap-1">
+              {/* Resource Update Button */}
+              {hasUpdate && updateType === 'resource' && (
+                <button
+                  onClick={handleUpdate}
+                  disabled={isUpdating}
+                  className={cn(
+                    'p-1.5 rounded-md text-primary hover:bg-primary/10 transition-all',
+                    isUpdating && 'animate-spin opacity-50',
+                  )}
+                  title={`Update resources to ${remoteVersion}`}
+                >
+                  {isUpdating ? (
+                    <Loader2 className="w-4 h-4" />
+                  ) : (
+                    <ArrowDownToLine className="w-4 h-4" />
+                  )}
+                </button>
+              )}
+
+              <button
+                onClick={handleUpdateCheck}
+                disabled={isChecking}
+                className={cn(
+                  'p-1.5 rounded-md text-muted-foreground hover:text-foreground transition-all',
+                  isChecking && 'animate-spin text-primary',
+                )}
+                title={isChecking ? 'Checking...' : 'Check for updates'}
+              >
+                <CloudSync className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
         )}
       </div>
 
       <ThemeDrawer isOpen={isThemeDrawerOpen} onClose={() => setIsThemeDrawerOpen(false)} />
     </div>
   );
-};
+});
 
 export default Sidebar;

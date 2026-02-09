@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Server, Zap } from 'lucide-react';
+import { cn } from '@renderer/shared/lib/utils';
 import { CodeBlock } from '@renderer/core/components/CodeBlock';
 
 interface APIEndpoint {
@@ -484,63 +485,100 @@ export default function TutorialPage() {
   const [selectedEndpoint, setSelectedEndpoint] = useState<string | null>(null);
 
   return (
-    <div className="h-full flex flex-col bg-background p-4 gap-4">
-      {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">Tutorial</h2>
-        <p className="text-muted-foreground">Learn how to use Elara's embedded server APIs</p>
-      </div>
-
-      {/* Main Content Box */}
-      <div className="flex-1 flex overflow-hidden border border-dashed border-zinc-500/25 rounded-lg bg-card">
-        {/* Sidebar - API List */}
-        <div className="w-80 border-r border-border overflow-y-auto">
-          <div className="p-4 border-b border-border bg-muted/30">
-            <div className="flex items-center gap-2 mb-1">
-              <Server className="w-5 h-5 text-primary" />
-              <h3 className="font-semibold text-lg">Embedded Server APIs</h3>
-            </div>
-            <p className="text-xs text-muted-foreground">Available endpoints in the local server</p>
+    <div className="h-full flex flex-row bg-background">
+      {/* Sidebar */}
+      <div className="w-80 border-r border-border bg-card/30 flex flex-col shrink-0 h-full transition-all">
+        {/* Sidebar Header */}
+        <div className="h-16 flex items-center px-4 border-b border-border shrink-0">
+          <div className="flex items-center gap-2">
+            <Server className="w-5 h-5 text-primary" />
+            <h2 className="text-lg font-semibold tracking-tight">Tutorial</h2>
           </div>
+        </div>
 
-          <div className="p-4 space-y-6">
+        {/* Sidebar Content */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar py-4 space-y-6">
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground mb-4 px-4">
+              Explore local server APIs and integration patterns.
+            </p>
             {embeddedAPIs.map((category) => (
-              <div key={category.category}>
-                <h4 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">
+              <div key={category.category} className="mb-6 last:mb-0">
+                <h4 className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide px-6">
                   {category.category}
                 </h4>
-                <div className="space-y-1">
+                <div className="space-y-0.5">
                   {category.endpoints.map((endpoint) => (
                     <button
                       key={endpoint.path}
                       onClick={() => setSelectedEndpoint(endpoint.path)}
-                      className={`w-full text-left p-3 rounded-md transition-all hover:bg-muted/50 ${
+                      className={cn(
+                        'w-full text-left py-3 px-6 transition-all group relative flex flex-col gap-1.5',
                         selectedEndpoint === endpoint.path
-                          ? 'bg-primary/10 border border-primary/20'
-                          : 'border border-transparent'
-                      }`}
+                          ? 'text-foreground'
+                          : 'text-muted-foreground hover:text-foreground',
+                      )}
+                      style={
+                        selectedEndpoint === endpoint.path
+                          ? {
+                              background: `linear-gradient(to right, ${
+                                endpoint.method === 'GET'
+                                  ? '#3b82f6'
+                                  : endpoint.method === 'POST'
+                                    ? '#22c55e'
+                                    : endpoint.method === 'DELETE'
+                                      ? '#ef4444'
+                                      : endpoint.method === 'PUT'
+                                        ? '#eab308'
+                                        : '#a855f7'
+                              }15, transparent)`,
+                            }
+                          : undefined
+                      }
                     >
-                      <div className="flex items-center gap-2 mb-1">
+                      {selectedEndpoint === endpoint.path && (
+                        <div
+                          className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-full"
+                          style={{
+                            backgroundColor:
+                              endpoint.method === 'GET'
+                                ? '#3b82f6'
+                                : endpoint.method === 'POST'
+                                  ? '#22c55e'
+                                  : endpoint.method === 'DELETE'
+                                    ? '#ef4444'
+                                    : endpoint.method === 'PUT'
+                                      ? '#eab308'
+                                      : '#a855f7',
+                          }}
+                        />
+                      )}
+
+                      <span className="text-sm font-medium leading-tight line-clamp-2">
+                        {endpoint.description}
+                      </span>
+
+                      <div className="flex items-start gap-2 w-full">
                         <span
-                          className={`px-2 py-0.5 rounded text-xs font-mono font-semibold ${
+                          className={cn(
+                            'px-1.5 py-0.5 rounded-[4px] text-[10px] font-mono font-bold shrink-0 uppercase tracking-tighter mt-0.5',
                             endpoint.method === 'GET'
-                              ? 'bg-blue-500/20 text-blue-500'
+                              ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
                               : endpoint.method === 'POST'
-                                ? 'bg-green-500/20 text-green-500'
+                                ? 'bg-green-500/10 text-green-600 dark:text-green-400'
                                 : endpoint.method === 'DELETE'
-                                  ? 'bg-red-500/20 text-red-500'
+                                  ? 'bg-red-500/10 text-red-600 dark:text-red-400'
                                   : endpoint.method === 'PUT'
-                                    ? 'bg-yellow-500/20 text-yellow-500'
-                                    : 'bg-purple-500/20 text-purple-500'
-                          }`}
+                                    ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400'
+                                    : 'bg-purple-500/10 text-purple-600 dark:text-purple-400',
+                          )}
                         >
                           {endpoint.method}
                         </span>
-                        <code className="text-xs font-mono truncate flex-1">{endpoint.path}</code>
+                        <span className="font-mono text-xs opacity-70 group-hover:opacity-100 transition-opacity break-all text-left">
+                          {endpoint.path}
+                        </span>
                       </div>
-                      <p className="text-xs text-muted-foreground line-clamp-1">
-                        {endpoint.description}
-                      </p>
                     </button>
                   ))}
                 </div>
@@ -548,12 +586,28 @@ export default function TutorialPage() {
             ))}
           </div>
         </div>
+      </div>
 
-        {/* Main Content Area */}
-        <div className="flex-1 overflow-y-auto p-6">
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0 bg-background h-full">
+        {/* Content HeaderBar */}
+        <div className="h-16 flex items-center px-6 border-b border-border bg-card/50 backdrop-blur-sm shrink-0">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+            {selectedEndpoint ? (
+              <>
+                <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                API Documentation
+              </>
+            ) : (
+              'Select an API Endpoint'
+            )}
+          </h2>
+        </div>
+
+        {/* Content Body */}
+        <div className="flex-1 overflow-y-auto p-8">
           {selectedEndpoint ? (
-            <div className="w-full">
-              {/* Selected endpoint details */}
+            <div className="max-w-4xl mx-auto pb-20 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
               {(() => {
                 const endpoint = embeddedAPIs
                   .flatMap((cat) => cat.endpoints)
@@ -562,226 +616,233 @@ export default function TutorialPage() {
                 if (!endpoint) return null;
 
                 return (
-                  <div className="bg-background space-y-6">
-                    {/* Endpoint Header */}
-                    <div>
-                      <div className="flex items-center gap-3 mb-4">
+                  <>
+                    {/* Endpoint Definition Header */}
+                    <div className="space-y-4 pb-6 border-b border-border/50">
+                      <div className="flex items-center gap-3">
                         <span
-                          className={`px-3 py-1 rounded text-sm font-mono font-semibold ${
+                          className={cn(
+                            'px-3 py-1 rounded-md text-sm font-mono font-bold uppercase tracking-wider',
                             endpoint.method === 'GET'
-                              ? 'bg-blue-500/20 text-blue-500'
+                              ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
                               : endpoint.method === 'POST'
-                                ? 'bg-green-500/20 text-green-500'
+                                ? 'bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20'
                                 : endpoint.method === 'DELETE'
-                                  ? 'bg-red-500/20 text-red-500'
-                                  : 'bg-yellow-500/20 text-yellow-500'
-                          }`}
+                                  ? 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20'
+                                  : 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20',
+                          )}
                         >
                           {endpoint.method}
                         </span>
-                        <code className="text-xl font-mono">{endpoint.path}</code>
+                        <code className="text-xl font-mono text-foreground font-medium select-all">
+                          {endpoint.path}
+                        </code>
                       </div>
-                      <p className="text-muted-foreground">{endpoint.description}</p>
+                      <p className="text-base text-muted-foreground leading-relaxed">
+                        {endpoint.description}
+                      </p>
                     </div>
 
                     {/* Path/Query Parameters */}
                     {endpoint.params && endpoint.params.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-semibold mb-3">Parameters</h4>
-                        <div className="rounded-lg border border-border overflow-hidden">
-                          <table className="w-full text-sm">
-                            <thead className="bg-muted/50">
+                      <div className="space-y-4">
+                        <h4 className="text-sm font-bold uppercase tracking-wider text-foreground">
+                          Parameters
+                        </h4>
+                        <div className="rounded-lg border border-border overflow-hidden bg-card/20">
+                          <table className="w-full text-sm text-left">
+                            <thead className="bg-muted/50 text-xs uppercase text-muted-foreground font-semibold">
                               <tr>
-                                <th className="text-left p-3 font-semibold">Name</th>
-                                <th className="text-left p-3 font-semibold">Type</th>
-                                <th className="text-left p-3 font-semibold">Required</th>
-                                <th className="text-left p-3 font-semibold">Description</th>
+                                <th className="px-4 py-3">Name</th>
+                                <th className="px-4 py-3">Type</th>
+                                <th className="px-4 py-3">Required</th>
+                                <th className="px-4 py-3">Description</th>
                               </tr>
                             </thead>
-                            <tbody>
+                            <tbody className="divide-y divide-border/50">
                               {endpoint.params.map((param, idx) => (
-                                <tr key={idx} className="border-t border-border">
-                                  <td className="p-3">
-                                    <code className="text-xs bg-muted px-2 py-1 rounded">
+                                <tr key={idx} className="hover:bg-muted/30 transition-colors">
+                                  <td className="px-4 py-3">
+                                    <code className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded border border-primary/20 font-mono">
                                       {param.name}
                                     </code>
                                   </td>
-                                  <td className="p-3 text-muted-foreground">{param.type}</td>
-                                  <td className="p-3">
-                                    <span
-                                      className={`text-xs px-2 py-1 rounded ${
-                                        param.required
-                                          ? 'bg-red-500/20 text-red-500'
-                                          : 'bg-gray-500/20 text-gray-500'
-                                      }`}
-                                    >
-                                      {param.required ? 'Required' : 'Optional'}
-                                    </span>
+                                  <td className="px-4 py-3 text-muted-foreground font-mono text-xs">
+                                    {param.type}
                                   </td>
-                                  <td className="p-3 text-muted-foreground">{param.description}</td>
+                                  <td className="px-4 py-3">
+                                    {param.required ? (
+                                      <span className="text-[10px] font-bold text-red-500 bg-red-500/10 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                        Required
+                                      </span>
+                                    ) : (
+                                      <span className="text-[10px] font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                        Optional
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3 text-muted-foreground">
+                                    {param.description}
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>
                           </table>
                         </div>
                         {endpoint.queryParams && (
-                          <div className="mt-2">
-                            <p className="text-xs text-muted-foreground mb-1">Example:</p>
-                            <code className="text-sm bg-muted px-3 py-1 rounded">
-                              ?{endpoint.queryParams}
-                            </code>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 px-3 py-2 rounded-md border border-border/50 font-mono">
+                            <span className="font-semibold text-foreground shrink-0">
+                              Query Example:
+                            </span>
+                            <span className="select-all break-all">{endpoint.queryParams}</span>
                           </div>
                         )}
                       </div>
                     )}
 
-                    {/* Request Fields */}
-                    {endpoint.requestFields && endpoint.requestFields.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-semibold mb-3">Request Body Fields</h4>
-                        <div className="rounded-lg border border-border overflow-hidden">
-                          <table className="w-full text-sm">
-                            <thead className="bg-muted/50">
-                              <tr>
-                                <th className="text-left p-3 font-semibold">Field</th>
-                                <th className="text-left p-3 font-semibold">Type</th>
-                                <th className="text-left p-3 font-semibold">Required</th>
-                                <th className="text-left p-3 font-semibold">Description</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {endpoint.requestFields.map((field, idx) => (
-                                <tr key={idx} className="border-t border-border">
-                                  <td className="p-3">
-                                    <code className="text-xs bg-muted px-2 py-1 rounded">
-                                      {field.name}
-                                    </code>
-                                  </td>
-                                  <td className="p-3 text-muted-foreground">{field.type}</td>
-                                  <td className="p-3">
-                                    <span
-                                      className={`text-xs px-2 py-1 rounded ${
-                                        field.required
-                                          ? 'bg-red-500/20 text-red-500'
-                                          : 'bg-gray-500/20 text-gray-500'
-                                      }`}
-                                    >
-                                      {field.required ? 'Required' : 'Optional'}
-                                    </span>
-                                  </td>
-                                  <td className="p-3 text-muted-foreground">{field.description}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
+                    {/* Request/Response Split View */}
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                      {/* Request Section */}
+                      {(endpoint.requestBody ||
+                        (endpoint.requestFields && endpoint.requestFields.length > 0)) && (
+                        <div className="space-y-4">
+                          <h4 className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                            Request
+                            <span className="text-[10px] font-normal text-muted-foreground normal-case bg-muted px-1.5 py-0.5 rounded">
+                              application/json
+                            </span>
+                          </h4>
 
-                    {/* Request/Response Bodies */}
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                      {/* Request Body */}
-                      {endpoint.requestBody && (
-                        <div>
-                          <h4 className="text-sm font-semibold mb-2">Request Body Example</h4>
-                          <CodeBlock
-                            code={endpoint.requestBody}
-                            language="json"
-                            maxLines={30}
-                            showLineNumbers={false}
-                            editorOptions={{
-                              guides: {
-                                indentation: false,
-                                bracketPairs: false,
-                                highlightActiveIndentation: false,
-                              },
-                              renderLineHighlight: 'none',
-                              cursorStyle: 'line-thin',
-                              cursorBlinking: 'solid',
-                              domReadOnly: true,
-                              readOnly: true,
-                              selectionHighlight: false,
-                              occurrencesHighlight: false,
-                              hover: { enabled: false },
-                            }}
-                          />
+                          {/* Request Fields Table */}
+                          {endpoint.requestFields && endpoint.requestFields.length > 0 && (
+                            <div className="rounded-lg border border-border overflow-hidden bg-card/20 mb-4">
+                              <table className="w-full text-sm text-left">
+                                <thead className="bg-muted/50 text-xs uppercase text-muted-foreground font-semibold">
+                                  <tr>
+                                    <th className="px-3 py-2">Field</th>
+                                    <th className="px-3 py-2">Type</th>
+                                    <th className="px-3 py-2">Req</th>
+                                    <th className="px-3 py-2">Desc</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-border/50">
+                                  {endpoint.requestFields.map((field, idx) => (
+                                    <tr key={idx} className="hover:bg-muted/30 transition-colors">
+                                      <td className="px-3 py-2">
+                                        <code className="text-xs font-mono">{field.name}</code>
+                                      </td>
+                                      <td className="px-3 py-2 text-xs text-muted-foreground font-mono">
+                                        {field.type}
+                                      </td>
+                                      <td className="px-3 py-2 text-xs">
+                                        {field.required && (
+                                          <span className="text-red-500 font-bold">•</span>
+                                        )}
+                                      </td>
+                                      <td className="px-3 py-2 text-xs text-muted-foreground leading-tight">
+                                        {field.description}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+
+                          {/* Request Code Block */}
+                          {endpoint.requestBody && (
+                            <CodeBlock
+                              code={endpoint.requestBody}
+                              language="json"
+                              maxLines={30}
+                              showLineNumbers={false}
+                              editorOptions={{
+                                guides: { indentation: false },
+                                renderLineHighlight: 'none',
+                                readOnly: true,
+                                minimap: { enabled: false },
+                              }}
+                            />
+                          )}
                         </div>
                       )}
 
-                      {/* Response Body */}
-                      {endpoint.responseBody && (
-                        <div className={endpoint.requestBody ? '' : 'xl:col-span-2'}>
-                          <h4 className="text-sm font-semibold mb-2">Response Body Example</h4>
-                          <CodeBlock
-                            code={endpoint.responseBody}
-                            language="json"
-                            maxLines={30}
-                            showLineNumbers={false}
-                            editorOptions={{
-                              guides: {
-                                indentation: false,
-                                bracketPairs: false,
-                                highlightActiveIndentation: false,
-                              },
-                              renderLineHighlight: 'none',
-                              cursorStyle: 'line-thin',
-                              cursorBlinking: 'solid',
-                              domReadOnly: true,
-                              readOnly: true,
-                              selectionHighlight: false,
-                              occurrencesHighlight: false,
-                              hover: { enabled: false },
-                            }}
-                          />
+                      {/* Response Section */}
+                      {(endpoint.responseBody ||
+                        (endpoint.responseFields && endpoint.responseFields.length > 0)) && (
+                        <div
+                          className={cn(
+                            'space-y-4',
+                            !endpoint.requestBody && !endpoint.requestFields ? 'xl:col-span-2' : '',
+                          )}
+                        >
+                          <h4 className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                            Response
+                            <span className="text-[10px] font-normal text-muted-foreground normal-case bg-muted px-1.5 py-0.5 rounded">
+                              application/json
+                            </span>
+                          </h4>
+
+                          {endpoint.responseBody && (
+                            <CodeBlock
+                              code={endpoint.responseBody}
+                              language="json"
+                              maxLines={30}
+                              showLineNumbers={false}
+                              editorOptions={{
+                                guides: { indentation: false },
+                                renderLineHighlight: 'none',
+                                readOnly: true,
+                                minimap: { enabled: false },
+                              }}
+                            />
+                          )}
+
+                          {endpoint.responseFields && endpoint.responseFields.length > 0 && (
+                            <div className="rounded-lg border border-border overflow-hidden bg-card/20 mt-4">
+                              <div className="px-3 py-2 bg-muted/50 border-b border-border/50 text-xs font-semibold text-muted-foreground uppercase">
+                                schema
+                              </div>
+                              <div className="p-0">
+                                <table className="w-full text-xs text-left">
+                                  <tbody className="divide-y divide-border/50">
+                                    {endpoint.responseFields.map((field, idx) => (
+                                      <tr key={idx} className="hover:bg-muted/30">
+                                        <td className="px-3 py-2 font-mono text-foreground/80 w-1/3">
+                                          {field.name}
+                                        </td>
+                                        <td className="px-3 py-2 font-mono text-muted-foreground w-1/6">
+                                          {field.type}
+                                        </td>
+                                        <td className="px-3 py-2 text-muted-foreground">
+                                          {field.description}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
-
-                    {/* Response Fields */}
-                    {endpoint.responseFields && endpoint.responseFields.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-semibold mb-3">Response Body Fields</h4>
-                        <div className="rounded-lg border border-border overflow-hidden">
-                          <table className="w-full text-sm">
-                            <thead className="bg-muted/50">
-                              <tr>
-                                <th className="text-left p-3 font-semibold">Field</th>
-                                <th className="text-left p-3 font-semibold">Type</th>
-                                <th className="text-left p-3 font-semibold">Description</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {endpoint.responseFields.map((field, idx) => (
-                                <tr key={idx} className="border-t border-border">
-                                  <td className="p-3">
-                                    <code className="text-xs bg-muted px-2 py-1 rounded">
-                                      {field.name}
-                                    </code>
-                                  </td>
-                                  <td className="p-3 text-muted-foreground">{field.type}</td>
-                                  <td className="p-3 text-muted-foreground">{field.description}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  </>
                 );
               })()}
             </div>
           ) : (
-            <div className="h-full flex items-center justify-center">
-              <div className="text-center max-w-md">
-                <div className="mb-4 flex justify-center">
-                  <div className="p-4 rounded-full bg-primary/10">
-                    <Zap className="w-12 h-12 text-primary" />
-                  </div>
-                </div>
-                <h3 className="text-xl font-semibold mb-2">Select an API endpoint</h3>
-                <p className="text-muted-foreground">
-                  Choose an endpoint from the sidebar to view its documentation and usage examples
+            <div className="h-full flex flex-col items-center justify-center text-center space-y-4 animate-in fade-in zoom-in duration-500">
+              <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-2">
+                <Zap className="w-8 h-8 text-primary" />
+              </div>
+              <div className="max-w-md space-y-2">
+                <h3 className="text-xl font-bold tracking-tight text-foreground">
+                  Complete API Reference
+                </h3>
+                <p className="text-muted-foreground text-sm leading-relaxed">
+                  Select an endpoint from the sidebar to view detailed request parameters, response
+                  schemas, and example usage for the Elara Embedded Server.
                 </p>
               </div>
             </div>

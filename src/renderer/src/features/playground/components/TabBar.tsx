@@ -19,7 +19,7 @@ export const TabBar = ({
   providersList = [],
 }: TabBarProps) => {
   return (
-    <div className="flex items-center h-10 bg-muted/30 border-b overflow-x-auto">
+    <div className="flex items-center h-10 bg-card/30 border-b overflow-x-auto">
       {tabs.map((tab) => (
         <div
           key={tab.id}

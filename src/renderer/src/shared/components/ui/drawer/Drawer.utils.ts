@@ -3,6 +3,9 @@ import { DrawerDirection, DrawerAnimationType, DrawerSize } from './Drawer.types
 
 /**
  * Convert fraction string to percentage
+ * @example parseSize("1/2") => "50%"
+ * @example parseSize(400) => "400px"
+ * @example parseSize("33%") => "33%"
  */
 export const parseSize = (size: DrawerSize | undefined, defaultValue: string): string => {
   if (!size) return defaultValue;

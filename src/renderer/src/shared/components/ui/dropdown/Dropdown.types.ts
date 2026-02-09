@@ -90,7 +90,7 @@ export interface DropdownItemProps {
   disabled?: boolean;
 
   /** Click handler */
-  onClick?: () => void;
+  onClick?: (e: React.MouseEvent) => void;
 
   /** Custom className */
   className?: string;

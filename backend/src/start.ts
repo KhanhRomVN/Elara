@@ -40,7 +40,10 @@ const main = async (options?: { dbPath?: string }) => {
 export const startBackend = main;
 
 if (require.main === module) {
-  main().catch((err) => {
+  const dbPathArg = process.argv.find((arg) => arg.startsWith('--db-path='));
+  const dbPath = dbPathArg ? dbPathArg.split('=')[1] : undefined;
+
+  main({ dbPath }).catch((err) => {
     logger.error('Unhandled error during startup', err);
     process.exit(1);
   });

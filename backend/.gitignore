@@ -93,3 +93,5 @@ dist/
 
 temp
 database.sqlite
+backend/dist-bin/
+dist-bin/

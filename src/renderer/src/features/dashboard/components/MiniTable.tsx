@@ -3,6 +3,7 @@ import { memo } from 'react';
 interface MiniTableProps {
   title: string;
   data: any[];
+  className?: string;
   columns: {
     header: string;
     accessorKey: string;
@@ -11,9 +12,11 @@ interface MiniTableProps {
   }[];
 }
 
-export const MiniTable = memo(({ title, data, columns }: MiniTableProps) => {
+export const MiniTable = memo(({ title, data, columns, className }: MiniTableProps) => {
   return (
-    <div className="rounded-xl border border-border/50 bg-card text-card-foreground shadow-sm">
+    <div
+      className={`rounded-xl border border-border/50 bg-card text-card-foreground shadow-sm ${className || ''}`}
+    >
       <div className="p-6 pb-4">
         <h3 className="font-semibold leading-none tracking-tight">{title}</h3>
       </div>

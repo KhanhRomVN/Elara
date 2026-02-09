@@ -1,7 +1,7 @@
 import React, { useContext } from 'react';
 import { DropdownTriggerProps } from './Dropdown.types';
 import { DropdownContext } from './DropdownContext';
-import { cn } from '../../../lib/utils';
+import { cn } from '../../../../shared/utils/cn';
 
 const DropdownTrigger: React.FC<DropdownTriggerProps> = ({
   children,
@@ -19,6 +19,9 @@ const DropdownTrigger: React.FC<DropdownTriggerProps> = ({
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (props.onClick) {
+      props.onClick(e);
+    }
     if (!disabled) {
       setIsOpen(!isOpen);
     }
@@ -28,12 +31,12 @@ const DropdownTrigger: React.FC<DropdownTriggerProps> = ({
     <div
       data-dropdown-trigger
       className={cn(
-        'inline-flex cursor-pointer transition-all',
+        'inline-flex cursor-pointer',
         disabled && 'opacity-50 cursor-not-allowed',
         className,
       )}
-      onClick={handleClick}
       {...props}
+      onClick={handleClick}
     >
       {children}
     </div>

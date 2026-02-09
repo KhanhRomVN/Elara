@@ -1,4 +1,4 @@
-import { Copy, MoreHorizontal, MousePointer2, Trash2, Check } from 'lucide-react';
+import { Copy, MousePointer2, Trash2, Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../../../shared/lib/utils';
 import { FlatAccount } from '../types';

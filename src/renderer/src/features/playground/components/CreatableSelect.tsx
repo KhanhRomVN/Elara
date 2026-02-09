@@ -35,7 +35,7 @@ export const CreatableSelect = ({
 }: CreatableSelectProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [hoveredOption, setHoveredOption] = useState<Option | null>(null);
+  const [, setHoveredOption] = useState<Option | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 

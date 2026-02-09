@@ -39,6 +39,8 @@ export const getPositionStyles = (
   position: DropdownPosition,
   spacing: number = 8,
 ): CSSProperties => {
+  const offset = `${spacing}px`;
+
   const positions: Record<DropdownPosition, CSSProperties> = {
     // Top positions
     'top-left': {
@@ -115,4 +117,32 @@ export const getIconSize = (size: DropdownSize): number => {
   };
 
   return sizeMap[size];
+};
+
+/**
+ * Check if position is on the top
+ */
+export const isTopPosition = (position: DropdownPosition): boolean => {
+  return position.startsWith('top-');
+};
+
+/**
+ * Check if position is on the bottom
+ */
+export const isBottomPosition = (position: DropdownPosition): boolean => {
+  return position.startsWith('bottom-');
+};
+
+/**
+ * Check if position is on the left
+ */
+export const isLeftPosition = (position: DropdownPosition): boolean => {
+  return position.startsWith('left-');
+};
+
+/**
+ * Check if position is on the right
+ */
+export const isRightPosition = (position: DropdownPosition): boolean => {
+  return position.startsWith('right-');
 };

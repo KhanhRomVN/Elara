@@ -36,7 +36,7 @@ export const validateChatRequest = async (
   next: NextFunction,
 ) => {
   const body = req.body as ChatRequest;
-  const { model, search } = body;
+  const { modelId, search } = body;
 
   // Account/Provider resolution is tricky here because it usually happens inside the controller strategies.
   // However, we can try to infer provider from model or query params like the controller does,

@@ -2,7 +2,20 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "bin": "dist/start.js",
+  "pkg": {
+    "scripts": "dist/**/*.js",
+    "assets": [
+      "dist/**/*",
+      "node_modules/**/*"
+    ],
+    "targets": [
+      "node18-linux-x64",
+      "node18-win-x64",
+      "node18-macos-x64"
+    ],
+    "outputPath": "dist-bin"
+  },
   "scripts": {
     "dev": "nodemon",
     "start": "ts-node --transpile-only -r tsconfig-paths/register -r dotenv/config src/start.ts",
@@ -11,6 +24,8 @@
     "test:coverage": "jest --coverage",
     "format": "prettier --write .",
     "prepare": "husky",
+    "build": "tsc && tsc-alias",
+    "build:bin": "rm -rf dist dist-bin && npm run build && pkg . && cp node_modules/better-sqlite3/build/Release/better_sqlite3.node dist-bin/",
     "commit": "commit"
   },
   "keywords": [],
@@ -34,14 +49,17 @@
     "express-rate-limit": "^8.0.1",
     "fs-extra": "^11.3.3",
     "helmet": "^8.1.0",
+    "js-tiktoken": "^1.0.21",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^8.5.1",
     "multer": "^2.0.2",
     "node-fetch": "^2.7.0",
     "save-dev": "^0.0.1-security",
     "sqlite3": "^5.1.7",
+    "tough-cookie": "^6.0.0",
     "ts-node": "^10.9.2",
-    "winston": "^3.17.0"
+    "winston": "^3.17.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.8.0",
@@ -58,6 +76,7 @@
     "jest": "^29.7.0",
     "lint-staged": "^15.5.0",
     "nodemon": "^3.1.4",
+    "pkg": "^5.8.1",
     "prettier": "^3.3.3",
     "ts-jest": "^29.2.3",
     "tsc-alias": "^1.8.10",

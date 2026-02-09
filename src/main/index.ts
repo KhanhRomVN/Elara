@@ -1,8 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { electronApp, optimizer } from '@electron-toolkit/utils';
 import { windowManager } from './core/window';
-import * as net from 'net';
-import * as readline from 'readline';
 
 ipcMain.on('debug:log', (_, message) => {
   console.log('[Renderer Log]:', message);
@@ -10,16 +8,15 @@ ipcMain.on('debug:log', (_, message) => {
 import { setupEventHandlers } from './core/events';
 import { setupAccountsHandlers } from './ipc/accounts';
 import { setupServerHandlers } from './ipc/server';
-import { setupVersionHandlers } from './ipc/version';
 import { setupAppHandlers } from './ipc/app';
-import { startServer } from './server';
-import type { ServerStartResult } from './server';
+import path from 'path';
+import { spawn, ChildProcess } from 'child_process';
 
 import { setupCommandsHandlers } from './ipc/commands';
 import { setupStatsHandlers } from './ipc/stats';
 import { setupDialogHandlers } from './ipc/dialog';
 import { setupExtendedToolsHandlers } from './ipc/extended-tools';
-import { startCLIServer, stopCLIServer } from './core/cli-server';
+import { setupVersionHandlers } from './ipc/version';
 import { createSystemTray, destroySystemTray } from './core/tray';
 
 process.on('uncaughtException', (error) => {
@@ -34,81 +31,16 @@ process.on('exit', (code) => {
   console.log(`[Main] Process exiting with code: ${code}`);
 });
 
+// Backend process reference
+let backendProcess: ChildProcess | null = null;
+
 console.log('[Main] Requesting single instance lock...');
 const gotTheLock = app.requestSingleInstanceLock();
 console.log('[Main] Got lock:', gotTheLock);
 
 if (!gotTheLock) {
-  const args = process.argv
-    .slice(process.env.NODE_ENV === 'development' ? 2 : 1)
-    .filter((arg) => !arg.startsWith('--'));
-
-  if (args.length > 0) {
-    console.log('[Main] Secondary instance with arguments, acting as CLI client...');
-    const SOCKET_PATH = process.platform === 'win32' ? '\\\\.\\pipe\\elara-cli' : '/tmp/elara.sock';
-    const client = new net.Socket();
-    let buffer = '';
-
-    const command = args[0];
-    const commandArgs = args.slice(1);
-    const cwd = process.cwd();
-
-    client.connect(SOCKET_PATH, () => {
-      client.write(
-        JSON.stringify({
-          type: 'execute',
-          trigger: command,
-          args: commandArgs,
-          cwd,
-        }) + '\n',
-      );
-    });
-
-    client.on('data', (data) => {
-      buffer += data.toString();
-      let boundary = buffer.indexOf('\n');
-      while (boundary !== -1) {
-        const message = buffer.substring(0, boundary).trim();
-        buffer = buffer.substring(boundary + 1);
-        if (message) {
-          try {
-            const info = JSON.parse(message);
-            if (info.error) {
-              process.stderr.write(`\x1b[31mError: ${info.error}\x1b[0m\n`);
-            } else if (info.type === 'execution-result') {
-              process.stdout.write(info.output);
-            } else if (info.type === 'prompt') {
-              const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-              rl.question(`\x1b[33m${info.query} (y/n):\x1b[0m `, (answer) => {
-                rl.close();
-                client.write(JSON.stringify({ type: 'input', content: answer.trim() }) + '\n');
-              });
-            }
-          } catch (e) {
-            if (message.trim()) console.log(message);
-          }
-        }
-        boundary = buffer.indexOf('\n');
-      }
-    });
-
-    client.on('end', () => {
-      app.quit();
-    });
-    client.on('error', (err) => {
-      console.error(`[CLI Forward] Connection error: ${err.message}`);
-      app.quit();
-    });
-
-    // Safety timeout
-    setTimeout(() => {
-      console.log('[CLI Forward] Timeout waiting for server response');
-      app.quit();
-    }, 600000); // 10 minutes
-  } else {
-    console.log('[Main] Another instance is already running - quitting!');
-    app.quit();
-  }
+  console.log('[Main] Another instance is already running - quitting!');
+  app.quit();
 } else {
   app.on('second-instance', (_event, _commandLine, _workingDirectory) => {
     // Someone tried to run a second instance, we should focus our window.
@@ -143,9 +75,10 @@ if (!gotTheLock) {
     try {
       setupEventHandlers();
       setupAccountsHandlers();
+      // setupServerHandlers(); // Server handlers now use HTTP
       setupServerHandlers();
-      setupVersionHandlers();
       setupAppHandlers();
+      setupVersionHandlers();
       setupCommandsHandlers();
       setupStatsHandlers();
       setupDialogHandlers();
@@ -160,55 +93,95 @@ if (!gotTheLock) {
       });
 
       // Import and register proxy handlers
-      import('./ipc/proxy').then(({ registerProxyIpcHandlers }) => {
-        try {
-          console.log('[Main] Registering proxy handlers...');
-          registerProxyIpcHandlers();
-          console.log('[Main] Proxy handlers registered.');
-        } catch (err) {
-          console.error('[Main] Failed to setup proxy handlers:', err);
-        }
-      });
+      // REMOVED: Proxy handlers depend on embedded server which has been removed
+      // If proxy functionality is needed, it should be refactored to use the backend API
+      // import('./ipc/proxy').then(({ registerProxyIpcHandlers }) => {
+      //   try {
+      //     console.log('[Main] Registering proxy handlers...');
+      //     registerProxyIpcHandlers();
+      //     console.log('[Main] Proxy handlers registered.');
+      //   } catch (err) {
+      //     console.error('[Main] Failed to setup proxy handlers:', err);
+      //   }
+      // });
     } catch (err) {
       console.error('[Main] Error setting up IPC handlers:', err);
     }
 
-    // Start API server with embedded database
-    console.log('[Main] Starting API server...');
-    try {
-      startServer()
-        .then((result: ServerStartResult) => {
-          if (result.success) {
-            console.log(`[Main] Server started successfully on port ${result.port}`);
-          } else {
-            console.error('[Main] Server failed to start:', result.error);
-          }
-        })
-        .catch((err) => {
-          console.error('[Main] Unexpected error starting server:', err);
-        });
-    } catch (err) {
-      console.error('[Main] Failed to initiate server start:', err);
-    }
+    // Start Backend Server
 
-    // Start CLI server
-    try {
-      startCLIServer();
-    } catch (err) {
-      console.error('[Main] Failed to start CLI server:', err);
-    }
+    const startBackend = () => {
+      if (app.isPackaged) {
+        // Platform specific binary name
+        let backendExecutable = 'server';
+        if (process.platform === 'win32') {
+          backendExecutable = 'server.exe';
+        }
+
+        const backendPath = path.join(process.resourcesPath, 'backend', backendExecutable);
+
+        console.log('[Main] Starting backend binary from:', backendPath);
+
+        try {
+          const userDataPath = app.getPath('userData');
+          const dbPath = path.join(userDataPath, 'database.sqlite');
+
+          // Set cwd to the folder containing the binary so it can find adjacent .node files if needed,
+          // though pkg usually handles this if configured correctly or if we copy them there.
+          const backendCwd = path.join(process.resourcesPath, 'backend');
+
+          console.log('[Main] Starting backend with DB path:', dbPath);
+          console.log('[Main] Backend CWD:', backendCwd);
+
+          // Use spawn directly on the binary
+          backendProcess = spawn(backendPath, [], {
+            cwd: backendCwd,
+            env: {
+              ...process.env,
+              // Pass any strictly necessary env vars here
+              DATABASE_PATH: dbPath,
+              // If your backend reads port from env
+              PORT: '11434',
+            },
+            stdio: 'pipe',
+          });
+
+          if (backendProcess.stdout) {
+            backendProcess.stdout.on('data', (data) => {
+              console.log(`[Backend STDOUT]: ${data}`);
+            });
+          }
+
+          if (backendProcess.stderr) {
+            backendProcess.stderr.on('data', (data) => {
+              console.error(`[Backend STDERR]: ${data}`);
+            });
+          }
+
+          console.log('[Main] Backend process spawned with PID:', backendProcess.pid);
+
+          backendProcess.on('error', (err) => {
+            console.error('[Main] Backend process error:', err);
+          });
+
+          backendProcess.on('exit', (code, signal) => {
+            console.log(`[Main] Backend process exited with code ${code} and signal ${signal}`);
+          });
+        } catch (e) {
+          console.error('[Main] Failed to spawn backend:', e);
+        }
+      } else {
+        console.log('[Main] Development mode: Backend should be running in a separate terminal.');
+      }
+    };
+
+    startBackend();
 
     // Create system tray
     createSystemTray();
 
-    // Check for provider updates in the background
-    import('./server/dynamic-provider').then(({ DynamicProviderManager }) => {
-      DynamicProviderManager.getInstance()
-        .updateAllProviders()
-        .catch((err) => {
-          console.error('[Main] Failed to update providers:', err);
-        });
-    });
+    // Check for provider updates in the background - REMOVED (Relies on Backend)
+    // DynamicProviderManager functionality moved to backend or deprecated in main process
 
     // Create main window
     console.log('[Main] Creating main window...');
@@ -247,12 +220,15 @@ if (!gotTheLock) {
   // Track when app is about to quit
   app.on('will-quit', () => {
     console.log('[Main] App will quit');
+    if (backendProcess) {
+      console.log('[Main] Killing backend process...');
+      backendProcess.kill();
+    }
   });
 
   // Handle app quit from tray menu
   app.on('before-quit', () => {
     windowManager.setQuitting(true);
-    stopCLIServer();
     destroySystemTray();
   });
 }

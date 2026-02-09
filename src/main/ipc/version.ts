@@ -3,10 +3,20 @@ import { versionManager } from '../services/version-manager';
 
 export const setupVersionHandlers = () => {
   ipcMain.handle('version:check', async () => {
-    return await versionManager.checkForUpdates();
+    try {
+      return await versionManager.checkForUpdates();
+    } catch (error) {
+      console.error('[IPC] version:check error:', error);
+      throw error;
+    }
   });
 
   ipcMain.handle('version:update', async (_, remoteVersion: string) => {
-    return await versionManager.performUpdate(remoteVersion);
+    try {
+      return await versionManager.performUpdate(remoteVersion);
+    } catch (error) {
+      console.error('[IPC] version:update error:', error);
+      throw error;
+    }
   });
 };

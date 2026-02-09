@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { PRESET_THEMES } from './theme-loader';
+import { PRESET_THEMES, ThemeConfig } from './theme-loader';
 
 type Theme = 'dark' | 'light' | 'system';
 
@@ -12,11 +12,11 @@ type ThemeProviderProps = {
 type ThemeProviderState = {
   theme: Theme;
   setTheme: (theme: Theme) => void;
-  applyPresetTheme: (preset: any) => void;
+  applyPresetTheme: (preset: ThemeConfig) => void;
 };
 
 const initialState: ThemeProviderState = {
-  theme: 'system',
+  theme: 'dark',
   setTheme: () => null,
   applyPresetTheme: () => null,
 };
@@ -30,11 +30,10 @@ export function ThemeProvider({
   ...props
 }: ThemeProviderProps) {
   const [theme, setTheme] = useState<Theme>(() => {
-    const stored = localStorage.getItem(storageKey) as Theme;
-    return stored || defaultTheme;
+    return (localStorage.getItem(storageKey) as Theme) || defaultTheme;
   });
 
-  const applyCSSVariables = (preset: any) => {
+  const applyCSSVariables = (preset: ThemeConfig) => {
     const root = window.document.documentElement;
     const cssVarMap: Record<string, string> = {
       primary: '--primary',
@@ -73,7 +72,6 @@ export function ThemeProvider({
       cardShadow: '--card-shadow',
       dialogShadow: '--dialog-shadow',
       dropdownShadow: '--dropdown-shadow',
-      // Table variables
       tableHeaderBg: '--table-header-bg',
       tableHoverHeaderBg: '--table-hover-header-bg',
       tableBodyBg: '--table-body-bg',
@@ -82,11 +80,9 @@ export function ThemeProvider({
       tableFooterBg: '--table-footer-bg',
       tableHoverFooterBg: '--table-hover-footer-bg',
       tableBorder: '--table-border',
-      // Tab variables
       tabBackground: '--tab-background',
       tabBorder: '--tab-border',
       tabHoverBorder: '--tab-hover-border',
-      // TabItem variables
       tabItemBackground: '--tab-item-background',
       tabItemHoverBg: '--tab-item-hover-bg',
       tabItemFocusBg: '--tab-item-focus-bg',
@@ -94,8 +90,8 @@ export function ThemeProvider({
       tabItemHoverBorder: '--tab-item-hover-border',
       tabItemFocusBorder: '--tab-item-focus-border',
     };
-    // Use tailwind property from new theme structure
-    const themeData = preset.tailwind || preset;
+
+    const themeData = preset.tailwind;
     Object.entries(themeData).forEach(([key, value]) => {
       const cssVar = cssVarMap[key];
       if (cssVar && value) {
@@ -104,123 +100,42 @@ export function ThemeProvider({
     });
   };
 
-  const applyPresetTheme = (preset: any) => {
-    // Find the latest preset from PRESET_THEMES if name matches
-    let latestPreset = preset;
-    if (preset.name) {
-      const allPresets = [...PRESET_THEMES.light, ...PRESET_THEMES.dark];
-      const foundPreset = allPresets.find((p) => p.name === preset.name);
-      if (foundPreset) {
-        latestPreset = foundPreset;
-      }
-    }
-
-    applyCSSVariables(latestPreset);
-    // Save preset with name for CodeBlock theme detection
-    const presetWithName = {
-      ...latestPreset,
-      name: latestPreset.name, // Ensure name is saved
-    };
-    localStorage.setItem(`${storageKey}-preset`, JSON.stringify(presetWithName));
-
-    // Dispatch custom event to notify CodeBlock components
-    window.dispatchEvent(
-      new CustomEvent('theme-preset-changed', {
-        detail: { presetName: latestPreset.name },
-      }),
-    );
+  const applyPresetTheme = (preset: ThemeConfig) => {
+    applyCSSVariables(preset);
+    // Save preset name without "Light" or "Dark" suffix to maintain consistency across modes
+    const baseName = preset.name.replace(/Light$|Dark$/, '');
+    localStorage.setItem(`${storageKey}-preset-name`, baseName);
   };
 
-  // Load saved preset theme on mount
-  useEffect(() => {
-    const savedPreset = localStorage.getItem(`${storageKey}-preset`);
-    if (savedPreset) {
-      try {
-        const preset = JSON.parse(savedPreset);
+  const loadPresetForMode = (mode: 'light' | 'dark') => {
+    const savedPresetName = localStorage.getItem(`${storageKey}-preset-name`);
+    if (savedPresetName) {
+      // Try to find the preset for the current mode
+      const targetName = `${savedPresetName}${mode.charAt(0).toUpperCase() + mode.slice(1)}`;
+      const preset = PRESET_THEMES[mode].find((p) => p.name === targetName);
+      if (preset) {
         applyCSSVariables(preset);
-      } catch (e) {
-        console.error('Failed to load saved preset theme', e);
+        return;
       }
-    } else {
-      // Apply Default Dark theme on first load
-      const defaultDarkPreset = PRESET_THEMES.dark[0];
-      applyCSSVariables(defaultDarkPreset);
-      localStorage.setItem(`${storageKey}-preset`, JSON.stringify(defaultDarkPreset));
     }
-  }, []);
-
-  // Auto-sync preset with latest changes in development
-  useEffect(() => {
-    if (process.env.NODE_ENV !== 'development') return;
-
-    const syncInterval = setInterval(() => {
-      const savedPreset = localStorage.getItem(`${storageKey}-preset`);
-      if (savedPreset) {
-        try {
-          const preset = JSON.parse(savedPreset);
-          if (preset.name) {
-            const allPresets = [...PRESET_THEMES.light, ...PRESET_THEMES.dark];
-            const latestPreset = allPresets.find((p) => p.name === preset.name);
-            if (latestPreset) {
-              // Compare if colors have changed
-              const hasChanges =
-                JSON.stringify(latestPreset.tailwind) !== JSON.stringify(preset.tailwind) ||
-                JSON.stringify(latestPreset.monaco) !== JSON.stringify(preset.monaco);
-
-              if (hasChanges) {
-                console.log(`[Theme Sync] Updating preset: ${preset.name}`);
-                applyPresetTheme(latestPreset);
-              }
-            }
-          }
-        } catch (e) {
-          console.error('Failed to sync preset theme', e);
-        }
-      }
-    }, 2000); // Check every 2 seconds in development
-
-    return () => clearInterval(syncInterval);
-  }, [storageKey, applyPresetTheme]);
-
-  // Watch for changes in theme presets during development
-  useEffect(() => {
-    if (process.env.NODE_ENV !== 'development') return;
-
-    const checkPresetUpdate = () => {
-      const savedPreset = localStorage.getItem(`${storageKey}-preset`);
-      if (savedPreset) {
-        try {
-          const preset = JSON.parse(savedPreset);
-          applyCSSVariables(preset);
-        } catch (e) {
-          console.error('Failed to reload preset theme', e);
-        }
-      }
-    };
-
-    // Listen for custom event from HMR or manual refresh
-    window.addEventListener('theme-preset-reload', checkPresetUpdate);
-
-    return () => {
-      window.removeEventListener('theme-preset-reload', checkPresetUpdate);
-    };
-  }, [storageKey]);
+    // Fallback if no specific preset saved or found
+    applyCSSVariables(PRESET_THEMES[mode][0]);
+  };
 
   useEffect(() => {
     const root = window.document.documentElement;
-
     root.classList.remove('light', 'dark');
 
-    if (theme === 'system') {
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'dark'
-        : 'light';
+    let effectiveMode: 'light' | 'dark' = 'dark'; // Default
 
-      root.classList.add(systemTheme);
-      return;
+    if (theme === 'system') {
+      effectiveMode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    } else {
+      effectiveMode = theme;
     }
 
-    root.classList.add(theme);
+    root.classList.add(effectiveMode);
+    loadPresetForMode(effectiveMode);
   }, [theme]);
 
   const value = {
@@ -239,7 +154,6 @@ export function ThemeProvider({
   );
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
 export const useTheme = () => {
   const context = useContext(ThemeProviderContext);
 

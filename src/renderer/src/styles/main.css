@@ -3,67 +3,132 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+}
+
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* DefaultLight Theme Variables */
+    --primary: 54 134 255;
+    --background: 255 255 255;
+    --text-primary: 15 23 42;
+    --text-secondary: 71 85 105;
+    --border: 226 232 240;
+    --border-hover: 203 213 225;
+    --border-focus: 203 213 225;
+    --card-background: 255 255 255;
+    --input-background: 255 255 255;
+    --input-border-default: 226 232 240;
+    --input-border-hover: 203 213 225;
+    --input-border-focus: 54 134 255;
+    --dialog-background: 255 255 255;
+    --dropdown-background: 255 255 255;
+    --dropdown-item-hover: 248 250 252;
+    --dropdown-border: 226 232 240;
+    --dropdown-border-hover: 203 213 225;
+    --sidebar-background: 249 250 251;
+    --sidebar-item-hover: 243 244 246;
+    --sidebar-item-focus: 229 231 235;
+    --button-bg: 54 134 255;
+    --button-bg-hover: 29 78 216;
+    --button-text: 255 255 255;
+    --button-border: 37 99 235;
+    --button-border-hover: 30 64 175;
+    --button-second-bg: 212 212 212;
+    --button-second-bg-hover: 182 182 182;
+    --bookmark-item-bg: 241 245 249;
+    --bookmark-item-text: 15 23 42;
+    --drawer-background: 255 255 255;
+    --clock-gradient-from: 54 134 255;
+    --clock-gradient-to: 29 78 216;
+    --card-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+    --dialog-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+    --dropdown-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+    --table-header-bg: 248 250 252;
+    --table-hover-header-bg: 241 245 249;
+    --table-body-bg: 255 255 255;
+    --table-hover-item-body-bg: 243 244 246;
+    --table-focus-item-body-bg: 224 231 255;
+    --table-footer-bg: 248 250 252;
+    --table-hover-footer-bg: 241 245 249;
+    --table-border: 226 232 240;
+    --tab-background: 255 255 255;
+    --tab-border: 226 232 240;
+    --tab-hover-border: 203 213 225;
+    --tab-item-background: transparent;
+    --tab-item-hover-bg: 248 250 252;
+    --tab-item-focus-bg: 219 234 254;
+    --tab-item-border: transparent;
+    --tab-item-hover-border: 203 213 225;
+    --tab-item-focus-border: 54 134 255;
+    --divider: 229 231 235;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-
+    /* Radius */
     --radius: 0.5rem;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    /* DefaultDark Theme Variables */
+    --primary: 54 134 255;
+    --background: 10 10 10;
+    --text-primary: 236 236 236;
+    --text-secondary: 168 168 168;
+    --border: 53 53 53;
+    --border-hover: 65 141 254;
+    --border-focus: 65 141 254;
+    --card-background: 36 36 36;
+    --input-background: 30 30 30;
+    --input-border-default: 63 63 63;
+    --input-border-hover: 65 141 254;
+    --input-border-focus: 54 134 255;
+    --dialog-background: 30 30 30;
+    --dropdown-background: 30 30 30;
+    --dropdown-item-hover: 45 45 45;
+    --dropdown-border: 63 63 63;
+    --dropdown-border-hover: 65 141 254;
+    --sidebar-background: 19 19 19;
+    --sidebar-item-hover: 30 30 30;
+    --sidebar-item-focus: 51 51 51;
+    --button-bg: 54 134 255;
+    --button-bg-hover: 65 141 254;
+    --button-text: 255 255 255;
+    --button-border: 65 141 254;
+    --button-border-hover: 90 163 255;
+    --button-second-bg: 30 30 30;
+    --button-second-bg-hover: 52 52 52;
+    --bookmark-item-bg: 30 41 59;
+    --bookmark-item-text: 226 232 240;
+    --drawer-background: 30 30 30;
+    --clock-gradient-from: 54 134 255;
+    --clock-gradient-to: 65 141 254;
+    --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    --dialog-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    --dropdown-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    --table-header-bg: 26 26 26;
+    --table-hover-header-bg: 36 36 36;
+    --table-body-bg: 36 36 36;
+    --table-hover-item-body-bg: 45 45 45;
+    --table-focus-item-body-bg: 51 51 51;
+    --table-footer-bg: 26 26 26;
+    --table-hover-footer-bg: 36 36 36;
+    --table-border: 53 53 53;
+    --tab-background: 30 30 30;
+    --tab-border: 53 53 53;
+    --tab-hover-border: 65 141 254;
+    --tab-item-background: transparent;
+    --tab-item-hover-bg: 45 45 45;
+    --tab-item-focus-bg: 30 58 95;
+    --tab-item-border: transparent;
+    --tab-item-hover-border: 65 141 254;
+    --tab-item-focus-border: 54 134 255;
+    --divider: 53 53 53;
   }
 }
 
@@ -72,43 +137,37 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-text-primary;
   }
 }
 
 /* Animations */
 
 /* Custom Scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+@layer base {
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: rgb(var(--border) / 0.5); /* Semi-transparent border for thumb */
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(var(--primary)); /* Primary color on hover */
+  }
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--text-secondary);
-  opacity: 0.2;
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
-  opacity: 0.3;
-}
-
-/* Firefox scrollbar */
+/* Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--text-secondary) transparent;
-}
-/* Code Diff Highlighting */
-.code-line-added {
-  background-color: rgba(34, 197, 94, 0.15) !important;
-}
-
-.code-line-deleted {
-  background-color: rgba(239, 68, 68, 0.15) !important;
+  scrollbar-color: rgb(var(--border) / 0.5) transparent;
 }

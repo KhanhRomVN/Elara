@@ -1,49 +1,74 @@
 import { ipcMain } from 'electron';
-import {
-  getAccountStatsByPeriod,
-  getModelStatsByPeriod,
-  getUsageHistory,
-} from '../../../backend/src/services/stats.service';
-import { getAllProviders } from '../../../backend/src/services/provider.service';
+
+const BACKEND_URL = process.env.BACKEND_API_URL || 'http://localhost:11434';
 
 export const setupStatsHandlers = () => {
   ipcMain.handle(
     'stats:get',
-    async (_event, period?: any, offset: number = 0, type?: 'history' | 'accounts' | 'models') => {
-      const providers = await getAllProviders();
+    async (
+      _event,
+      period: string = 'day',
+      offset: number = 0,
+      type?: 'history' | 'accounts' | 'models',
+    ) => {
+      try {
+        const url = new URL(`${BACKEND_URL}/v1/stats`);
+        url.searchParams.append('period', period);
+        url.searchParams.append('offset', offset.toString());
+        if (type) {
+          url.searchParams.append('type', type);
+        }
 
-      if (type === 'accounts') {
-        return { accounts: getAccountStatsByPeriod(period, offset), providers };
-      }
+        const response = await fetch(url.toString());
+        if (!response.ok) {
+          throw new Error(`Backend responded with ${response.status}`);
+        }
 
-      if (type === 'models') {
-        return { models: getModelStatsByPeriod(period, offset), providers };
-      }
+        const json = await response.json();
+        if (json.success && json.data) {
+          // Flatten data to match expected renderer format
+          const { accounts, models, history, providers } = json.data;
 
-      // Default/Bulk Logic
-      const baseStats = {
-        accounts: getAccountStatsByPeriod('day', 0), // Default for summary
-        models: getModelStatsByPeriod('day', 0), // Default for summary
-        providers,
-      };
+          if (type === 'accounts') return { accounts, providers };
+          if (type === 'models') return { models, providers };
 
-      if (!period && offset === 0 && !type) {
+          if (!type && period === 'day' && offset === 0) {
+            return {
+              accounts,
+              models,
+              providers,
+              history: Array.isArray(history)
+                ? history
+                : {
+                    day: history,
+                    week: history, // Backend controller might need adjustment for bulk, or main emulates it
+                    month: history,
+                    year: history,
+                  },
+              isBulk: true,
+            };
+          }
+
+          return {
+            accounts,
+            models,
+            providers,
+            history,
+          };
+        }
+
+        throw new Error(json.message || 'Failed to fetch stats');
+      } catch (error: any) {
+        console.error('[IPC] Failed to fetch stats from backend:', error.message);
         return {
-          ...baseStats,
-          history: {
-            day: getUsageHistory('day', 0),
-            week: getUsageHistory('week', 0),
-            month: getUsageHistory('month', 0),
-            year: getUsageHistory('year', 0),
-          },
-          isBulk: true,
+          success: false,
+          error: error.message,
+          accounts: [],
+          models: [],
+          providers: [],
+          history: [],
         };
       }
-
-      return {
-        ...baseStats,
-        history: getUsageHistory(period, offset),
-      };
     },
   );
 };
