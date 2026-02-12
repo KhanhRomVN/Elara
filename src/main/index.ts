@@ -17,6 +17,7 @@ import { setupStatsHandlers } from './ipc/stats';
 import { setupDialogHandlers } from './ipc/dialog';
 import { setupExtendedToolsHandlers } from './ipc/extended-tools';
 import { setupVersionHandlers } from './ipc/version';
+import { setupWorkspaceHandlers } from './ipc/workspaces';
 import { createSystemTray, destroySystemTray } from './core/tray';
 
 process.on('uncaughtException', (error) => {
@@ -83,6 +84,7 @@ if (!gotTheLock) {
       setupStatsHandlers();
       setupDialogHandlers();
       setupExtendedToolsHandlers();
+      setupWorkspaceHandlers();
 
       import('./ipc/ide').then(({ setupIDEHandlers }) => {
         try {

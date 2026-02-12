@@ -56,10 +56,6 @@
         "token": "string constant.other.placeholder"
       },
       {
-        "foreground": "ececec",
-        "token": "meta.function-call.py"
-      },
-      {
         "foreground": "a8a8a8",
         "token": "meta.tag"
       },
@@ -70,11 +66,79 @@
       {
         "foreground": "ececec",
         "token": "entity.name.section"
+      },
+      {
+        "foreground": "9cdcfe",
+        "token": "variable"
+      },
+      {
+        "foreground": "9cdcfe",
+        "token": "variable.parameter"
+      },
+      {
+        "foreground": "9cdcfe",
+        "token": "variable.name"
+      },
+      {
+        "foreground": "dcdcaa",
+        "token": "entity.name.function"
+      },
+      {
+        "foreground": "dcdcaa",
+        "token": "meta.function-call"
+      },
+      {
+        "foreground": "4ec9b0",
+        "token": "entity.name.type"
+      },
+      {
+        "foreground": "4ec9b0",
+        "token": "entity.name.class"
+      },
+      {
+        "foreground": "4ec9b0",
+        "token": "support.type"
+      },
+      {
+        "foreground": "4ec9b0",
+        "token": "support.class"
+      },
+      {
+        "foreground": "ce9178",
+        "token": "string.escape"
+      },
+      {
+        "foreground": "9cdcfe",
+        "token": "identifier"
+      },
+      {
+        "foreground": "b5cea8",
+        "token": "number"
+      },
+      {
+        "foreground": "ce9178",
+        "token": "character"
+      },
+      {
+        "foreground": "c586c0",
+        "token": "meta.preprocessor"
+      },
+      {
+        "foreground": "c586c0",
+        "token": "keyword.control"
+      },
+      {
+        "foreground": "3686ff",
+        "token": "keyword.operator"
+      },
+      {
+        "foreground": "5aa3ff",
+        "token": "storage.type"
       }
     ],
     "colors": {
       "editor.foreground": "#ececec",
-      "editor.background": "#1e1e1e",
+      "editor.background": "#0a0a0a",
       "editor.selectionBackground": "#353535",
       "editor.lineHighlightBackground": "#2d2d2d",
       "editorCursor.foreground": "#3686ff",

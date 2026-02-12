@@ -49,7 +49,7 @@ const FileHeader: React.FC<{ path: string; label?: string }> = ({ path, label })
   const iconPath = getFileIconPath(path);
 
   return (
-    <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 border-b border-border rounded-t-md text-xs font-medium text-muted-foreground select-none">
+    <div className="flex items-center gap-2 px-3 py-2 bg-secondary/30 border-b border-border rounded-t-md text-xs font-medium text-muted-foreground select-none">
       <img src={iconPath} alt="" className="w-4 h-4 object-contain" />
       <span className="text-foreground">{path}</span>
       {label && <span className="ml-auto text-[10px] uppercase tracking-wider">{label}</span>}
@@ -123,7 +123,7 @@ const ReplacementChunkRenderer: React.FC<{
     <div className="flex flex-col md:flex-row border-b border-border last:border-0 relative group">
       {/* Left: Original */}
       <div className="w-full md:w-1/2 md:border-r border-border min-w-0">
-        <div className="px-2 py-1 text-[10px] text-red-400/70 font-mono uppercase bg-red-950/10 border-b border-red-900/10">
+        <div className="px-2 py-1 text-[10px] text-red-500/70 font-mono uppercase bg-red-500/10 border-b border-red-500/20">
           Original
         </div>
         <CodeBlock
@@ -149,7 +149,7 @@ const ReplacementChunkRenderer: React.FC<{
 
       {/* Right: New */}
       <div className="w-full md:w-1/2 min-w-0">
-        <div className="px-2 py-1 text-[10px] text-green-400/70 font-mono uppercase bg-green-950/10 border-b border-green-900/10">
+        <div className="px-2 py-1 text-[10px] text-green-500/70 font-mono uppercase bg-green-500/10 border-b border-green-500/20">
           Replacement
         </div>
         <CodeBlock

@@ -37,6 +37,26 @@ const EXTENSIONS: Record<string, string> = {
   plaintext: 'txt',
 };
 
+const LANGUAGE_MAP: Record<string, string> = {
+  py: 'python',
+  js: 'javascript',
+  ts: 'typescript',
+  tsx: 'typescript',
+  jsx: 'javascript',
+  cpp: 'cpp',
+  c: 'c',
+  java: 'java',
+  rs: 'rust',
+  go: 'go',
+  rb: 'ruby',
+  php: 'php',
+  cs: 'csharp',
+  sh: 'shell',
+  md: 'markdown',
+  yml: 'yaml',
+  yaml: 'yaml',
+};
+
 // Helper for simple tag extraction
 const extractTag = (tagText: string, tagName: string) => {
   const match = new RegExp(`<${tagName}>([\\s\\S]*?)</${tagName}>`, 'i').exec(tagText);
@@ -136,7 +156,7 @@ const InlineFileViewer: React.FC<{ filePath: string; workspacePath?: string }> =
           ) : (
             <div className="rounded-md border border-border overflow-hidden">
               {/* Mini Header */}
-              <div className="bg-muted px-3 py-1.5 border-b border-border flex justify-between items-center">
+              <div className="bg-secondary/30 px-3 py-1.5 border-b border-border flex justify-between items-center">
                 <div className="flex items-center gap-2">
                   <img src={iconPath} className="w-3 h-3 object-contain" />
                   <span className="text-[10px] font-medium text-foreground uppercase">
@@ -358,9 +378,61 @@ export const MessageContent: React.FC<MessageContentProps> = ({ content, workspa
       },
     );
 
+    // Context Operations
+    formatted = formatted.replace(
+      /<read_workspace_context(?: \/>|\/>|>([\s\S]*?)<\/read_workspace_context>)/g,
+      () => `<status_tag text="Reading workspace.md bối cảnh..." />`,
+    );
+
+    formatted = formatted.replace(
+      /<update_workspace_context(?: \/>|\/>|>([\s\S]*?)<\/update_workspace_context>)/g,
+      (match, inner) => {
+        const content = inner ? extractTag(match, 'content') || inner : '';
+        return `<write_to_file><path>workspace.md</path><content>${content}</content></write_to_file>`;
+      },
+    );
+
+    formatted = formatted.replace(
+      /<read_workspace_rules_context(?: \/>|\/>|>([\s\S]*?)<\/read_workspace_rules_context>)/g,
+      () => `<status_tag text="Reading Project Rules (rules)..." />`,
+    );
+
+    formatted = formatted.replace(
+      /<update_workspace_rules_context(?: \/>|\/>|>([\s\S]*?)<\/update_workspace_rules_context>)/g,
+      (match, inner) => {
+        const content = inner ? extractTag(match, 'content') || inner : '';
+        return `<write_to_file><path>workspace_rules.md</path><content>${content}</content></write_to_file>`;
+      },
+    );
+
+    formatted = formatted.replace(
+      /<read_current_conversation_summary_context(?: \/>|\/>|>([\s\S]*?)<\/read_current_conversation_summary_context>)/g,
+      () => `<status_tag text="Reading Conversation Summary..." />`,
+    );
+
+    formatted = formatted.replace(
+      /<update_current_conversation_summary_context(?: \/>|\/>|>([\s\S]*?)<\/update_current_conversation_summary_context>)/g,
+      (match, inner) => {
+        const content = inner ? extractTag(match, 'content') || inner : '';
+        return `<write_to_file><path>summary.md</path><content>${content}</content></write_to_file>`;
+      },
+    );
+
     formatted = formatted.replace(/<tool_result name="(\w+)">([\s\S]*?)<\/tool_result>/g, '');
 
     formatted = formatted.replace(/<(text|code|language)>([\s\S]*?)<\/\1>/g, '$2');
+
+    // Hide any trailing partial/incomplete XML tags during streaming
+    // 1. Remove trailing "<tag" or "<tag " (incomplete tag start)
+    formatted = formatted.replace(/<[a-zA-Z0-9_]+[^>]*$/g, '');
+
+    // 2. Remove trailing "<tag>..." if the closing tag "</tag>" is missing at the end
+    // This uses a backreference to match any tag name and ensure it's not closed
+    formatted = formatted.replace(/<([a-zA-Z0-9_]+)>((?!<\/\1>)[\s\S])*$/g, '');
+
+    // Hide metadata tags like <task_progress> and its children from the main chat
+    formatted = formatted.replace(/<task_progress>([\s\S]*?)<\/task_progress>/g, '');
+    formatted = formatted.replace(/<(task_name|task|task_done)>([\s\S]*?)<\/\1>/g, '');
 
     return formatted;
   };
@@ -390,7 +462,7 @@ export const MessageContent: React.FC<MessageContentProps> = ({ content, workspa
   const parseContent = (text: string) => {
     const parts: React.ReactNode[] = [];
     const combinedRegex =
-      /```(\w+)?\n([\s\S]*?)```|(<status_tag text="([\s\S]*?)" \/>)|(<inline_file_tag path="([\s\S]*?)" \/>)|(<inline_folder_tag path="([\s\S]*?)" \/>)|(<replace_in_file>[\s\S]*?<\/replace_in_file>)|(<write_to_file>[\s\S]*?<\/write_to_file>)|<file>([\s\S]*?)<\/file>/g;
+      /```(\w+)?\n([\s\S]*?)```|(<status_tag text="([\s\S]*?)" \/>)|(<inline_file_tag path="([\s\S]*?)" \/>)|(<inline_folder_tag path="([\s\S]*?)" \/>)|(<replace_in_file>[\s\S]*?<\/replace_in_file>)|(<write_to_file>[\s\S]*?<\/write_to_file>)|<file>([\s\S]*?)<\/file>|(\*\*(.*?)\*\*)/g;
 
     let lastIndex = 0;
     let match;
@@ -409,7 +481,9 @@ export const MessageContent: React.FC<MessageContentProps> = ({ content, workspa
       const fullMatch = match[0];
 
       if (fullMatch.startsWith('```')) {
-        const language = match[1] || 'plaintext';
+        // ... (existing logic for code blocks)
+        const rawLanguage = match[1]?.toLowerCase() || 'plaintext';
+        const language = LANGUAGE_MAP[rawLanguage] || rawLanguage;
         const code = match[2].trim();
         const blockIndex = key;
         const ext = EXTENSIONS[language.toLowerCase()] || 'txt';
@@ -420,7 +494,7 @@ export const MessageContent: React.FC<MessageContentProps> = ({ content, workspa
             key={`code-${key++}`}
             className="my-3 rounded-lg overflow-hidden border border-border"
           >
-            <div className="bg-muted px-3 py-1.5 border-b border-border flex items-center justify-between">
+            <div className="bg-secondary/30 px-3 py-1.5 border-b border-border flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <img src={iconPath} alt={language} className="w-4 h-4 object-contain" />
                 <span className="text-xs font-medium text-foreground uppercase">{language}</span>
@@ -545,13 +619,20 @@ export const MessageContent: React.FC<MessageContentProps> = ({ content, workspa
           />,
         );
       } else if (fullMatch.startsWith('<file>')) {
-        const filePath = match[11]; // Adjusted index because of new regex groups
+        const filePath = match[11];
         parts.push(
           <InlineFileViewer
             key={`file-${key++}`}
             filePath={filePath}
             workspacePath={workspacePath}
           />,
+        );
+      } else if (fullMatch.startsWith('**')) {
+        const boldText = match[13];
+        parts.push(
+          <strong key={`bold-${key++}`} className="font-bold">
+            {boldText}
+          </strong>,
         );
       }
 

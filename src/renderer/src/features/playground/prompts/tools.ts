@@ -15,6 +15,14 @@ search_files(path, regex) - Search files matching regex content
 
 EXECUTION
 
-execute_command(command, requires_approval)
   - requires_approval: true (destructive), false (safe)
-  - Supports chaining: cd dir && npm install`;
+  - Supports chaining: cd dir && npm install
+
+CONTEXT OPERATIONS
+
+read_workspace_context() - Read the current workspace.md content.
+update_workspace_context(content) - Update the workspace.md file for this project.
+read_workspace_rules_context() - Read the current workspace_rules.md content.
+update_workspace_rules_context(content) - Update the workspace_rules.md file for this project.
+read_current_conversation_summary_context() - Read the current conversation summary (summary.md).
+update_current_conversation_summary_context(content) - Update the summary for the current conversation.`;

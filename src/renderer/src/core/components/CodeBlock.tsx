@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useTheme } from '../theme/ThemeProvider';
 
 // Define Window interface to include require for AMD loader
 declare global {
@@ -47,27 +48,6 @@ interface CodeBlockProps {
   decorations?: CodeBlockDecoration[];
 }
 
-const SYSTEMA_THEME = {
-  base: 'vs-dark',
-  inherit: true,
-  rules: [
-    { token: 'string.key.json', foreground: 'a78bfa' }, // Light Purple for keys
-    { token: 'string.value.json', foreground: '38bdf8' }, // Sky Blue for string values
-    { token: 'number', foreground: 'f472b6' }, // Pink for numbers
-    { token: 'keyword.json', foreground: '818cf8' }, // Indigo for keywords (true/false/null)
-    { token: 'delimiter', foreground: '94a3b8' }, // Slate Grey for delimiters
-    { token: 'comment', foreground: '64748b', fontStyle: 'italic' }, // Slate for comments
-  ],
-  colors: {
-    'editor.background': '#020617', // Deep blue-black (slate-950)
-    'editor.foreground': '#e2e8f0', // Slate-200
-    'editorLineNumber.foreground': '#475569', // Slate-600
-    'editor.lineHighlightBackground': '#1e293b', // Slate-800
-    'editorCursor.foreground': '#38bdf8', // Sky blue cursor
-    'editor.selectionBackground': '#3b82f640', // Blue selection
-  },
-};
-
 const CodeBlock: React.FC<CodeBlockProps> = ({
   code,
   language = 'json',
@@ -83,6 +63,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
   disableClick = false,
   decorations,
 }) => {
+  const { currentPreset } = useTheme();
   const editorRef = useRef<HTMLDivElement>(null);
   const editorInstance = useRef<any>(null);
   const [currentHeight, setCurrentHeight] = useState<number>(0);
@@ -112,10 +93,10 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
           editorInstance.current.dispose();
         }
 
-        const themeName = 'systema-dark';
+        const themeName = currentPreset ? `elara-theme-${currentPreset.name}` : 'vs-dark';
 
         // Always define our custom theme
-        if (window.monaco) {
+        if (window.monaco && currentPreset) {
           const customRules =
             themeConfig?.rules?.map((r) => ({
               token: r.token,
@@ -125,10 +106,11 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
             })) || [];
 
           window.monaco.editor.defineTheme(themeName, {
-            ...SYSTEMA_THEME,
-            rules: [...SYSTEMA_THEME.rules, ...customRules], // Allow overrides
+            base: currentPreset.monaco.base as any,
+            inherit: currentPreset.monaco.inherit,
+            rules: [...currentPreset.monaco.rules, ...customRules],
             colors: {
-              ...SYSTEMA_THEME.colors,
+              ...currentPreset.monaco.colors,
               ...(themeConfig?.background ? { 'editor.background': themeConfig.background } : {}),
               ...(themeConfig?.foreground ? { 'editor.foreground': themeConfig.foreground } : {}),
             },
@@ -169,7 +151,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
 
         // Dynamic height adjustment
         editorInstance.current.onDidContentSizeChange((e: any) => {
-          if (!mounted) return;
+          if (!mounted || className?.includes('h-full')) return;
           const topPadding = editorOptions?.padding?.top ?? 16;
           const bottomPadding = editorOptions?.padding?.bottom ?? 16;
           const verticalPadding = topPadding + bottomPadding;
@@ -191,13 +173,15 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
         });
 
         // Initialize height immediately
-        const contentHeight = editorInstance.current.getContentHeight();
-        const topPadding = editorOptions?.padding?.top ?? 16;
-        const bottomPadding = editorOptions?.padding?.bottom ?? 16;
-        const verticalPadding = topPadding + bottomPadding;
-        const lineHeight = 19; // Default guess
-        const maxHeight = maxLines * lineHeight + verticalPadding;
-        setCurrentHeight(Math.min(contentHeight, maxHeight));
+        if (!className?.includes('h-full')) {
+          const contentHeight = editorInstance.current.getContentHeight();
+          const topPadding = editorOptions?.padding?.top ?? 16;
+          const bottomPadding = editorOptions?.padding?.bottom ?? 16;
+          const verticalPadding = topPadding + bottomPadding;
+          const lineHeight = 19; // Default guess
+          const maxHeight = maxLines * lineHeight + verticalPadding;
+          setCurrentHeight(Math.min(contentHeight, maxHeight));
+        }
 
         // Expose editor instance
         if (onEditorMounted) {
@@ -274,8 +258,8 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
         editorInstance.current.dispose();
       }
     };
-    // Use JSON.stringify for deep comparison of themeConfig to avoid re-init on every render if object reference changes but content doesn't
-  }, [JSON.stringify(themeConfig), wordWrap]); // Re-init if config/wrap changes
+    // Use JSON.stringify for deep comparison of themeConfig/currentPreset to avoid re-init on every render
+  }, [JSON.stringify(themeConfig), currentPreset?.name, language, wordWrap]); // Re-init if config/preset/wrap/language changes
 
   // Update value
   useEffect(() => {
@@ -283,6 +267,24 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
       editorInstance.current.setValue(code);
     }
   }, [code]);
+
+  // Update language dynamically without re-creating editor
+  useEffect(() => {
+    if (editorReady && editorInstance.current && window.monaco) {
+      const model = editorInstance.current.getModel();
+      if (model && language) {
+        window.monaco.editor.setModelLanguage(model, language);
+      }
+    }
+  }, [language, editorReady]);
+
+  // Update theme dynamically
+  useEffect(() => {
+    if (editorReady && editorInstance.current && window.monaco && currentPreset) {
+      const themeName = `elara-theme-${currentPreset.name}`;
+      window.monaco.editor.setTheme(themeName);
+    }
+  }, [currentPreset?.name, editorReady]);
 
   // Update word wrap dynamically
   useEffect(() => {
@@ -317,7 +319,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
       ref={editorRef}
       className={className}
       style={{
-        height: `${currentHeight}px`,
+        height: className?.includes('h-full') ? '100%' : `${currentHeight}px`,
         minHeight: '20px',
         opacity: currentHeight ? 1 : 0,
         transition: 'opacity 0.2s ease-in-out',

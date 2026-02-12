@@ -9,8 +9,34 @@ export const PlaygroundWithTabs = () => {
   const navigate = useNavigate();
 
   //  Tab management
-  const [tabs, setTabs] = useState<ConversationTab[]>(() => [createDefaultTab()]);
-  const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0]?.id || '');
+  const [tabs, setTabs] = useState<ConversationTab[]>(() => {
+    try {
+      const saved = localStorage.getItem('elara_playground_tabs');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.error('Failed to load tabs', e);
+    }
+    return [createDefaultTab()];
+  });
+  const [activeTabId, setActiveTabId] = useState<string>(() => {
+    const savedId = localStorage.getItem('elara_active_tab_id');
+    const firstTabId = tabs[0]?.id || '';
+    if (savedId && tabs.some((t) => t.id === savedId)) return savedId;
+    return firstTabId;
+  });
+
+  // Save tabs to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('elara_playground_tabs', JSON.stringify(tabs));
+  }, [tabs]);
+
+  // Save activeTabId to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('elara_active_tab_id', activeTabId);
+  }, [activeTabId]);
 
   const getActiveTab = (): ConversationTab => {
     return tabs.find((t) => t.id === activeTabId) || tabs[0];
@@ -79,7 +105,11 @@ export const PlaygroundWithTabs = () => {
   };
 
   const handleUpdateTab = useCallback((tabId: string, updates: Partial<ConversationTab>) => {
-    setTabs((prevTabs) => prevTabs.map((tab) => (tab.id === tabId ? { ...tab, ...updates } : tab)));
+    setTabs((prevTabs) => {
+      const nextTabs = prevTabs.map((tab) => (tab.id === tabId ? { ...tab, ...updates } : tab));
+      localStorage.setItem('elara_playground_tabs', JSON.stringify(nextTabs));
+      return nextTabs;
+    });
   }, []);
 
   const activeTab = getActiveTab();

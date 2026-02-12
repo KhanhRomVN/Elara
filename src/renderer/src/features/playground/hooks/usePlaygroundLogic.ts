@@ -27,17 +27,111 @@ export const usePlaygroundLogic = ({
   activeTabId?: string;
   onUpdateTab?: (id: string, data: Partial<ConversationTab>) => void;
 }) => {
+  // Load state from localStorage on mount
+
   const [messages, setMessages] = useState<Message[]>(() => activeTab?.messages || []);
   const [input, setInput] = useState(() => activeTab?.input || '');
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [providersList, setProvidersList] = useState<any[]>([]);
-  const [streamEnabled, setStreamEnabled] = useState(true);
+  const [streamEnabled, setStreamEnabled] = useState(() => activeTab?.groqSettings?.stream ?? true);
+  const [isLoadingContext, setIsLoadingContext] = useState(false);
+  const [temperature, setTemperature] = useState<number>(
+    () => activeTab?.temperature ?? activeTab?.groqSettings?.temperature ?? 0.7,
+  );
+
+  // Agent Mode State
+  const [agentMode, setAgentMode] = useState(() => activeTab?.agentMode ?? false);
+  const [selectedWorkspacePath, setSelectedWorkspacePath] = useState<string | undefined>(
+    () => activeTab?.selectedWorkspacePath,
+  );
+
+  const [availableWorkspaces, setAvailableWorkspaces] = useState<any[]>([]);
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | undefined>();
+
+  const [taskProgress, setTaskProgress] = useState<{
+    current: {
+      taskName: string;
+      tasks: { text: string; status: 'todo' | 'done' }[];
+    } | null;
+    history: {
+      taskName: string;
+      tasks: { text: string; status: 'todo' | 'done' }[];
+    }[];
+  }>(() => activeTab?.taskProgress || { current: null, history: [] });
+
+  const [activePreviewFile, setActivePreviewFile] = useState<string | null>(
+    () => activeTab?.activePreviewFile ?? null,
+  );
+  const [previewFiles, setPreviewFiles] = useState<Record<string, any>>(
+    () => activeTab?.previewFiles || {},
+  );
+
+  // Note: Persist functionality is now handled by the parent PlaygroundWithTabs
+  // via the tabs array and onUpdateTab callback. We remove the individual
+  // localStorage effects here to prevent multi-tab state overwrites.
+
+  // Extract Task Progress from messages
+  useEffect(() => {
+    const assistantMessages = messages.filter(
+      (m) => m.role === 'assistant' && m.content.includes('<task_progress>'),
+    );
+
+    if (assistantMessages.length === 0) {
+      if (taskProgress.current !== null || taskProgress.history.length > 0) {
+        setTaskProgress({ current: null, history: [] });
+      }
+      return;
+    }
+
+    const allSessions: { taskName: string; tasks: { text: string; status: 'todo' | 'done' }[] }[] =
+      [];
+
+    assistantMessages.forEach((msg) => {
+      const content = msg.content;
+      const progressBlocks = content.match(/<task_progress>([\s\S]*?)<\/task_progress>/g);
+
+      if (progressBlocks) {
+        progressBlocks.forEach((block) => {
+          const nameMatch = block.match(/<task_name>([\s\S]*?)<\/task_name>/);
+          const taskName = nameMatch ? nameMatch[1].trim() : 'Untitled Task';
+
+          const taskRegex = /<(task|task_done)>([\s\S]*?)<\/\1>/g;
+          const tasks: { text: string; status: 'todo' | 'done' }[] = [];
+          let m;
+          while ((m = taskRegex.exec(block)) !== null) {
+            tasks.push({
+              text: m[2].trim(),
+              status: m[1] === 'task_done' ? 'done' : 'todo',
+            });
+          }
+
+          if (tasks.length > 0) {
+            const existingIdx = allSessions.findIndex((s) => s.taskName === taskName);
+            if (existingIdx !== -1) {
+              allSessions[existingIdx] = { taskName, tasks };
+            } else {
+              allSessions.push({ taskName, tasks });
+            }
+          }
+        });
+      }
+    });
+
+    const current = allSessions.length > 0 ? allSessions[allSessions.length - 1] : null;
+
+    if (JSON.stringify({ current, history: allSessions }) !== JSON.stringify(taskProgress)) {
+      setTaskProgress({
+        current,
+        history: allSessions,
+      });
+    }
+  }, [messages, taskProgress]);
 
   const [selectedProvider, setSelectedProvider] = useState<string>(
-    () => (activeTab?.selectedProvider as any) || '',
+    () => (activeTab?.selectedProvider as any) || localStorage.getItem('elara_last_provider') || '',
   );
   const [selectedAccount, setSelectedAccount] = useState<string>(
-    () => activeTab?.selectedAccount || '',
+    () => activeTab?.selectedAccount || localStorage.getItem('elara_last_account') || '',
   );
   const [loading, setLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -48,7 +142,6 @@ export const usePlaygroundLogic = ({
 
   const [thinkingEnabled, setThinkingEnabled] = useState(() => activeTab?.thinkingEnabled ?? true);
   const [searchEnabled, setSearchEnabled] = useState(() => activeTab?.searchEnabled ?? false);
-  const [agentMode, setAgentMode] = useState(() => activeTab?.agentMode ?? false);
   const [attachments, setAttachments] = useState<PendingAttachment[]>(
     () => activeTab?.attachments || [],
   );
@@ -56,10 +149,15 @@ export const usePlaygroundLogic = ({
   const [inputTokenCount, setInputTokenCount] = useState(() => activeTab?.inputTokenCount || 0);
   const [accumulatedUsage, setAccumulatedUsage] = useState(() => activeTab?.accumulatedUsage || 0);
 
-  const [selectedWorkspacePath, setSelectedWorkspacePath] = useState<string | undefined>(
-    () => activeTab?.selectedWorkspacePath,
-  );
-  const [temperature, setTemperature] = useState<number>(() => activeTab?.temperature ?? 0.7);
+  // Note: agentMode, selectedWorkspacePath, taskProgress, availableWorkspaces, currentWorkspaceId
+  // are already defined at the top of the hook with persistence logic.
+  // We need to remove the duplicate declarations here.
+
+  // Checking for other duplicates... contextFiles is fine.
+  const [contextFiles, setContextFiles] = useState<{ workspace: string; rules: string }>({
+    workspace: '',
+    rules: '',
+  });
   const [language, setLanguage] = useState<string | null>(() => {
     return localStorage.getItem('elara_preferred_language');
   });
@@ -71,15 +169,6 @@ export const usePlaygroundLogic = ({
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
-
-  const [recentWorkspaces, setRecentWorkspaces] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('elara_recent_workspaces');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
 
   const [systemInfo, setSystemInfo] = useState<any>(null);
 
@@ -96,23 +185,40 @@ export const usePlaygroundLogic = ({
     fetchSystemInfo();
   }, []);
 
-  // Verify recent workspaces on mount
+  // Fetch available workspaces from persistent storage
   useEffect(() => {
-    const verifyWorkspaces = async () => {
-      const validWorkspaces: string[] = [];
-      for (const path of recentWorkspaces) {
-        const exists = await window.api.commands.checkPathExists(path);
-        if (exists) {
-          validWorkspaces.push(path);
-        }
-      }
-      if (validWorkspaces.length !== recentWorkspaces.length) {
-        setRecentWorkspaces(validWorkspaces);
-        localStorage.setItem('elara_recent_workspaces', JSON.stringify(validWorkspaces));
+    const fetchWorkspaces = async () => {
+      try {
+        // @ts-ignore
+        const data = await window.api.workspaces.list();
+        setAvailableWorkspaces(data || []);
+      } catch (error) {
+        console.error('Failed to fetch persistent workspaces:', error);
       }
     };
-    verifyWorkspaces();
+    fetchWorkspaces();
   }, []);
+
+  // Fetch context files when workspace ID changes
+  useEffect(() => {
+    const fetchContext = async () => {
+      if (!currentWorkspaceId) {
+        setContextFiles({ workspace: '', rules: '' });
+        return;
+      }
+      setIsLoadingContext(true);
+      try {
+        // @ts-ignore
+        const data = await window.api.workspaces.getContext(currentWorkspaceId);
+        setContextFiles(data);
+      } catch (error) {
+        console.error('Failed to fetch workspace context files:', error);
+      } finally {
+        setIsLoadingContext(false);
+      }
+    };
+    fetchContext();
+  }, [currentWorkspaceId]);
 
   const [activeChatId, setActiveChatId] = useState<string | null>(
     () => activeTab?.activeChatId || null,
@@ -122,9 +228,25 @@ export const usePlaygroundLogic = ({
   );
 
   // Model selections - Mapping provider_id to selected model_id
-  const [providerModels, setProviderModels] = useState<Record<string, string>>(
-    () => activeTab?.providerModels || {},
-  );
+  const [providerModels, setProviderModels] = useState<Record<string, string>>(() => {
+    if (activeTab?.providerModels) return activeTab.providerModels;
+    try {
+      const saved = localStorage.getItem('elara_last_provider_models');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+  // Save configuration to localStorage
+  useEffect(() => {
+    if (selectedProvider) localStorage.setItem('elara_last_provider', selectedProvider);
+    if (selectedAccount) localStorage.setItem('elara_last_account', selectedAccount);
+    if (selectedWorkspacePath)
+      localStorage.setItem('elara_last_workspace_path', selectedWorkspacePath);
+    if (providerModels && Object.keys(providerModels).length > 0) {
+      localStorage.setItem('elara_last_provider_models', JSON.stringify(providerModels));
+    }
+  }, [selectedProvider, selectedAccount, selectedWorkspacePath, providerModels]);
 
   // Model lists - Mapping provider_id to list of models
   const [providerModelsList, setProviderModelsList] = useState<Record<string, any[]>>(
@@ -284,6 +406,47 @@ export const usePlaygroundLogic = ({
           const output = await window.api.shell.execute(command, selectedWorkspacePath);
           return output;
         }
+        case 'read_workspace_context': {
+          // @ts-ignore
+          const contextData = await window.api.workspaces.getContext(currentWorkspaceId);
+          return contextData.workspace || '';
+        }
+        case 'update_workspace_context': {
+          const { content } = args;
+          if (content === undefined) return 'Error: content is required.';
+          const cleanContent = content.replace(/^```\w*\n?/, '').replace(/\n?```$/, '');
+          // @ts-ignore
+          await window.api.workspaces.updateContext(currentWorkspaceId, 'workspace', cleanContent);
+          return 'Successfully updated workspace.md';
+        }
+        case 'read_workspace_rules_context': {
+          // @ts-ignore
+          const contextData = await window.api.workspaces.getContext(currentWorkspaceId);
+          return contextData.rules || '';
+        }
+        case 'update_workspace_rules_context': {
+          const { content } = args;
+          if (content === undefined) return 'Error: content is required.';
+          const cleanContent = content.replace(/^```\w*\n?/, '').replace(/\n?```$/, '');
+          // @ts-ignore
+          await window.api.workspaces.updateContext(currentWorkspaceId, 'rules', cleanContent);
+          return 'Successfully updated workspace_rules.md';
+        }
+        case 'read_current_conversation_summary_context': {
+          if (!activeChatId) return 'Error: No active conversation.';
+          // @ts-ignore
+          const summary = await window.api.workspaces.getSummary(currentWorkspaceId, activeChatId);
+          return summary || '';
+        }
+        case 'update_current_conversation_summary_context': {
+          const { content } = args;
+          if (!activeChatId) return 'Error: No active conversation.';
+          if (content === undefined) return 'Error: content is required.';
+          const cleanContent = content.replace(/^```\w*\n?/, '').replace(/\n?```$/, '');
+          // @ts-ignore
+          await window.api.workspaces.updateSummary(currentWorkspaceId, activeChatId, cleanContent);
+          return 'Successfully updated conversation summary';
+        }
         default:
           return `Error: Unknown tool ${tagName}`;
       }
@@ -296,7 +459,7 @@ export const usePlaygroundLogic = ({
     if (isExecutingTool) return;
     const content = message.content;
     const toolRegex =
-      /<(read_file|write_to_file|replace_in_file|list_files|list_file|search_files|execute_command|write_to_file_elara|replace_in_file_elara)(?:>([\s\S]*?)<\/\1>| \/>|\/>)/g;
+      /<(read_file|write_to_file|replace_in_file|list_files|list_file|search_files|execute_command|write_to_file_elara|replace_in_file_elara|read_workspace_context|update_workspace_context|read_workspace_rules_context|update_workspace_rules_context|read_current_conversation_summary_context|update_current_conversation_summary_context)(?:>([\s\S]*?)<\/\1>| \/>|\/>)/g;
 
     const results: { display: string; actual: string }[] = [];
     let match;
@@ -329,6 +492,12 @@ export const usePlaygroundLogic = ({
           info = args.regex || 'query';
         } else if (tagType === 'execute_command') {
           info = args.command || 'command';
+        } else if (tagType.includes('workspace_context')) {
+          info = 'workspace.md';
+        } else if (tagType.includes('workspace_rules')) {
+          info = 'workspace_rules.md';
+        } else if (tagType.includes('conversation_summary')) {
+          info = 'summary.md';
         }
 
         const header = info ? `${tagType} for '${info}'` : tagType;
@@ -496,33 +665,43 @@ export const usePlaygroundLogic = ({
 
   const handleSelectWorkspace = async () => {
     try {
+      // @ts-ignore
       const result = await window.api.dialog.openDirectory();
-      if (!result.canceled && result.filePaths.length > 0) {
-        const newPath = result.filePaths[0];
-        setSelectedWorkspacePath(newPath);
+      if (result.canceled || result.filePaths.length === 0) return;
 
-        // Update recent workspaces
-        setRecentWorkspaces((prev) => {
-          const filtered = prev.filter((p) => p !== newPath);
-          const updated = [newPath, ...filtered].slice(0, 10);
-          localStorage.setItem('elara_recent_workspaces', JSON.stringify(updated));
-          return updated;
-        });
-      }
+      const folderPath = result.filePaths[0];
+      // @ts-ignore
+      const workspace = await window.api.workspaces.link(folderPath);
+
+      setSelectedWorkspacePath(workspace.path);
+      setCurrentWorkspaceId(workspace.id);
+
+      // Refresh list
+      // @ts-ignore
+      const updatedList = await window.api.workspaces.list();
+      setAvailableWorkspaces(updatedList);
     } catch (error) {
       console.error('Failed to select workspace:', error);
     }
   };
 
   const handleQuickSelectWorkspace = (path: string) => {
-    setSelectedWorkspacePath(path);
-    // Move to top of history
-    setRecentWorkspaces((prev) => {
-      const filtered = prev.filter((p) => p !== path);
-      const updated = [path, ...filtered].slice(0, 10);
-      localStorage.setItem('elara_recent_workspaces', JSON.stringify(updated));
-      return updated;
-    });
+    const workspace = availableWorkspaces.find((w) => w.path === path);
+    if (workspace) {
+      setSelectedWorkspacePath(workspace.path);
+      setCurrentWorkspaceId(workspace.id);
+    }
+  };
+
+  const handleUpdateContextFile = async (type: 'workspace' | 'rules', content: string) => {
+    if (!currentWorkspaceId) return;
+    setContextFiles((prev) => ({ ...prev, [type]: content }));
+    try {
+      // @ts-ignore
+      await window.api.workspaces.updateContext(currentWorkspaceId, type, content);
+    } catch (error) {
+      console.error('Failed to update context file:', error);
+    }
   };
 
   const handleStop = useCallback(async () => {
@@ -556,6 +735,9 @@ export const usePlaygroundLogic = ({
     selectedWorkspacePath,
     temperature,
     language,
+    taskProgress,
+    activePreviewFile,
+    previewFiles,
   });
 
   useEffect(() => {
@@ -579,6 +761,9 @@ export const usePlaygroundLogic = ({
       selectedWorkspacePath,
       temperature,
       language,
+      taskProgress,
+      activePreviewFile,
+      previewFiles,
     };
   }, [
     messages,
@@ -599,6 +784,9 @@ export const usePlaygroundLogic = ({
     conversationTitle,
     selectedWorkspacePath,
     temperature,
+    taskProgress,
+    activePreviewFile,
+    previewFiles,
   ]);
 
   // Sync state on unmount or tab change
@@ -624,6 +812,13 @@ export const usePlaygroundLogic = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationTitle, activeTabId]);
+
+  // Sync preview state immediately
+  useEffect(() => {
+    if (onUpdateTab && activeTabId) {
+      onUpdateTab(activeTabId, { activePreviewFile, previewFiles });
+    }
+  }, [activePreviewFile, previewFiles, activeTabId, onUpdateTab]);
 
   // Sync messages on done
   useEffect(() => {
@@ -907,6 +1102,54 @@ export const usePlaygroundLogic = ({
               language: langName,
             },
           });
+
+          // Fetch Project Context and Tree View if workspace is selected
+          if (selectedWorkspacePath) {
+            try {
+              // 1. Get Workspace ID
+              let wsId = currentWorkspaceId;
+              if (!wsId) {
+                // @ts-ignore
+                const workspace = await window.api.workspaces.link(selectedWorkspacePath);
+                wsId = workspace.id;
+                setCurrentWorkspaceId(wsId);
+              }
+
+              if (wsId) {
+                // 2. Fetch context files via IPC
+                // @ts-ignore
+                const contextData = await window.api.workspaces.getContext(wsId);
+                const { workspace, rules } = contextData;
+
+                contextSection += `\n\n## Project Overview (workspace.md)\n\`\`\`\n${workspace || ''}\n\`\`\``;
+                contextSection += `\n\n## Project Rules (workspace_rules.md)\n\`\`\`\n${rules || ''}\n\`\`\``;
+
+                // 3. Fetch Project Structure (Tree View) via IPC
+                // @ts-ignore
+                const treeView = await window.api.workspaces.scan(selectedWorkspacePath);
+                contextSection += `\n\n## Project Structure\n\`\`\`\n${treeView || 'NULL'}\n\`\`\``;
+
+                // 4. Create Session File & Summary
+                if (activeChatId && activeChatId !== 'new-session') {
+                  try {
+                    // @ts-ignore
+                    await window.api.workspaces.createSession(wsId, activeChatId, {
+                      timestamp: Date.now(),
+                      modelId: getProviderModel(account?.provider_id || selectedProvider),
+                      systemInfo: {
+                        os: systemInfo?.os || 'Linux',
+                        cwd: selectedWorkspacePath,
+                      },
+                    });
+                  } catch (err) {
+                    console.error('Failed to create session file:', err);
+                  }
+                }
+              }
+            } catch (e) {
+              console.error('Failed to inject persistent context:', e);
+            }
+          }
         }
 
         if (agentPrompt || contextSection) {
@@ -1243,8 +1486,6 @@ export const usePlaygroundLogic = ({
     setSearchEnabled,
     agentMode,
     setAgentMode,
-    selectedWorkspacePath,
-    handleSelectWorkspace,
     attachments,
     handleFileSelect,
     handleRemoveAttachment,
@@ -1263,7 +1504,6 @@ export const usePlaygroundLogic = ({
     groqSettings,
     setGroqSettings,
     history,
-    recentWorkspaces,
     handleQuickSelectWorkspace,
     handleSend,
     handleStop,
@@ -1282,5 +1522,17 @@ export const usePlaygroundLogic = ({
         localStorage.removeItem('elara_preferred_language');
       }
     },
+    availableWorkspaces,
+    contextFiles,
+    isLoadingContext,
+    handleUpdateContextFile,
+    handleSelectWorkspace,
+    selectedWorkspacePath,
+    currentWorkspaceId,
+    taskProgress,
+    activePreviewFile,
+    setActivePreviewFile,
+    previewFiles,
+    setPreviewFiles,
   };
 };

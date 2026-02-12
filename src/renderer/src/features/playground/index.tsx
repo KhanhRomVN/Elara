@@ -12,6 +12,12 @@ import { TabBar } from './components/TabBar';
 import { SettingsSidebar } from './components/SettingsSidebar';
 import { ConversationTab } from './types';
 import { usePlaygroundLogic } from './hooks/usePlaygroundLogic';
+import { useUI } from '../../core/contexts/UIContext';
+import { FileTreeView } from './components/FileTreeView';
+import { FilePreviewPanel } from './components/FilePreviewPanel';
+import { useGitStatus } from './hooks/useGitStatus';
+import { COMMIT_MESSAGE_PROMPT } from './prompts/commit_message';
+import { toast } from 'sonner';
 
 export const PlaygroundPage = ({
   tabs,
@@ -72,35 +78,153 @@ export const PlaygroundPage = ({
     setAgentMode,
     selectedWorkspacePath,
     handleSelectWorkspace,
-    recentWorkspaces,
     handleQuickSelectWorkspace,
     temperature,
     setTemperature,
+    availableWorkspaces,
+    contextFiles,
+    isLoadingContext,
+    handleUpdateContextFile,
+    currentWorkspaceId,
+    taskProgress,
+    activePreviewFile,
+    setActivePreviewFile,
+    previewFiles,
+    setPreviewFiles,
   } = usePlaygroundLogic({ activeTab, activeTabId, onUpdateTab });
+
+  const { setIsMainSidebarCollapsed } = useUI();
+
+  // Auto-collapse main sidebar when entering Agent Mode
+  useEffect(() => {
+    if (agentMode) {
+      setIsMainSidebarCollapsed(true);
+    }
+  }, [agentMode, setIsMainSidebarCollapsed]);
 
   // Sidebar Resize State (UI only)
   const [sidebarWidth, setSidebarWidth] = useState(260);
-  const [isResizing, setIsResizing] = useState(false);
+  const [treeViewWidth, setTreeViewWidth] = useState(240);
+  const [previewPanelWidth, setPreviewPanelWidth] = useState(600);
+  const [isResizing, setIsResizing] = useState<'sidebar' | 'treeview' | 'preview' | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
+  const treeViewRef = useRef<HTMLDivElement>(null);
+  const previewPanelRef = useRef<HTMLDivElement>(null);
 
-  const startResizing = (e: React.MouseEvent) => {
-    setIsResizing(true);
+  // Git Status
+  const { gitStatus, diffStats } = useGitStatus(selectedWorkspacePath);
+
+  const startResizingSidebar = (e: React.MouseEvent) => {
+    setIsResizing('sidebar');
     e.preventDefault();
+  };
+
+  const startResizingTreeView = (e: React.MouseEvent) => {
+    setIsResizing('treeview');
+    e.preventDefault();
+  };
+
+  const startResizingPreview = (e: React.MouseEvent) => {
+    setIsResizing('preview');
+    e.preventDefault();
+  };
+
+  const LANGUAGE_MAP: Record<string, string> = {
+    py: 'python',
+    js: 'javascript',
+    ts: 'typescript',
+    tsx: 'typescript',
+    jsx: 'javascript',
+    cpp: 'cpp',
+    c: 'c',
+    java: 'java',
+    rs: 'rust',
+    go: 'go',
+    rb: 'ruby',
+    php: 'php',
+    cs: 'csharp',
+    sh: 'shell',
+    md: 'markdown',
+    yml: 'yaml',
+    yaml: 'yaml',
+  };
+
+  const handleOpenPreviewFile = async (file: any) => {
+    if (file.isDirectory) return;
+
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const correctLanguage = LANGUAGE_MAP[ext] || ext || 'text';
+
+    if (previewFiles[file.path]) {
+      // Fix persisted language if it's wrong (e.g. 'py' instead of 'python')
+      if (previewFiles[file.path].language !== correctLanguage) {
+        setPreviewFiles((prev: any) => ({
+          ...prev,
+          [file.path]: { ...prev[file.path], language: correctLanguage },
+        }));
+      }
+      setActivePreviewFile(file.path);
+      return;
+    }
+
+    try {
+      const fullPath = `${selectedWorkspacePath}/${file.path}`;
+
+      const content = await window.api.commands.readFile(fullPath);
+      const newFile = {
+        path: file.path,
+        name: file.name,
+        content,
+        language: correctLanguage,
+      };
+
+      setPreviewFiles((prev: any) => ({ ...prev, [file.path]: newFile }));
+      setActivePreviewFile(file.path);
+    } catch (error) {
+      console.error('Failed to read file:', error);
+      toast.error('Failed to read file content');
+    }
+  };
+
+  const handleClosePreviewTab = (path: string) => {
+    setPreviewFiles((prev: any) => {
+      const newFiles = { ...prev };
+      delete newFiles[path];
+      return newFiles;
+    });
+    if (activePreviewFile === path) {
+      setActivePreviewFile(null);
+    }
+  };
+
+  const handleGitCommit = () => {
+    handleInput({ target: { value: COMMIT_MESSAGE_PROMPT } } as any);
+    // Focus input? InputArea handles focus usually.
   };
 
   useEffect(() => {
     if (!isResizing) return;
     const handleMouseMove = (e: MouseEvent) => {
-      if (sidebarRef.current) {
+      if (isResizing === 'sidebar' && sidebarRef.current) {
         const newWidth = e.clientX - sidebarRef.current.getBoundingClientRect().left;
         if (newWidth > 150 && newWidth < 600) {
           setSidebarWidth(newWidth);
         }
+      } else if (isResizing === 'treeview' && treeViewRef.current) {
+        const newWidth = e.clientX - treeViewRef.current.getBoundingClientRect().left;
+        if (newWidth > 150 && newWidth < 600) {
+          setTreeViewWidth(newWidth);
+        }
+      } else if (isResizing === 'preview' && previewPanelRef.current) {
+        const newWidth = e.clientX - previewPanelRef.current.getBoundingClientRect().left;
+        if (newWidth > 300 && newWidth < 1200) {
+          setPreviewPanelWidth(newWidth);
+        }
       }
     };
     const handleMouseUp = () => {
-      setIsResizing(false);
+      setIsResizing(null);
     };
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
@@ -119,7 +243,7 @@ export const PlaygroundPage = ({
   // Layout Logic
   const innerContent = (
     <div className="flex-1 flex overflow-hidden relative">
-      {/* Sidebar */}
+      {/* Task/Chat Sidebar */}
       <div ref={sidebarRef} className="relative flex-shrink-0" style={{ width: sidebarWidth }}>
         <div className="h-full overflow-y-auto border-r bg-card/30 w-full">
           <Sidebar
@@ -130,17 +254,37 @@ export const PlaygroundPage = ({
             activeChatId={activeChatId}
             startNewChat={startNewChat}
             loadConversation={loadConversation}
-            account={account || null}
+            account={account || undefined}
             groqSettings={groqSettings}
             setGroqSettings={setGroqSettings}
+            taskProgress={taskProgress}
           />
         </div>
         {/* Resizer Handle */}
         <div
           className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50 transition-colors z-10"
-          onMouseDown={startResizing}
+          onMouseDown={startResizingSidebar}
         />
       </div>
+
+      {/* Workspace TreeView Sidebar (Agent Mode only) */}
+      {/* Workspace TreeView Sidebar (Agent Mode only) */}
+      {agentMode && selectedWorkspacePath && (
+        <div ref={treeViewRef} className="relative flex-shrink-0" style={{ width: treeViewWidth }}>
+          <FileTreeView
+            workspacePath={selectedWorkspacePath}
+            className="h-full"
+            gitStatus={gitStatus}
+            diffStats={diffStats}
+            onFileSelect={handleOpenPreviewFile}
+          />
+          {/* Resizer Handle */}
+          <div
+            className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50 transition-colors z-10"
+            onMouseDown={startResizingTreeView}
+          />
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 bg-background relative">
@@ -154,210 +298,279 @@ export const PlaygroundPage = ({
             providersList={providersList}
           />
         )}
-        {messages.length === 0 ? (
-          <WelcomeScreen
-            dropdowns={
-              <div className="flex flex-wrap gap-4">
-                <CustomSelect
-                  value={selectedProvider}
-                  onChange={(val) => {
-                    setSelectedProvider(val as any);
-                    const providerAccounts = accounts.filter((acc) => acc.provider_id === val);
-                    if (providerAccounts.length > 0) {
-                      setSelectedAccount(providerAccounts[0].id);
-                    } else {
-                      setSelectedAccount('');
-                    }
-                  }}
-                  options={providersList.map((p) => {
-                    return {
-                      value: p.provider_name,
-                      label: p.provider_name,
-                      icon: p.website
-                        ? `https://www.google.com/s2/favicons?domain=${new URL(p.website).hostname}&sz=64`
-                        : undefined,
-                      disabled: !p.is_enabled,
-                    };
-                  })}
-                  placeholder="Select Provider"
-                />
-                {selectedProvider && (
-                  <div className="flex flex-row items-center gap-4">
+
+        <div className="flex-1 flex overflow-hidden relative">
+          {/* File Preview Panel (Agent Mode only) */}
+          {agentMode && activePreviewFile && (
+            <div
+              ref={previewPanelRef}
+              className="relative flex-shrink-0 border-r"
+              style={{ width: previewPanelWidth }}
+            >
+              <FilePreviewPanel
+                files={previewFiles}
+                activeFilePath={activePreviewFile}
+                onCloseTab={handleClosePreviewTab}
+                onSetActiveTab={setActivePreviewFile}
+                width={previewPanelWidth}
+              />
+              <div
+                className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50 transition-colors z-10"
+                onMouseDown={startResizingPreview}
+              />
+            </div>
+          )}
+
+          <div className="flex-1 flex flex-col min-w-0 bg-background relative">
+            {messages.length === 0 ? (
+              <WelcomeScreen
+                dropdowns={
+                  <div className="flex flex-wrap gap-4">
                     <CustomSelect
-                      value={selectedAccount}
-                      onChange={setSelectedAccount}
-                      options={filteredAccounts.map((acc) => ({
-                        value: acc.id,
-                        label: acc.email,
-                        icon: (
-                          <AccountAvatar
-                            email={acc.email}
-                            provider={acc.provider_id}
-                            className="w-4 h-4 text-[8px]"
-                          />
-                        ),
-                      }))}
-                      placeholder={filteredAccounts.length === 0 ? 'No account' : 'Select Account'}
-                      disabled={!selectedProvider || filteredAccounts.length === 0}
+                      value={selectedProvider}
+                      onChange={(val) => {
+                        setSelectedProvider(val as any);
+                        const providerAccounts = accounts.filter((acc) => acc.provider_id === val);
+                        if (providerAccounts.length > 0) {
+                          setSelectedAccount(providerAccounts[0].id);
+                        } else {
+                          setSelectedAccount('');
+                        }
+                      }}
+                      options={providersList.map((p) => {
+                        return {
+                          value: p.provider_name,
+                          label: p.provider_name,
+                          icon: p.website
+                            ? `https://www.google.com/s2/favicons?domain=${new URL(p.website).hostname}&sz=64`
+                            : undefined,
+                          disabled: !p.is_enabled,
+                        };
+                      })}
+                      placeholder="Select Provider"
                     />
+                    {selectedProvider && (
+                      <div className="flex flex-row items-center gap-4">
+                        <CustomSelect
+                          value={selectedAccount}
+                          onChange={setSelectedAccount}
+                          options={filteredAccounts.map((acc) => ({
+                            value: acc.id,
+                            label: acc.email,
+                            icon: (
+                              <AccountAvatar
+                                email={acc.email}
+                                provider={acc.provider_id}
+                                className="w-4 h-4 text-[8px]"
+                              />
+                            ),
+                          }))}
+                          placeholder={
+                            filteredAccounts.length === 0 ? 'No account' : 'Select Account'
+                          }
+                          disabled={!selectedProvider || filteredAccounts.length === 0}
+                        />
+                        {(() => {
+                          const providerKey = selectedProvider.toLowerCase();
+                          const models = providerModelsList[providerKey] || [];
+                          const selectedModel = providerModels[providerKey] || '';
+
+                          const setModel = (val: string) => {
+                            setProviderModels((prev) => ({ ...prev, [providerKey]: val }));
+                          };
+
+                          if (models.length > 0) {
+                            return (
+                              <ModelSelector
+                                value={selectedModel}
+                                onChange={setModel}
+                                models={models}
+                                placeholder={`Select ${selectedProvider} Model`}
+                              />
+                            );
+                          }
+
+                          return null;
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                }
+                input={input}
+                handleInput={handleInput}
+                handleKeyDown={handleKeyDown}
+                handleSend={handleSend}
+                loading={loading}
+                isStreaming={isStreaming}
+                selectedAccount={selectedAccount}
+                selectedProvider={selectedProvider}
+                thinkingEnabled={thinkingEnabled}
+                setThinkingEnabled={setThinkingEnabled}
+                searchEnabled={searchEnabled}
+                setSearchEnabled={setSearchEnabled}
+                onFileSelect={handleFileSelect}
+                attachments={attachments}
+                onRemoveAttachment={handleRemoveAttachment}
+                streamEnabled={streamEnabled}
+                setStreamEnabled={setStreamEnabled}
+                supportsSearch={
+                  providersList.find(
+                    (p) =>
+                      p.provider_id === selectedProvider || p.provider_name === selectedProvider,
+                  )?.is_search
+                }
+                supportsUpload={
+                  providersList.find(
+                    (p) =>
+                      p.provider_id === selectedProvider || p.provider_name === selectedProvider,
+                  )?.is_upload
+                }
+                supportsThinking={(() => {
+                  const providerKey = selectedProvider.toLowerCase();
+                  const models = providerModelsList[providerKey] || [];
+                  const selectedModelId = providerModels[providerKey];
+                  if (models && selectedModelId) {
+                    const model = models.find((m) => m.id === selectedModelId);
+                    return model?.is_thinking === true;
+                  }
+                  return false;
+                })()}
+                agentMode={agentMode}
+                setAgentMode={setAgentMode}
+                selectedWorkspacePath={selectedWorkspacePath}
+                handleSelectWorkspace={handleSelectWorkspace}
+                handleQuickSelectWorkspace={handleQuickSelectWorkspace}
+                availableWorkspaces={availableWorkspaces}
+                temperature={temperature}
+                setTemperature={setTemperature}
+                isTemperatureSupported={
+                  providersList.find(
+                    (p) =>
+                      p.provider_id === selectedProvider || p.provider_name === selectedProvider,
+                  )?.is_temperature
+                }
+                onToggleSettings={() => setIsSettingsOpen(!isSettingsOpen)}
+                onNavigateToSettings={() => navigate('/settings')}
+              />
+            ) : (
+              <>
+                <div className="h-9 border-b flex items-center justify-between px-4 bg-background/50 backdrop-blur-sm sticky top-0 z-10">
+                  <div className="flex items-center gap-2 max-w-[300px] truncate">
                     {(() => {
-                      const providerKey = selectedProvider.toLowerCase();
-                      const models = providerModelsList[providerKey] || [];
-                      const selectedModel = providerModels[providerKey] || '';
+                      const providerData = providersList.find(
+                        (p) =>
+                          p.provider_name.toLowerCase() === selectedProvider?.toLowerCase() ||
+                          p.provider_id?.toLowerCase() === selectedProvider?.toLowerCase(),
+                      );
+                      const faviconUrl = providerData?.website
+                        ? `https://www.google.com/s2/favicons?domain=${new URL(providerData.website).hostname}&sz=64`
+                        : null;
+                      const modelName = providerModels[selectedProvider?.toLowerCase()] || '';
 
-                      const setModel = (val: string) => {
-                        setProviderModels((prev) => ({ ...prev, [providerKey]: val }));
-                      };
-
-                      if (models.length > 0) {
-                        return (
-                          <ModelSelector
-                            value={selectedModel}
-                            onChange={setModel}
-                            models={models}
-                            placeholder={`Select ${selectedProvider} Model`}
-                          />
-                        );
-                      }
-
-                      return null;
+                      return (
+                        <>
+                          {faviconUrl && (
+                            <img
+                              src={faviconUrl}
+                              alt="Provider"
+                              className="w-3.5 h-3.5 object-contain"
+                            />
+                          )}
+                          <span className="text-[10px] font-bold text-foreground/80 tracking-tight uppercase">
+                            {selectedProvider}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground mx-1">•</span>
+                          <span className="text-[10px] font-medium text-muted-foreground truncate">
+                            {modelName}
+                          </span>
+                        </>
+                      );
                     })()}
                   </div>
-                )}
-              </div>
-            }
-            input={input}
-            handleInput={handleInput}
-            handleKeyDown={handleKeyDown}
-            handleSend={handleSend}
-            loading={loading}
-            isStreaming={isStreaming}
-            selectedAccount={selectedAccount}
-            selectedProvider={selectedProvider}
-            thinkingEnabled={thinkingEnabled}
-            setThinkingEnabled={setThinkingEnabled}
-            searchEnabled={searchEnabled}
-            setSearchEnabled={setSearchEnabled}
-            onFileSelect={handleFileSelect}
-            attachments={attachments}
-            onRemoveAttachment={handleRemoveAttachment}
-            streamEnabled={streamEnabled}
-            setStreamEnabled={setStreamEnabled}
-            supportsSearch={
-              providersList.find(
-                (p) => p.provider_id === selectedProvider || p.provider_name === selectedProvider,
-              )?.is_search
-            }
-            supportsUpload={
-              providersList.find(
-                (p) => p.provider_id === selectedProvider || p.provider_name === selectedProvider,
-              )?.is_upload
-            }
-            supportsThinking={(() => {
-              const providerKey = selectedProvider.toLowerCase();
-              const models = providerModelsList[providerKey] || [];
-              const selectedModelId = providerModels[providerKey];
-              if (models && selectedModelId) {
-                const model = models.find((m) => m.id === selectedModelId);
-                return model?.is_thinking === true;
-              }
-              return false;
-            })()}
-            agentMode={agentMode}
-            setAgentMode={setAgentMode}
-            selectedWorkspacePath={selectedWorkspacePath}
-            handleSelectWorkspace={handleSelectWorkspace}
-            recentWorkspaces={recentWorkspaces}
-            handleQuickSelectWorkspace={handleQuickSelectWorkspace}
-            temperature={temperature}
-            setTemperature={setTemperature}
-            isTemperatureSupported={
-              providersList.find(
-                (p) => p.provider_id === selectedProvider || p.provider_name === selectedProvider,
-              )?.is_temperature
-            }
-            onToggleSettings={() => setIsSettingsOpen(!isSettingsOpen)}
-            onNavigateToSettings={() => navigate('/settings')}
-          />
-        ) : (
-          <>
-            <div className="h-10 border-b flex items-center justify-between px-4 bg-background/50 backdrop-blur-sm sticky top-0 z-10">
-              <div className="max-w-[150px] text-[10px] font-medium text-muted-foreground mr-2 flex items-center gap-1 truncate uppercase tracking-tight">
-                {providerModels[selectedProvider.toLowerCase()]}
-              </div>
-              <div className="text-sm font-semibold truncate flex-1 text-center">
-                {conversationTitle || 'New Chat'}
-              </div>
-              <div className="w-24 text-right text-[10px] text-muted-foreground mr-2 font-mono">
-                {(tokenCount + accumulatedUsage + inputTokenCount).toLocaleString()} tokens
-              </div>
-            </div>
+                  <div className="text-sm font-semibold truncate flex-1 text-center flex items-center justify-center gap-2">
+                    {conversationTitle || 'New Chat'}
+                    {currentWorkspaceId && (
+                      <span className="text-[9px] font-mono text-muted-foreground bg-secondary/30 border border-border px-1.5 py-0.5 rounded uppercase">
+                        ID: {currentWorkspaceId.substring(0, 8)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="w-24 text-right text-[10px] text-muted-foreground mr-2 font-mono">
+                    {(tokenCount + accumulatedUsage + inputTokenCount).toLocaleString()} tokens
+                  </div>
+                </div>
 
-            <ChatArea
-              messages={messages}
-              loading={loading}
-              isStreaming={isStreaming}
-              agentMode={agentMode}
-              workspacePath={selectedWorkspacePath}
-            />
+                <ChatArea
+                  messages={messages}
+                  loading={loading}
+                  isStreaming={isStreaming}
+                  agentMode={agentMode}
+                  workspacePath={selectedWorkspacePath}
+                />
 
-            <InputArea
-              input={input}
-              handleInput={handleInput}
-              handleKeyDown={handleKeyDown}
-              handleSend={handleSend}
-              handleStop={handleStop}
-              loading={loading}
-              isStreaming={isStreaming}
-              selectedAccount={selectedAccount}
-              selectedProvider={selectedProvider}
-              thinkingEnabled={thinkingEnabled}
-              setThinkingEnabled={setThinkingEnabled}
-              searchEnabled={searchEnabled}
-              setSearchEnabled={setSearchEnabled}
-              onFileSelect={handleFileSelect}
-              attachments={attachments}
-              onRemoveAttachment={handleRemoveAttachment}
-              streamEnabled={streamEnabled}
-              setStreamEnabled={setStreamEnabled}
-              supportsSearch={
-                providersList.find(
-                  (p) => p.provider_id === selectedProvider || p.provider_name === selectedProvider,
-                )?.is_search
-              }
-              supportsUpload={
-                providersList.find(
-                  (p) => p.provider_id === selectedProvider || p.provider_name === selectedProvider,
-                )?.is_upload
-              }
-              supportsThinking={(() => {
-                const providerKey = selectedProvider.toLowerCase();
-                const models = providerModelsList[providerKey] || [];
-                const selectedModelId = providerModels[providerKey];
-                if (models && selectedModelId) {
-                  const model = models.find((m) => m.id === selectedModelId);
-                  return model?.is_thinking === true;
-                }
-                return false;
-              })()}
-              agentMode={agentMode}
-              setAgentMode={setAgentMode}
-              selectedWorkspacePath={selectedWorkspacePath}
-              handleSelectWorkspace={handleSelectWorkspace}
-              recentWorkspaces={recentWorkspaces}
-              handleQuickSelectWorkspace={handleQuickSelectWorkspace}
-              isConversationActive={messages.length > 0}
-              temperature={temperature}
-              setTemperature={setTemperature}
-              isTemperatureSupported={
-                providersList.find(
-                  (p) => p.provider_id === selectedProvider || p.provider_name === selectedProvider,
-                )?.is_temperature
-              }
-              onToggleSettings={() => setIsSettingsOpen(!isSettingsOpen)}
-            />
-          </>
-        )}
+                <InputArea
+                  input={input}
+                  handleInput={handleInput}
+                  handleKeyDown={handleKeyDown}
+                  handleSend={handleSend}
+                  handleStop={handleStop}
+                  loading={loading}
+                  isStreaming={isStreaming}
+                  selectedAccount={selectedAccount}
+                  selectedProvider={selectedProvider}
+                  thinkingEnabled={thinkingEnabled}
+                  setThinkingEnabled={setThinkingEnabled}
+                  searchEnabled={searchEnabled}
+                  setSearchEnabled={setSearchEnabled}
+                  onFileSelect={handleFileSelect}
+                  attachments={attachments}
+                  onRemoveAttachment={handleRemoveAttachment}
+                  streamEnabled={streamEnabled}
+                  setStreamEnabled={setStreamEnabled}
+                  supportsSearch={
+                    providersList.find(
+                      (p) =>
+                        p.provider_id === selectedProvider || p.provider_name === selectedProvider,
+                    )?.is_search
+                  }
+                  supportsUpload={
+                    providersList.find(
+                      (p) =>
+                        p.provider_id === selectedProvider || p.provider_name === selectedProvider,
+                    )?.is_upload
+                  }
+                  supportsThinking={(() => {
+                    const providerKey = selectedProvider.toLowerCase();
+                    const models = providerModelsList[providerKey] || [];
+                    const selectedModelId = providerModels[providerKey];
+                    if (models && selectedModelId) {
+                      const model = models.find((m) => m.id === selectedModelId);
+                      return model?.is_thinking === true;
+                    }
+                    return false;
+                  })()}
+                  agentMode={agentMode}
+                  setAgentMode={setAgentMode}
+                  selectedWorkspacePath={selectedWorkspacePath}
+                  handleSelectWorkspace={handleSelectWorkspace}
+                  handleQuickSelectWorkspace={handleQuickSelectWorkspace}
+                  availableWorkspaces={availableWorkspaces}
+                  isConversationActive={messages.length > 0}
+                  temperature={temperature}
+                  setTemperature={setTemperature}
+                  isTemperatureSupported={
+                    providersList.find(
+                      (p) =>
+                        p.provider_id === selectedProvider || p.provider_name === selectedProvider,
+                    )?.is_temperature
+                  }
+                  onToggleSettings={() => setIsSettingsOpen(!isSettingsOpen)}
+                  onGitCommit={handleGitCommit}
+                />
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Settings Sidebar (Right) */}
@@ -371,6 +584,10 @@ export const PlaygroundPage = ({
             (p) => p.provider_id === selectedProvider || p.provider_name === selectedProvider,
           )?.is_temperature
         }
+        contextFiles={contextFiles}
+        isLoadingContext={isLoadingContext}
+        onUpdateContextFile={handleUpdateContextFile}
+        selectedWorkspacePath={selectedWorkspacePath}
       />
     </div>
   );

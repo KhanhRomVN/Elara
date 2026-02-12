@@ -194,7 +194,7 @@ const Sidebar = memo(({ isCollapsed, setIsCollapsed }: SidebarProps) => {
       {/* Header */}
       <div
         className={cn(
-          'h-16 flex items-center border-b border-border/50 transition-[padding] duration-300 overflow-hidden shrink-0',
+          'h-12 flex items-center border-b border-border/50 transition-[padding] duration-300 overflow-hidden shrink-0',
           isCollapsed ? 'justify-center px-0' : 'px-4 justify-between',
         )}
       >

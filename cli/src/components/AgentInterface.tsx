@@ -130,8 +130,6 @@ const ToolBlock = React.memo(
           return { label: 'ListFiles', color: 'magenta', arg: args.path || '.' };
         case 'replace_in_file':
           return { label: 'Update', color: 'blue', arg: args.path };
-        case 'update_context_fact':
-          return { label: 'Memory', color: 'cyan', arg: args.fact || 'fact' };
         default:
           return {
             label: tagName.charAt(0).toUpperCase() + tagName.slice(1),
@@ -505,7 +503,7 @@ const ToolCallRenderer = ({
   messages?: Message[];
 }) => {
   const parts = content.split(
-    /(<read_file>[\s\S]*?<\/read_file>|<write_to_file>[\s\S]*?<\/write_to_file>|<execute_command>[\s\S]*?<\/execute_command>|<list_files>[\s\S]*?<\/list_files>|<replace_in_file>[\s\S]*?<\/replace_in_file>|<update_context_fact>[\s\S]*?<\/update_context_fact>|<text>[\s\S]*?<\/text>|<temp>[\s\S]*?<\/temp>|<comment>[\s\S]*?<\/comment>|<code>[\s\S]*?<\/code>)/g,
+    /(<read_file>[\s\S]*?<\/read_file>|<write_to_file>[\s\S]*?<\/write_to_file>|<execute_command>[\s\S]*?<\/execute_command>|<list_files>[\s\S]*?<\/list_files>|<replace_in_file>[\s\S]*?<\/replace_in_file>|<text>[\s\S]*?<\/text>|<temp>[\s\S]*?<\/temp>|<comment>[\s\S]*?<\/comment>|<code>[\s\S]*?<\/code>)/g,
   );
 
   return (
@@ -1022,37 +1020,6 @@ const AgentInterface: React.FC = () => {
           fs.writeFileSync(fullPath, newContent, 'utf-8');
           return `Successfully updated ${filePath}`;
         }
-        case 'update_context_fact': {
-          const { fact } = args;
-          if (!fact) return 'Error: fact is required.';
-
-          try {
-            const response = await fetch(`${baseUrl}/v1/context-agent/jobs`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                type: 'EXTRACT_FACTS',
-                workspacePath,
-                data: {
-                  fact,
-                  llmConfig: {
-                    provider: currentProvider,
-                    account: selectedAccount?.id,
-                    model: currentModel,
-                  },
-                },
-              }),
-            });
-
-            if (response.ok) {
-              return `Fact added to user memory: "${fact}"`;
-            } else {
-              return `Failed to add fact. Status: ${response.status}`;
-            }
-          } catch (e: any) {
-            return `Error adding fact: ${e.message}`;
-          }
-        }
         default:
           return `Error: Unknown tool ${tagName}`;
       }
@@ -1065,7 +1032,7 @@ const AgentInterface: React.FC = () => {
     if (isExecutingTool) return;
     const content = message.content;
     const toolRegex =
-      /<(read_file|write_to_file|replace_in_file|list_files|list_file|search_files|execute_command|update_context_fact)(?:>([\s\S]*?)<\/\1>| \/>|\/>)/g;
+      /<(read_file|write_to_file|replace_in_file|list_files|list_file|search_files|execute_command)(?:>([\s\S]*?)<\/\1>| \/>|\/>)/g;
 
     const results: string[] = [];
     let match;
@@ -1113,12 +1080,6 @@ const AgentInterface: React.FC = () => {
             info = args.path || 'directory';
           } else if (tagType === 'execute_command') {
             info = args.command || 'command';
-          } else if (tagType === 'update_context_fact') {
-            info = args.fact
-              ? args.fact.length > 30
-                ? args.fact.substring(0, 30) + '...'
-                : args.fact
-              : 'fact';
           }
           const header = info ? `${tagType} for '${info}'` : tagType;
 

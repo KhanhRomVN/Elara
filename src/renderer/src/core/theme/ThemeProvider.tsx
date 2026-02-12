@@ -13,12 +13,14 @@ type ThemeProviderState = {
   theme: Theme;
   setTheme: (theme: Theme) => void;
   applyPresetTheme: (preset: ThemeConfig) => void;
+  currentPreset: ThemeConfig | null;
 };
 
 const initialState: ThemeProviderState = {
   theme: 'dark',
   setTheme: () => null,
   applyPresetTheme: () => null,
+  currentPreset: null,
 };
 
 export const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
@@ -32,6 +34,7 @@ export function ThemeProvider({
   const [theme, setTheme] = useState<Theme>(() => {
     return (localStorage.getItem(storageKey) as Theme) || defaultTheme;
   });
+  const [currentPreset, setCurrentPreset] = useState<ThemeConfig | null>(null);
 
   const applyCSSVariables = (preset: ThemeConfig) => {
     const root = window.document.documentElement;
@@ -102,6 +105,7 @@ export function ThemeProvider({
 
   const applyPresetTheme = (preset: ThemeConfig) => {
     applyCSSVariables(preset);
+    setCurrentPreset(preset);
     // Save preset name without "Light" or "Dark" suffix to maintain consistency across modes
     const baseName = preset.name.replace(/Light$|Dark$/, '');
     localStorage.setItem(`${storageKey}-preset-name`, baseName);
@@ -115,11 +119,14 @@ export function ThemeProvider({
       const preset = PRESET_THEMES[mode].find((p) => p.name === targetName);
       if (preset) {
         applyCSSVariables(preset);
+        setCurrentPreset(preset);
         return;
       }
     }
     // Fallback if no specific preset saved or found
-    applyCSSVariables(PRESET_THEMES[mode][0]);
+    const defaultPreset = PRESET_THEMES[mode][0];
+    applyCSSVariables(defaultPreset);
+    setCurrentPreset(defaultPreset);
   };
 
   useEffect(() => {
@@ -145,6 +152,7 @@ export function ThemeProvider({
       setTheme(theme);
     },
     applyPresetTheme,
+    currentPreset,
   };
 
   return (

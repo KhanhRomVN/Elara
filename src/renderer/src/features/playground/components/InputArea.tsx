@@ -20,9 +20,13 @@ import {
 } from 'react';
 import { PendingAttachment } from '../types';
 import { cn } from '../../../shared/lib/utils';
+import { GitCommitButton } from './GitCommitButton';
 import { FilePreviewModal } from './FilePreviewModal';
 
 interface InputAreaProps {
+  // ... existing props
+  onGitCommit?: () => void;
+  // ...
   input: string;
   handleInput: (e: ChangeEvent<HTMLTextAreaElement>) => void;
   handleKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => void;
@@ -59,8 +63,8 @@ interface InputAreaProps {
   setAgentMode?: (enabled: boolean) => void;
   selectedWorkspacePath?: string;
   handleSelectWorkspace?: () => void;
-  recentWorkspaces?: string[];
   handleQuickSelectWorkspace?: (path: string) => void;
+  availableWorkspaces?: any[];
 }
 
 export const InputArea = ({
@@ -83,16 +87,17 @@ export const InputArea = ({
   onRemoveAttachment,
   streamEnabled,
   setStreamEnabled,
-  supportsSearch,
+  supportsSearch: _supportsSearch,
   supportsUpload,
   supportsThinking,
   agentMode,
   setAgentMode,
   selectedWorkspacePath,
   handleSelectWorkspace,
-  recentWorkspaces = [],
   handleQuickSelectWorkspace,
+  availableWorkspaces = [],
   isConversationActive,
+  onGitCommit,
 
   temperature: _temperature,
   setTemperature: _setTemperature,
@@ -411,6 +416,16 @@ export const InputArea = ({
                       <span>Agent</span>
                     </button>
                   </div>
+
+                  {agentMode && selectedWorkspacePath && onGitCommit && (
+                    <div className="ml-2">
+                      <GitCommitButton
+                        workspacePath={selectedWorkspacePath}
+                        onGenerateMessage={onGitCommit}
+                        disabled={disabled || loading || isStreaming}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -438,41 +453,43 @@ export const InputArea = ({
                   {isWorkspaceDropdownOpen && (
                     <div className="absolute bottom-full mb-2 right-0 w-72 bg-popover text-popover-foreground rounded-xl border shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-bottom-2">
                       <div className="p-1.5 flex flex-col gap-1 max-h-[300px] overflow-y-auto custom-scrollbar">
-                        <div className="px-2 py-1.5 text-[10px] uppercase font-bold text-muted-foreground/70 tracking-wider">
-                          Recent Workspaces
-                        </div>
-                        {recentWorkspaces.length > 0 ? (
-                          recentWorkspaces.map((path: string) => (
-                            <button
-                              key={path}
-                              onClick={() => {
-                                handleQuickSelectWorkspace?.(path);
-                                setIsWorkspaceDropdownOpen(false);
-                              }}
-                              className={cn(
-                                'flex flex-col items-start px-2 py-2 rounded-lg text-left transition-colors',
-                                selectedWorkspacePath === path
-                                  ? 'bg-primary/10 text-primary'
-                                  : 'hover:bg-muted text-foreground',
-                              )}
-                            >
-                              <span className="text-xs font-medium truncate w-full">
-                                {path.split(/[/\\]/).pop()}
-                              </span>
-                              <span
-                                className="text-[10px] text-muted-foreground truncate w-full"
-                                title={path}
+                        {availableWorkspaces.length > 0 ? (
+                          <>
+                            <div className="px-2 py-1.5 text-[10px] uppercase font-bold text-muted-foreground/70 tracking-wider">
+                              Saved Workspaces
+                            </div>
+                            {availableWorkspaces.map((ws: any) => (
+                              <button
+                                key={ws.id}
+                                onClick={() => {
+                                  handleQuickSelectWorkspace?.(ws.path);
+                                  setIsWorkspaceDropdownOpen(false);
+                                }}
+                                className={cn(
+                                  'flex flex-col items-start px-2 py-2 rounded-lg text-left transition-colors',
+                                  selectedWorkspacePath === ws.path
+                                    ? 'bg-primary/10 text-primary'
+                                    : 'hover:bg-muted text-foreground',
+                                )}
                               >
-                                {formatWorkspacePath(path)}
-                              </span>
-                            </button>
-                          ))
+                                <span className="text-xs font-medium truncate w-full">
+                                  {ws.name}
+                                </span>
+                                <span
+                                  className="text-[10px] text-muted-foreground truncate w-full"
+                                  title={ws.path}
+                                >
+                                  {formatWorkspacePath(ws.path)}
+                                </span>
+                              </button>
+                            ))}
+                            <div className="h-px bg-border my-1" />
+                          </>
                         ) : (
                           <div className="px-3 py-4 text-center text-xs text-muted-foreground">
-                            No recent workspaces
+                            No saved workspaces
                           </div>
                         )}
-                        <div className="h-px bg-border my-1" />
                         <button
                           onClick={() => {
                             handleSelectWorkspace();

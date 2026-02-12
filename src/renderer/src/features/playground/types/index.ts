@@ -99,4 +99,24 @@ export interface ConversationTab {
     };
     customFunctions: FunctionParams[];
   };
+  taskProgress?: {
+    current: {
+      taskName: string;
+      tasks: { text: string; status: 'todo' | 'done' }[];
+    } | null;
+    history: {
+      taskName: string;
+      tasks: { text: string; status: 'todo' | 'done' }[];
+    }[];
+  };
+  activePreviewFile?: string | null;
+  previewFiles?: Record<
+    string,
+    {
+      path: string;
+      name: string;
+      content: string;
+      language: string;
+    }
+  >;
 }

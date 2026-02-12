@@ -19,16 +19,16 @@ export const TabBar = ({
   providersList = [],
 }: TabBarProps) => {
   return (
-    <div className="flex items-center h-10 bg-card/30 border-b overflow-x-auto">
+    <div className="flex items-center h-12 bg-card/30 border-b overflow-x-auto">
       {tabs.map((tab) => (
         <div
           key={tab.id}
           onClick={() => onTabClick(tab.id)}
           className={cn(
-            'group flex items-center gap-1.5 px-3 py-2 cursor-pointer select-none transition-all min-w-[120px] max-w-[200px] border-r border-border/50',
+            'group flex items-center gap-1.5 px-3 h-full cursor-pointer select-none transition-all min-w-[120px] max-w-[200px] border-r border-border/50',
             activeTabId === tab.id
-              ? 'bg-background text-foreground'
-              : 'bg-transparent text-muted-foreground hover:bg-muted/50',
+              ? 'bg-background text-foreground border-t border-t-primary'
+              : 'bg-transparent text-muted-foreground hover:bg-muted/50 border-t border-t-transparent',
           )}
         >
           {tab.selectedProvider && (
@@ -65,7 +65,7 @@ export const TabBar = ({
 
       <button
         onClick={onNewTab}
-        className="shrink-0 px-3 py-2 hover:bg-muted transition-colors border-r border-border/50"
+        className="shrink-0 px-3 h-full hover:bg-muted transition-colors border-r border-border/50"
         title="New Tab"
       >
         <Plus className="h-4 w-4" />

@@ -64,6 +64,36 @@ const api = {
     return () => ipcRenderer.removeListener(channel, subscription);
   },
   send: (channel: string, ...args: any[]) => ipcRenderer.send(channel, ...args),
+  workspaces: {
+    list: () => {
+      console.log('[Preload] invoking workspaces:list');
+      return ipcRenderer.invoke('workspaces:list');
+    },
+    // ...
+    link: (folderPath: string) => ipcRenderer.invoke('workspaces:link', folderPath),
+    getContext: (id: string) => ipcRenderer.invoke('workspaces:get-context', id),
+    updateContext: (id: string, type: 'workspace' | 'rules', content: string) =>
+      ipcRenderer.invoke('workspaces:update-context', id, type, content),
+    scan: (folderPath: string) => ipcRenderer.invoke('workspaces:scan', folderPath),
+    getSummary: (workspaceId: string, conversationId: string) =>
+      ipcRenderer.invoke('workspaces:get-summary', workspaceId, conversationId),
+    updateSummary: (workspaceId: string, conversationId: string, content: string) =>
+      ipcRenderer.invoke('workspaces:update-summary', workspaceId, conversationId, content),
+    createSession: (workspaceId: string, conversationId: string, data: any) =>
+      ipcRenderer.invoke('workspaces:create-session', workspaceId, conversationId, data),
+    getTree: (folderPath: string) => ipcRenderer.invoke('workspaces:get-tree', folderPath),
+  },
+  git: {
+    status: (repoPath: string) => ipcRenderer.invoke('git:status', repoPath),
+    diffStats: (repoPath: string) => ipcRenderer.invoke('git:diff-stats', repoPath),
+    add: (repoPath: string, files: string[]) => ipcRenderer.invoke('git:add', repoPath, files),
+    commit: (repoPath: string, message: string) =>
+      ipcRenderer.invoke('git:commit', repoPath, message),
+  },
+  watcher: {
+    watch: (folderPath: string) => ipcRenderer.invoke('watcher:watch', folderPath),
+    unwatch: () => ipcRenderer.invoke('watcher:unwatch'),
+  },
 };
 
 if (process.contextIsolated) {
@@ -71,7 +101,9 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('electron', electronAPI);
     contextBridge.exposeInMainWorld('api', api);
     console.log('[Preload] APIs exposed to main world (contextIsolated)');
+    console.log('[Preload] Workspaces API keys:', Object.keys(api.workspaces));
     console.log('[Preload] Server API keys:', Object.keys(api.server));
+    console.log('[Preload] getTree API exists:', typeof api.workspaces.getTree);
   } catch (error) {
     console.error(error);
   }

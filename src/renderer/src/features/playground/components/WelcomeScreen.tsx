@@ -28,13 +28,13 @@ interface WelcomeScreenProps {
   setAgentMode?: (enabled: boolean) => void;
   selectedWorkspacePath?: string;
   handleSelectWorkspace?: () => void;
-  recentWorkspaces?: string[];
   handleQuickSelectWorkspace?: (path: string) => void;
   temperature?: number;
   setTemperature?: (val: number) => void;
   isTemperatureSupported?: boolean;
   onToggleSettings?: () => void;
   onNavigateToSettings?: () => void;
+  availableWorkspaces?: any[];
 }
 
 export const WelcomeScreen = ({
@@ -63,13 +63,13 @@ export const WelcomeScreen = ({
   setAgentMode,
   selectedWorkspacePath,
   handleSelectWorkspace,
-  recentWorkspaces,
   handleQuickSelectWorkspace,
   temperature,
   setTemperature,
   isTemperatureSupported,
   onToggleSettings,
   onNavigateToSettings,
+  availableWorkspaces,
 }: WelcomeScreenProps) => {
   return (
     <div className="h-full flex flex-col items-center justify-center text-center space-y-6 animate-in fade-in zoom-in-95 duration-500">
@@ -110,13 +110,13 @@ export const WelcomeScreen = ({
           setAgentMode={setAgentMode}
           selectedWorkspacePath={selectedWorkspacePath}
           handleSelectWorkspace={handleSelectWorkspace}
-          recentWorkspaces={recentWorkspaces}
           handleQuickSelectWorkspace={handleQuickSelectWorkspace}
           temperature={temperature}
           setTemperature={setTemperature}
           isTemperatureSupported={isTemperatureSupported}
           onToggleSettings={onToggleSettings}
           onNavigateToSettings={onNavigateToSettings}
+          availableWorkspaces={availableWorkspaces}
         />
       </div>
     </div>

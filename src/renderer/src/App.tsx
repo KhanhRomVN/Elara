@@ -5,6 +5,7 @@ import { ThemeProvider } from './core/theme/ThemeProvider';
 import { Toaster } from 'sonner';
 
 import { BackendConnectionProvider } from './core/contexts/BackendConnectionContext';
+import { UIProvider } from './core/contexts/UIContext';
 
 function App() {
   const router = createHashRouter(routes);
@@ -13,10 +14,12 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BackendConnectionProvider>
-        <ThemeProvider defaultTheme="dark" storageKey="syfer-theme">
-          <RouterProvider router={router} />
-          <Toaster />
-        </ThemeProvider>
+        <UIProvider>
+          <ThemeProvider defaultTheme="dark" storageKey="syfer-theme">
+            <RouterProvider router={router} />
+            <Toaster />
+          </ThemeProvider>
+        </UIProvider>
       </BackendConnectionProvider>
     </QueryClientProvider>
   );

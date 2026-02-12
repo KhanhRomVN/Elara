@@ -129,6 +129,43 @@ interface API {
   dialog: {
     openDirectory: () => Promise<{ canceled: boolean; filePaths: string[] }>;
   };
+  workspaces: {
+    list: () => Promise<any[]>;
+    link: (folderPath: string) => Promise<any>;
+    getContext: (id: string) => Promise<{ workspace: string; rules: string }>;
+    updateContext: (id: string, type: 'workspace' | 'rules', content: string) => Promise<void>;
+    scan: (folderPath: string) => Promise<string>;
+    getTree: (folderPath: string) => Promise<any[]>;
+    getSummary: (workspaceId: string, conversationId: string) => Promise<string>;
+    updateSummary: (workspaceId: string, conversationId: string, content: string) => Promise<void>;
+    createSession: (
+      workspaceId: string,
+      conversationId: string,
+      data: any,
+    ) => Promise<{ sessionPath: string; summaryPath: string }>;
+  };
+  git: {
+    status: (repoPath: string) => Promise<{
+      modified: string[];
+      staged: string[];
+      untracked: string[];
+      conflicted: string[];
+      ahead: number;
+      behind: number;
+      current: string;
+      tracking: string;
+    }>;
+    diffStats: (repoPath: string) => Promise<{
+      files: { [path: string]: { insertions: number; deletions: number; binary: boolean } };
+      total: { insertions: number; deletions: number };
+    }>;
+    add: (repoPath: string, files: string[]) => Promise<void>;
+    commit: (repoPath: string, message: string) => Promise<void>;
+  };
+  watcher: {
+    watch: (folderPath: string) => Promise<void>;
+    unwatch: () => Promise<void>;
+  };
   // General IPC methods
   on: (channel: string, listener: (event: IpcRendererEvent, ...args: any[]) => void) => () => void;
   send: (channel: string, ...args: any[]) => void;
