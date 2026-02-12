@@ -1,20 +1,14 @@
 import {
   Upload,
   StopCircle,
-  Globe,
   Loader2,
   X,
   FileText,
   Zap,
-  Brain,
   Bot,
   FolderOpen,
   Settings2,
-  AlertTriangle,
-  Database,
-  RefreshCw,
 } from 'lucide-react';
-import { LanguageSelector } from './LanguageSelector';
 import {
   ChangeEvent,
   KeyboardEvent,
@@ -51,33 +45,22 @@ interface InputAreaProps {
   onRemoveAttachment?: (index: number) => void;
   streamEnabled?: boolean;
   setStreamEnabled?: (enabled: boolean) => void;
+  isConversationActive?: boolean;
+
+  temperature?: number;
+  setTemperature?: (val: number) => void;
+  isTemperatureSupported?: boolean;
+  onToggleSettings?: () => void;
+  onNavigateToSettings?: () => void;
   supportsSearch?: boolean;
   supportsUpload?: boolean;
   supportsThinking?: boolean;
   agentMode?: boolean;
   setAgentMode?: (enabled: boolean) => void;
-  indexingEnabled?: boolean;
-  setIndexingEnabled?: (enabled: boolean) => void;
   selectedWorkspacePath?: string;
   handleSelectWorkspace?: () => void;
   recentWorkspaces?: string[];
   handleQuickSelectWorkspace?: (path: string) => void;
-  language?: string | null;
-  setLanguage?: (lang: string | null) => void;
-  isConversationActive?: boolean;
-  temperature?: number;
-  setTemperature?: (val: number) => void;
-  isTemperatureSupported?: boolean;
-  onToggleSettings?: () => void;
-  indexingStatus?: {
-    indexed: boolean;
-    configured: boolean;
-    loading?: boolean;
-    needsSync?: boolean;
-    syncStats?: { added: number; modified: number; deleted: number };
-  };
-  onStartIndexing?: () => void;
-  onNavigateToSettings?: () => void;
 }
 
 export const InputArea = ({
@@ -94,8 +77,6 @@ export const InputArea = ({
   className,
   thinkingEnabled: _thinkingEnabled,
   setThinkingEnabled: _setThinkingEnabled,
-  searchEnabled,
-  setSearchEnabled,
   innerClassName,
   onFileSelect,
   attachments,
@@ -107,22 +88,16 @@ export const InputArea = ({
   supportsThinking,
   agentMode,
   setAgentMode,
-  indexingEnabled,
-  setIndexingEnabled,
   selectedWorkspacePath,
   handleSelectWorkspace,
   recentWorkspaces = [],
   handleQuickSelectWorkspace,
-  language,
-  setLanguage,
   isConversationActive,
+
   temperature: _temperature,
   setTemperature: _setTemperature,
   isTemperatureSupported: _isTemperatureSupported,
   onToggleSettings,
-  indexingStatus,
-  onStartIndexing,
-  onNavigateToSettings,
 }: InputAreaProps) => {
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false);
   const workspaceDropdownRef = useRef<HTMLDivElement>(null);
@@ -393,48 +368,9 @@ export const InputArea = ({
                   )}
                   title={_thinkingEnabled ? 'Thinking Mode On' : 'Thinking Mode Off'}
                 >
-                  <Brain className="h-4 w-4" />
+                  <Bot className="h-4 w-4" />
                   <span>Think</span>
                 </button>
-              )}
-              {supportsSearch && (
-                <button
-                  onClick={() => setSearchEnabled?.(!searchEnabled)}
-                  className={cn(
-                    'px-3 py-1.5 flex items-center gap-1.5 text-xs font-medium rounded-md transition-colors',
-                    searchEnabled
-                      ? 'bg-blue-500/10 text-blue-500 hover:bg-blue-500/20'
-                      : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
-                  )}
-                  title="Search"
-                >
-                  <Globe className="h-4 w-4" />
-                  <span>Search</span>
-                </button>
-              )}
-              {selectedWorkspacePath && setIndexingEnabled && (
-                <button
-                  onClick={() => setIndexingEnabled(!indexingEnabled)}
-                  className={cn(
-                    'px-3 py-1.5 flex items-center gap-1.5 text-xs font-medium rounded-md transition-colors',
-                    indexingEnabled
-                      ? indexingStatus?.indexed
-                        ? 'bg-blue-500/10 text-blue-500 hover:bg-blue-500/20'
-                        : 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20'
-                      : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
-                  )}
-                  title={indexingEnabled ? 'Codebase Indexing On' : 'Codebase Indexing Off'}
-                >
-                  <Database className="h-4 w-4" />
-                  <span>Index</span>
-                </button>
-              )}
-              {setLanguage && (
-                <LanguageSelector
-                  value={language || null}
-                  onChange={setLanguage}
-                  className="scale-90 origin-left"
-                />
               )}
             </div>
 
@@ -506,7 +442,7 @@ export const InputArea = ({
                           Recent Workspaces
                         </div>
                         {recentWorkspaces.length > 0 ? (
-                          recentWorkspaces.map((path) => (
+                          recentWorkspaces.map((path: string) => (
                             <button
                               key={path}
                               onClick={() => {
@@ -565,75 +501,6 @@ export const InputArea = ({
             </div>
           </div>
         </div>
-
-        {/* Indexing Warning Box */}
-        {indexingEnabled &&
-          selectedWorkspacePath &&
-          !isConversationActive &&
-          indexingStatus &&
-          (!indexingStatus.indexed || indexingStatus.needsSync) && (
-            <div
-              onClick={() => {
-                // If RAG is not configured, navigate to settings instead of starting indexing
-                if (!indexingStatus.configured && onNavigateToSettings) {
-                  onNavigateToSettings();
-                } else if (onStartIndexing) {
-                  onStartIndexing();
-                }
-              }}
-              className={cn(
-                'flex items-center gap-3 px-4 py-3 rounded-lg border cursor-pointer transition-all',
-                indexingStatus.loading
-                  ? 'bg-blue-500/10 border-blue-500/30 cursor-wait'
-                  : indexingStatus.needsSync
-                    ? 'bg-orange-500/10 border-orange-500/30 hover:bg-orange-500/20'
-                    : indexingStatus.configured
-                      ? 'bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20'
-                      : 'bg-red-500/10 border-red-500/30 hover:bg-red-500/20',
-              )}
-            >
-              {indexingStatus.loading ? (
-                <Loader2 className="w-5 h-5 text-blue-500 animate-spin flex-shrink-0" />
-              ) : indexingStatus.needsSync ? (
-                <RefreshCw className="w-5 h-5 text-orange-500 flex-shrink-0" />
-              ) : indexingStatus.configured ? (
-                <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
-              ) : (
-                <Database className="w-5 h-5 text-red-500 flex-shrink-0" />
-              )}
-              <div className="flex-1 min-w-0">
-                <p
-                  className={cn(
-                    'text-sm font-medium',
-                    indexingStatus.loading
-                      ? 'text-blue-500'
-                      : indexingStatus.needsSync
-                        ? 'text-orange-500'
-                        : indexingStatus.configured
-                          ? 'text-amber-500'
-                          : 'text-red-500',
-                  )}
-                >
-                  {indexingStatus.loading
-                    ? 'Indexing in progress...'
-                    : indexingStatus.needsSync
-                      ? 'Codebase needs sync'
-                      : indexingStatus.configured
-                        ? 'Codebase not indexed'
-                        : 'RAG not configured'}
-                </p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {indexingStatus.loading
-                    ? 'Please wait while the codebase is being indexed'
-                    : indexingStatus.needsSync && indexingStatus.syncStats
-                      ? `Click to sync: +${indexingStatus.syncStats.added} new, ~${indexingStatus.syncStats.modified} modified, -${indexingStatus.syncStats.deleted} deleted`
-                      : indexingStatus.configured
-                        ? 'Click to index this workspace for better code context'
-                        : 'Configure Qdrant and Gemini API keys in Settings'}
-                </p>
-              </div>
-            </div>
-          )}
       </div>
 
       <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />

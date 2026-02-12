@@ -12,9 +12,11 @@ import {
   Check,
   FolderSearch,
   Settings,
+  Languages,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../shared/lib/utils';
+import { LanguageSelector } from '../playground/components/LanguageSelector';
 
 interface QdrantConfig {
   id: string;
@@ -57,6 +59,7 @@ const SettingsPage = () => {
   const [activeSection, setActiveSection] = useState<SidebarOption>('general');
   const [generalConfig, setGeneralConfig] = useState({
     apiUrl: localStorage.getItem('ELARA_API_URL') || 'http://localhost:11434',
+    language: localStorage.getItem('elara_preferred_language') || null,
   });
 
   useEffect(() => {
@@ -119,6 +122,11 @@ const SettingsPage = () => {
       setSaving(true);
       // Save General Config to localStorage only
       localStorage.setItem('ELARA_API_URL', generalConfig.apiUrl);
+      if (generalConfig.language) {
+        localStorage.setItem('elara_preferred_language', generalConfig.language);
+      } else {
+        localStorage.removeItem('elara_preferred_language');
+      }
       window.dispatchEvent(new Event('storage')); // Notify other components
       toast.success('General settings saved successfully');
     } catch (error) {
@@ -271,10 +279,11 @@ const SettingsPage = () => {
     { id: 'general' as SidebarOption, label: 'General', icon: Settings, color: '#94a3b8' }, // Slate
     {
       id: 'indexing' as SidebarOption,
-      label: 'Indexing Codebase',
+      label: 'Indexing Codebase (Disabled)',
       icon: FolderSearch,
-      color: '#f59e0b',
-    }, // Amber
+      color: '#64748b',
+      disabled: true,
+    }, // Slate
   ];
 
   return (
@@ -293,15 +302,17 @@ const SettingsPage = () => {
 
         {/* Sidebar Navigation */}
         <nav className="flex-1 py-4 space-y-1 overflow-y-auto custom-scrollbar">
-          {sidebarItems.map((item) => (
+          {sidebarItems.map((item: any) => (
             <button
               key={item.id}
-              onClick={() => setActiveSection(item.id)}
+              onClick={() => !item.disabled && setActiveSection(item.id)}
+              disabled={item.disabled}
               className={cn(
                 'w-full flex items-center gap-3 py-3 px-6 text-sm font-medium rounded-none transition-all relative group text-left',
                 activeSection === item.id
                   ? 'text-foreground'
                   : 'text-muted-foreground hover:text-foreground',
+                item.disabled && 'opacity-50 cursor-not-allowed grayscale',
               )}
               style={
                 activeSection === item.id
@@ -368,6 +379,20 @@ const SettingsPage = () => {
                     </p>
                   </div>
 
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium flex items-center gap-1">
+                      Response Language
+                    </label>
+                    <LanguageSelector
+                      value={generalConfig.language}
+                      onChange={(val) => setGeneralConfig({ ...generalConfig, language: val })}
+                      className="w-full"
+                    />
+                    <p className="text-[13px] text-muted-foreground leading-relaxed">
+                      Select the default language for AI responses.
+                    </p>
+                  </div>
+
                   <div className="flex justify-start pt-2">
                     <button
                       onClick={saveGeneralConfig}
@@ -395,394 +420,10 @@ const SettingsPage = () => {
               <div className="space-y-8">
                 <div>
                   <h3 className="text-2xl font-bold tracking-tight">Codebase Indexing</h3>
-                  <p className="text-base text-muted-foreground mt-1">
-                    Manage Vector Database connections and Embedding API keys.
+                  <p className="text-base text-muted-foreground mt-1 text-destructive">
+                    This feature is currently disabled and all associated backend services have been
+                    removed.
                   </p>
-                </div>
-
-                {/* Qdrant Databases */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="p-2 bg-primary/10 rounded-lg">
-                        <Database className="w-5 h-5 text-primary" />
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-semibold">Qdrant Databases</h3>
-                        <p className="text-xs text-muted-foreground">Vector storage clusters</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={startAddQdrant}
-                      className="px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Add Database
-                    </button>
-                  </div>
-
-                  <div className="space-y-3">
-                    {config.qdrant_databases.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center p-8 border border-dashed border-muted-foreground/25 rounded-xl bg-card/10">
-                        <Database className="w-10 h-10 text-muted-foreground/50 mb-3" />
-                        <p className="text-sm text-muted-foreground font-medium">
-                          No Qdrant databases configured
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Add a database to enable semantic search.
-                        </p>
-                      </div>
-                    ) : (
-                      config.qdrant_databases.map((db) => (
-                        <div
-                          key={db.id}
-                          className="flex items-center gap-4 p-4 bg-card/40 rounded-xl border border-border hover:border-primary/30 transition-all group shadow-sm"
-                        >
-                          <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center shrink-0">
-                            <Server className="w-5 h-5 text-blue-500" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <p className="font-semibold text-sm">
-                                {db.cluster_name || 'Unnamed Cluster'}
-                              </p>
-                              {db.email && (
-                                <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
-                                  {db.email}
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate max-w-md">
-                              {db.cluster_endpoint}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={() => startEditQdrant(db)}
-                              className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
-                              title="Edit"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => removeQdrantDatabase(db.id)}
-                              className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
-                              title="Delete"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )}
-
-                    {/* Add/Edit Qdrant Form */}
-                    {showQdrantForm && editingQdrant && (
-                      <div className="p-6 bg-card/60 backdrop-blur-md rounded-xl border border-border shadow-lg space-y-4 animate-in zoom-in-95 duration-200">
-                        <h4 className="font-semibold text-sm border-b pb-2 mb-2 flex items-center gap-2">
-                          <Server className="w-4 h-4 text-primary" />
-                          {editingQdrant.id ? 'Edit Database' : 'New Qdrant Database'}
-                        </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-1.5">
-                            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                              Email (Optional)
-                            </label>
-                            <input
-                              type="email"
-                              value={editingQdrant.email || ''}
-                              onChange={(e) =>
-                                setEditingQdrant((prev) =>
-                                  prev ? { ...prev, email: e.target.value } : null,
-                                )
-                              }
-                              placeholder="your@email.com"
-                              className="w-full px-3 py-2 text-sm bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-                            />
-                          </div>
-                          <div className="space-y-1.5">
-                            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                              Cluster Name
-                            </label>
-                            <input
-                              type="text"
-                              value={editingQdrant.cluster_name || ''}
-                              onChange={(e) =>
-                                setEditingQdrant((prev) =>
-                                  prev ? { ...prev, cluster_name: e.target.value } : null,
-                                )
-                              }
-                              placeholder="My Cluster"
-                              className="w-full px-3 py-2 text-sm bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                            Cluster Endpoint <span className="text-destructive">*</span>
-                          </label>
-                          <input
-                            type="text"
-                            value={editingQdrant.cluster_endpoint}
-                            onChange={(e) =>
-                              setEditingQdrant((prev) =>
-                                prev ? { ...prev, cluster_endpoint: e.target.value } : null,
-                              )
-                            }
-                            placeholder="https://xxx.qdrant.io:6333"
-                            className="w-full px-3 py-2 text-sm bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 font-mono"
-                          />
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                            API Key <span className="text-destructive">*</span>
-                          </label>
-                          <div className="relative">
-                            <input
-                              type={showApiKeys[editingQdrant.id || 'new'] ? 'text' : 'password'}
-                              value={editingQdrant.cluster_api_key}
-                              onChange={(e) =>
-                                setEditingQdrant((prev) =>
-                                  prev ? { ...prev, cluster_api_key: e.target.value } : null,
-                                )
-                              }
-                              placeholder="Enter Cluster API key"
-                              className="w-full px-3 py-2 pr-10 text-sm bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 font-mono"
-                            />
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setShowApiKeys((prev) => ({
-                                  ...prev,
-                                  [editingQdrant.id || 'new']: !prev[editingQdrant.id || 'new'],
-                                }))
-                              }
-                              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted"
-                            >
-                              {showApiKeys[editingQdrant.id || 'new'] ? (
-                                <EyeOff className="w-4 h-4" />
-                              ) : (
-                                <Eye className="w-4 h-4" />
-                              )}
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="flex gap-3 pt-2 justify-end">
-                          <button
-                            onClick={() => {
-                              setEditingQdrant(null);
-                              setShowQdrantForm(false);
-                            }}
-                            className="px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            onClick={saveQdrantDatabase}
-                            className="px-4 py-2 rounded-lg flex items-center justify-center gap-1.5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
-                          >
-                            <Check className="w-4 h-4" />
-                            Save Database
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="h-px bg-border/50" />
-
-                {/* Gemini API Keys */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="p-2 bg-amber-500/10 rounded-lg">
-                        <Key className="w-5 h-5 text-amber-500" />
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-semibold">Gemini API Keys</h3>
-                        <p className="text-xs text-muted-foreground">For embedding generation</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={startAddGemini}
-                      className="px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Add Key
-                    </button>
-                  </div>
-
-                  <p className="text-sm text-muted-foreground bg-muted/30 p-3 rounded-md border border-border/50 flex items-start gap-2">
-                    <span className="text-primary text-lg leading-none">ℹ</span>
-                    Add multiple Gemini API keys. The system will rotate through them to avoid rate
-                    limits during heavy indexing tasks.
-                  </p>
-
-                  <div className="space-y-3">
-                    {config.gemini_api_keys.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center p-8 border border-dashed border-destructive/25 bg-destructive/5 rounded-xl">
-                        <Key className="w-10 h-10 text-destructive/50 mb-3" />
-                        <p className="text-sm font-semibold text-destructive">
-                          No API keys configured
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          At least one key is required.
-                        </p>
-                      </div>
-                    ) : (
-                      config.gemini_api_keys.map((key) => (
-                        <div
-                          key={key.id}
-                          className="flex items-center gap-4 p-4 bg-card/40 rounded-xl border border-border hover:border-primary/30 transition-all group shadow-sm"
-                        >
-                          <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0">
-                            <Key className="w-5 h-5 text-amber-500" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-sm truncate">{key.email}</p>
-                            <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate">
-                              {showGeminiKeys[key.id] ? key.api_key : maskApiKey(key.api_key)}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={() =>
-                                setShowGeminiKeys((prev) => ({ ...prev, [key.id]: !prev[key.id] }))
-                              }
-                              className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
-                              title={showGeminiKeys[key.id] ? 'Hide Key' : 'Show Key'}
-                            >
-                              {showGeminiKeys[key.id] ? (
-                                <EyeOff className="w-4 h-4" />
-                              ) : (
-                                <Eye className="w-4 h-4" />
-                              )}
-                            </button>
-                            <button
-                              onClick={() => startEditGemini(key)}
-                              className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
-                              title="Edit"
-                            >
-                              <Settings className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => removeGeminiKey(key.id)}
-                              className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
-                              title="Delete"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )}
-
-                    {/* Add/Edit Gemini Form */}
-                    {showGeminiForm && editingGemini && (
-                      <div className="p-6 bg-card/60 backdrop-blur-md rounded-xl border border-border shadow-lg space-y-4 animate-in zoom-in-95 duration-200">
-                        <h4 className="font-semibold text-sm border-b pb-2 mb-2 flex items-center gap-2">
-                          <Key className="w-4 h-4 text-primary" />
-                          {editingGemini.id ? 'Edit API Key' : 'New One-Time Key'}
-                        </h4>
-
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                            Email <span className="text-destructive">*</span>
-                          </label>
-                          <input
-                            type="email"
-                            value={editingGemini.email}
-                            onChange={(e) =>
-                              setEditingGemini((prev) =>
-                                prev ? { ...prev, email: e.target.value } : null,
-                              )
-                            }
-                            placeholder="your@email.com"
-                            className="w-full px-3 py-2 text-sm bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
-                          />
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                            API Key <span className="text-destructive">*</span>
-                          </label>
-                          <div className="relative">
-                            <input
-                              type={showGeminiKeys[editingGemini.id || 'new'] ? 'text' : 'password'}
-                              value={editingGemini.api_key}
-                              onChange={(e) =>
-                                setEditingGemini((prev) =>
-                                  prev ? { ...prev, api_key: e.target.value } : null,
-                                )
-                              }
-                              placeholder="Enter Gemini API key"
-                              className="w-full px-3 py-2 pr-10 text-sm bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 font-mono"
-                            />
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setShowGeminiKeys((prev) => ({
-                                  ...prev,
-                                  [editingGemini.id || 'new']: !prev[editingGemini.id || 'new'],
-                                }))
-                              }
-                              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted"
-                            >
-                              {showGeminiKeys[editingGemini.id || 'new'] ? (
-                                <EyeOff className="w-4 h-4" />
-                              ) : (
-                                <Eye className="w-4 h-4" />
-                              )}
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="flex gap-3 pt-2 justify-end">
-                          <button
-                            onClick={() => {
-                              setEditingGemini(null);
-                              setShowGeminiForm(false);
-                            }}
-                            className="px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            onClick={saveGeminiKey}
-                            className="px-4 py-2 rounded-lg flex items-center justify-center gap-1.5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
-                          >
-                            <Check className="w-4 h-4" />
-                            Save Key
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Save Button */}
-                <div className="flex justify-end pt-6 border-t">
-                  <button
-                    onClick={saveIndexingConfig}
-                    disabled={saving}
-                    className={cn(
-                      'px-6 py-2.5 rounded-lg flex items-center gap-2 text-sm font-bold transition-all shadow-md active:scale-95',
-                      saving
-                        ? 'bg-muted text-muted-foreground cursor-not-allowed'
-                        : 'bg-primary text-primary-foreground hover:bg-primary/90',
-                    )}
-                  >
-                    {saving ? (
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Save className="w-4 h-4" />
-                    )}
-                    {saving ? 'Saving...' : 'Save All Settings'}
-                  </button>
                 </div>
               </div>
             )}

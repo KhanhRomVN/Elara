@@ -76,12 +76,6 @@ export const PlaygroundPage = ({
     handleQuickSelectWorkspace,
     temperature,
     setTemperature,
-    indexingEnabled,
-    setIndexingEnabled,
-    language,
-    setLanguage,
-    indexingStatus,
-    handleStartIndexing,
   } = usePlaygroundLogic({ activeTab, activeTabId, onUpdateTab });
 
   // Sidebar Resize State (UI only)
@@ -283,12 +277,6 @@ export const PlaygroundPage = ({
               )?.is_temperature
             }
             onToggleSettings={() => setIsSettingsOpen(!isSettingsOpen)}
-            indexingEnabled={indexingEnabled}
-            setIndexingEnabled={setIndexingEnabled}
-            language={language}
-            setLanguage={setLanguage}
-            indexingStatus={indexingStatus}
-            onStartIndexing={handleStartIndexing}
             onNavigateToSettings={() => navigate('/settings')}
           />
         ) : (
@@ -367,12 +355,6 @@ export const PlaygroundPage = ({
                 )?.is_temperature
               }
               onToggleSettings={() => setIsSettingsOpen(!isSettingsOpen)}
-              indexingEnabled={indexingEnabled}
-              setIndexingEnabled={setIndexingEnabled}
-              language={language}
-              setLanguage={setLanguage}
-              indexingStatus={indexingStatus}
-              onStartIndexing={handleStartIndexing}
             />
           </>
         )}

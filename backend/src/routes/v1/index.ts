@@ -11,7 +11,6 @@ import providerRouter from './provider';
 import messagesRouter from './messages';
 import debugRouter from './debug';
 import configRouter from './config';
-import indexingRouter from './indexing';
 import modelRouter from './model';
 import statsRouter from './stats';
 
@@ -24,7 +23,6 @@ router.use('/providers', providerRouter);
 router.use('/messages', messagesRouter);
 router.use('/debug', debugRouter);
 router.use('/config', configRouter);
-router.use('/indexing', indexingRouter);
 router.use('/models', modelRouter);
 router.use('/model-sequences', modelSequencesRouter);
 router.use('/stats', statsRouter);

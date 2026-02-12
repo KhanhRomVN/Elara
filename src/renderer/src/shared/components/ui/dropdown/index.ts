@@ -1,4 +1,5 @@
-export { default as Dropdown, DropdownContext } from './Dropdown';
+export { default as Dropdown } from './Dropdown';
+export { DropdownContext } from './DropdownContext';
 export { default as DropdownTrigger } from './DropdownTrigger';
 export { default as DropdownContent } from './DropdownContent';
 export { default as DropdownItem } from './DropdownItem';

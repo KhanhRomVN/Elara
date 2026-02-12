@@ -49,7 +49,6 @@ export const usePlaygroundLogic = ({
   const [thinkingEnabled, setThinkingEnabled] = useState(() => activeTab?.thinkingEnabled ?? true);
   const [searchEnabled, setSearchEnabled] = useState(() => activeTab?.searchEnabled ?? false);
   const [agentMode, setAgentMode] = useState(() => activeTab?.agentMode ?? false);
-  const [indexingEnabled, setIndexingEnabled] = useState(() => activeTab?.indexingEnabled ?? true);
   const [attachments, setAttachments] = useState<PendingAttachment[]>(
     () => activeTab?.attachments || [],
   );
@@ -62,9 +61,16 @@ export const usePlaygroundLogic = ({
   );
   const [temperature, setTemperature] = useState<number>(() => activeTab?.temperature ?? 0.7);
   const [language, setLanguage] = useState<string | null>(() => {
-    if (activeTab?.language) return activeTab.language;
     return localStorage.getItem('elara_preferred_language');
   });
+
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setLanguage(localStorage.getItem('elara_preferred_language'));
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   const [recentWorkspaces, setRecentWorkspaces] = useState<string[]>(() => {
     try {
@@ -149,175 +155,6 @@ export const usePlaygroundLogic = ({
       return [];
     }
   });
-
-  // Indexing status state
-  const [indexingStatus, setIndexingStatus] = useState<{
-    indexed: boolean;
-    configured: boolean;
-    loading?: boolean;
-    needsSync?: boolean;
-    syncStats?: { added: number; modified: number; deleted: number };
-  }>({ indexed: false, configured: false });
-
-  // Check indexing status when workspace changes
-  useEffect(() => {
-    const checkIndexing = async () => {
-      console.log('[Indexing] Check triggered:', { selectedWorkspacePath, agentMode });
-
-      if (!selectedWorkspacePath) {
-        setIndexingStatus({ indexed: false, configured: false });
-        return;
-      }
-
-      try {
-        const serverStatus = await window.api.server.start();
-        const port = serverStatus.port || 11434;
-
-        const baseUrl = getApiBaseUrl(port);
-
-        console.log('[Indexing] Fetching status for:', selectedWorkspacePath);
-
-        const response = await fetch(
-          `${baseUrl}/v1/indexing/status?workspace_path=${encodeURIComponent(selectedWorkspacePath)}`,
-        );
-
-        console.log('[Indexing] Response status:', response.status);
-
-        if (response.ok) {
-          const data = await response.json();
-          console.log('[Indexing] Response data:', data);
-          if (data.success && data.data) {
-            setIndexingStatus({
-              indexed: data.data.indexed,
-              configured: data.data.configured,
-              needsSync: data.data.needsSync,
-              syncStats: data.data.syncStats,
-            });
-          }
-        } else {
-          console.error('[Indexing] Response not ok:', response.status);
-          setIndexingStatus({ indexed: false, configured: false });
-        }
-      } catch (error) {
-        console.error('[Indexing] Failed to check indexing status:', error);
-        setIndexingStatus({ indexed: false, configured: false });
-      }
-    };
-
-    checkIndexing();
-  }, [selectedWorkspacePath]);
-
-  // Start indexing handler
-  const handleStartIndexing = async () => {
-    if (!selectedWorkspacePath || indexingStatus.loading) return;
-
-    setIndexingStatus((prev) => ({ ...prev, loading: true }));
-
-    try {
-      const serverStatus = await window.api.server.start();
-      const port = serverStatus.port || 11434;
-
-      const baseUrl = getApiBaseUrl(port);
-      // Use sync endpoint if already indexed but needs sync
-      const endpoint =
-        indexingStatus.indexed && indexingStatus.needsSync
-          ? `${baseUrl}/v1/indexing/sync`
-          : `${baseUrl}/v1/indexing/start`;
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspace_path: selectedWorkspacePath }),
-      });
-
-      if (response.ok) {
-        // Poll for completion
-        const pollInterval = setInterval(async () => {
-          try {
-            const baseUrl = getApiBaseUrl(port);
-            const statusRes = await fetch(
-              `${baseUrl}/v1/indexing/status?workspace_path=${encodeURIComponent(selectedWorkspacePath)}`,
-            );
-            if (statusRes.ok) {
-              const statusData = await statusRes.json();
-              if (statusData.success && statusData.data?.indexed && !statusData.data?.needsSync) {
-                clearInterval(pollInterval);
-                setIndexingStatus({
-                  indexed: true,
-                  configured: true,
-                  loading: false,
-                  needsSync: false,
-                });
-              }
-            }
-          } catch {
-            // Ignore polling errors
-          }
-        }, 3000);
-
-        // Stop polling after 5 minutes
-        setTimeout(() => {
-          clearInterval(pollInterval);
-          setIndexingStatus((prev) => ({ ...prev, loading: false }));
-        }, 300000);
-      }
-    } catch (error) {
-      console.error('Failed to start indexing:', error);
-      setIndexingStatus((prev) => ({ ...prev, loading: false }));
-    }
-  };
-
-  // Read ELARA.md content
-  const readElaraContent = async (): Promise<string> => {
-    if (!selectedWorkspacePath) return '';
-
-    const elaraPath = selectedWorkspacePath + '/ELARA.md';
-    try {
-      const content = await window.api.commands.readFile(elaraPath);
-      return content;
-    } catch {
-      // File doesn't exist, create empty one
-      try {
-        await window.api.commands.writeFile(elaraPath, '');
-      } catch {
-        // Ignore creation errors
-      }
-      return '';
-    }
-  };
-
-  // Search relevant files from RAG
-  const searchRelevantFiles = async (query: string): Promise<string[]> => {
-    if (!selectedWorkspacePath || !indexingStatus.indexed) return [];
-
-    try {
-      const serverStatus = await window.api.server.start();
-      const port = serverStatus.port || 11434;
-
-      const baseUrl = getApiBaseUrl(port);
-
-      const response = await fetch(`${baseUrl}/v1/indexing/search`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workspace_path: selectedWorkspacePath,
-          query,
-          limit: 10,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.data?.files) {
-          return data.data.files.map((f: any) => f.path);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to search relevant files:', error);
-    }
-
-    return [];
-  };
 
   const parseTagArguments = (tagContent: string) => {
     const args: Record<string, string> = {};
@@ -446,27 +283,6 @@ export const usePlaygroundLogic = ({
           if (!command) return 'Error: command is required.';
           const output = await window.api.shell.execute(command, selectedWorkspacePath);
           return output;
-        }
-        case 'write_to_file_elara': {
-          const { content } = args;
-          if (content === undefined) return 'Error: content is required.';
-          const elaraPath = selectedWorkspacePath + '/ELARA.md';
-          const cleanContent = content.replace(/^```\w*\n?/, '').replace(/\n?```$/, '');
-          await window.api.commands.writeFile(elaraPath, cleanContent);
-          return 'Successfully wrote to ELARA.md';
-        }
-        case 'replace_in_file_elara': {
-          const { diff } = args;
-          if (!diff) return 'Error: diff is required.';
-          const elaraPath = selectedWorkspacePath + '/ELARA.md';
-          try {
-            const oldContent = await window.api.commands.readFile(elaraPath);
-            const newContent = applyDiff(oldContent, diff);
-            await window.api.commands.writeFile(elaraPath, newContent);
-            return 'Successfully updated ELARA.md';
-          } catch {
-            return 'Error: ELARA.md not found. Use write_to_file_elara to create it first.';
-          }
         }
         default:
           return `Error: Unknown tool ${tagName}`;
@@ -730,7 +546,6 @@ export const usePlaygroundLogic = ({
     thinkingEnabled,
     searchEnabled,
     agentMode,
-    indexingEnabled,
     attachments,
     tokenCount,
     accumulatedUsage,
@@ -754,7 +569,6 @@ export const usePlaygroundLogic = ({
       thinkingEnabled,
       searchEnabled,
       agentMode,
-      indexingEnabled,
       attachments,
       tokenCount,
       accumulatedUsage,
@@ -1069,22 +883,6 @@ export const usePlaygroundLogic = ({
       if (messages.length === 0 && !overrideContent) {
         let contextSection = '';
         let agentPrompt = '';
-
-        if (indexingEnabled) {
-          // Read ELARA.md content
-          const elaraContent = await readElaraContent();
-
-          // Search for relevant files
-          const relevantFiles = await searchRelevantFiles(finalInput);
-
-          if (elaraContent.trim()) {
-            contextSection += `\n\n## ELARA.md (Project Context)\n\`\`\`\n${elaraContent}\n\`\`\``;
-          }
-
-          if (relevantFiles.length > 0) {
-            contextSection += `\n\n## Relevant Files (from codebase index)\n${relevantFiles.map((f) => `- ${f}`).join('\n')}`;
-          }
-        }
 
         if (agentMode) {
           // Get language name for prompt
@@ -1445,8 +1243,6 @@ export const usePlaygroundLogic = ({
     setSearchEnabled,
     agentMode,
     setAgentMode,
-    indexingEnabled,
-    setIndexingEnabled,
     selectedWorkspacePath,
     handleSelectWorkspace,
     attachments,
@@ -1486,7 +1282,5 @@ export const usePlaygroundLogic = ({
         localStorage.removeItem('elara_preferred_language');
       }
     },
-    indexingStatus,
-    handleStartIndexing,
   };
 };

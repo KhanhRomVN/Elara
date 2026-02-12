@@ -25,20 +25,13 @@ Toàn bộ dữ liệu nằm tại thư mục gốc của người dùng:
 
 ```
 ~/.context_tool_data/
-├── root.json                # [CORE] File Index quản lý danh sách Project (O(1) Lookup)
-├── global_config.json       # Cấu hình chung (API Keys, Theme, Sync Settings)
-├── worker_queue/            # Folder chứa file lock/queue tạm cho Background Worker
+├── global_rules.md          # [NEW] Quy tắc chung của user, dùng cho toàn bộ dự án
 └── projects/                # Nơi chứa dữ liệu thực tế của từng Project
-    ├── <project_hash_id_1>/ # ID = MD5(AbsolutePath)
-    │   ├── db/
-    │   │   ├── codebase.lance      # [Layer 1] Codebase Brain: Vector + Metadata
-    │   │   ├── codebase_graph.json # [Layer 1] Codebase Brain: Graph Relationship
-    │   │   └── user_memory.lance   # [Layer 2] User Heart: Facts & Preferences
-    │   ├── active_session/
-    │   │   ├── current_summary.md  # [Layer 2] Context ngắn hạn
-    │   │   ├── chat_log.json       # Raw logs
-    │   │   └── active_tasks.json   # Auto-detected Tasks
-    │   └── archives/               # Lưu trữ session cũ
+    ├── workspace_rules.md  # Quy tắc riêng (long context) cho workspace này
+    ├── workspace.md        # Thông tin cơ bản dự án
+    ├── <hash>_<conv_id>_<ts>.json         # Chat log (Max 30)
+    └── <hash>_<conv_id>_<ts>_summary.md   # Tóm tắt riêng cho session đó
+    └── ...
     └── ...
 ```
 
@@ -46,37 +39,11 @@ Toàn bộ dữ liệu nằm tại thư mục gốc của người dùng:
 
 ## 2. Các Thành Phần Cốt Lõi (Core Components)
 
-Hệ thống được tổ chức thành 3 lớp (Layers) chính, kết hợp sức mạnh của Vector Search và Graph Relationship:
+Hệ thống được tổ chức thành 3 lớp (Layers) chính, kết hợp sức mạnh của Vector Search:
 
-### 2.1 Layer 1: Codebase Brain (Xương Sống - Cognee Style)
+### 2.1 Layer 1: Codebase Brain (Vector Search)
 
-_Mục tiêu: Hiểu sâu cấu trúc mã nguồn tĩnh (Static Analysis)._
-
-- **Graph-based Indexing**:
-  - Thay vì chỉ lưu văn bản, hệ thống lưu **Nodes** (File, Class, Function) và **Edges** (Imports, Calls, Inherits).
-  - Sử dụng `ts-morph` (TypeScript) hoặc `Tree-sitter` để trích xuất cấu trúc này _trước khi_ embedding.
-  - **Lợi ích**: Hỗ trợ Deep Retrieval (Ví dụ: Tìm tất cả hàm gọi đến `AuthService.login`) chính xác hơn vector search thuần túy.
-- **Pipeline Xử Lý**:
-  - `Ingestion` -> `Static Analysis` -> `Graph Extraction` -> `Embedding` -> `Storage`.
-
-### 2.2 Layer 2: User Heart (Trái Tim - Mem0 Style)
-
-_Mục tiêu: Cá nhân hóa và học hỏi từ người dùng (Dynamic Context)._
-
-- **Fact Extraction (Trích Xuất Sự Kiện)**:
-  - Background Worker sử dụng LLM nhỏ để trích xuất "Facts" từ hội thoại thay vì lưu raw text.
-  - Ví dụ: User chat "Đừng dùng arrow function ở đây", hệ thống lưu Fact: `preference: no_arrow_function_in_context`.
-- **Memory Lifecycle**:
-  - Tự động **Add/Update/Delete** facts dựa trên độ mới và độ mâu thuẫn của thông tin.
-- **Hybrid Search**:
-  - Khi Query, hệ thống tìm kiếm song song: `Codebase Brain` (Kiến thức dự án) + `User Heart` (Sở thích/Context User) -> Tổng hợp câu trả lời.
-
-### 2.3 Layer 3: Interaction Face (Giao Diện - Memora Style)
-
-_Mục tiêu: Trực quan hóa và Bảo mật._
-
-- **Visualization**: Tích hợp server nội bộ hiển thị Graph dự án (`ctx visualize`).
-- **Security**: Tự động Redact (che) API Key/Secret bằng Regex trước khi lưu vào DB.
+_Mục tiêu: Hiểu sâu dự án thông qua phân tích mã nguồn._
 
 ---
 
@@ -107,9 +74,9 @@ Trước khi Index, tool sẽ đọc thử file để kiểm tra:
 - **Kiểm tra Minified**: Nếu tỷ lệ (Số ký tự / Số dòng) quá lớn (ví dụ: 1 dòng dài > 3000 ký tự) -> Coi là Minified Code -> **Bỏ qua**.
 - **Kiểm tra Size**: File > 1MB (Text Code hiếm khi lớn hơn mức này) -> **Bỏ qua**.
 
-#### Lớp 4: Centralized Config
+#### Lớp 4: Centralized Skip List (Optional)
 
-Nếu muốn ignore thêm, User cấu hình trong `~/.context_tool_data/root.json`.
+Nếu muốn bỏ qua thêm các folder cụ thể cho toàn bộ dự án, User cấu hình trong file `global_rules.md`.
 
 ---
 
@@ -122,58 +89,42 @@ Thay vì chờ hết token mới tóm tắt (dễ gây lỗi mất dữ liệu),
 3.  **Background Worker**:
     - Lấy job từ Queue.
     - Dùng một **Small Model** (Gemini Flash / Gemma 2B) để đọc hội thoại vừa rồi.
-    - **Update Summary**: Cập nhật file `current_summary.md`.
-    - **Update Tasks**: Đánh dấu task trong `active_tasks.json` là hoàn thành/đang làm.
-    - **Fact Extraction**: Trích xuất thông tin mới (Facts) -> Lưu vào `user_memory.lance` (User Heart).
+    - **Update Summary**: Tạo file tóm tắt `<hash>_<conv_id>_<ts>_summary.md` cho phiên làm việc.
+    - **Save History**: Lưu trữ raw messages vào `<hash>_<conv_id>_<ts>.json`.
 
 ### 3.3 Context Rolling (Cuộn Ngữ Cảnh)
 
 Giải quyết giới hạn 50K token hoặc khi đổi Model:
 
 1.  **Trigger**: Token count > Limit HOẶC User đổi Model.
-2.  **Reset**: Xóa sạch `chat_log.json` (Raw text).
-3.  **Inject**: Khởi tạo phiên mới với Context đầu vào là `current_summary.md`.
+2.  **Restart**: Bắt đầu một session mới với file `<ts>.json` mới.
+3.  **Inject**: Khởi tạo phiên mới sử dụng nội dung từ file `_summary.md` gần nhất làm ngữ cảnh đầu vào.
 
 ---
 
-## 4. Đặc Tả `root.json` (Project Registry)
+---
 
-File này giúp hệ thống khởi động cực nhanh (O(1) Access).
+## 4. Metadata & Rules (Quy chuẩn)
 
-```json
-{
-  "version": "1.0",
-  "projects": [
-    {
-      "id": "a1b2c3...",
-      "name": "SuperApp",
-      "path": "/home/user/super-app",
-      "lastUsed": 1716200000000,
-      "stats": { "files": 150, "contextSize": 12000 },
-      "indexing": {
-        "exclude": ["src/legacy/**"] // Cấu hình ignore tại đây
-      }
-    }
-  ]
-}
-```
+Hệ thống sử dụng các file Markdown để quản lý quy tắc và thông tin dự án thay vì file JSON phức tạp:
+
+- **global_rules.md**: Chứa các quy tắc coding tiêu chuẩn áp dụng cho mọi dự án.
+- **workspace_rules.md**: Chứa các quy tắc riêng biệt, các thư viện đặc thù hoặc phong cách code của riêng dự án đó.
+- **workspace.md**: Chứa mô tả tổng quan về dự án, mục tiêu dự án và chức năng của các thư mục quan trọng.
 
 ---
 
 ## 5. Công Nghệ Đề Xuất (Recommended Tech Stack)
 
-| Thành Phần          | Công Nghệ / Thư Viện      | Lý Do                                           |
-| :------------------ | :------------------------ | :---------------------------------------------- |
-| **Language**        | **TypeScript (Node.js)**  | Hệ sinh thái mạnh, dễ maintain.                 |
-| **Embedding**       | **Gemini Output API**     | Chất lượng cao, chi phí thấp/free.              |
-| **Vector DB**       | **LanceDB** (Node)        | Serverless, chạy file local, nhanh hơn SQLite.  |
-| **Graph DB**        | **Adjacency List (JSON)** | Lite Graph, không cần setup Neo4j phức tạp.     |
-| **Static Analysis** | **ts-morph**              | Phân tích mã nguồn TypeScript (AST) chính xác.  |
-| **Visualization**   | **vis-network**           | Vẽ biểu đồ tương tác trên trình duyệt.          |
-| **Queue**           | **FastQ** / **BullMQ**    | Quản lý Worker xử lý background.                |
-| **File Watcher**    | **Chokidar**              | Theo dõi thay đổi file code.                    |
-| **Binary Check**    | **isbinaryfile**          | Thư viện NodeJS kiểm tra file binary heuristic. |
-| **CLI Framework**   | **Commander.js**          | Xây dựng giao diện dòng lệnh.                   |
+| Thành Phần        | Công Nghệ / Thư Viện     | Lý Do                                           |
+| :---------------- | :----------------------- | :---------------------------------------------- |
+| **Language**      | **TypeScript (Node.js)** | Hệ sinh thái mạnh, dễ maintain.                 |
+| **Embedding**     | **Gemini Output API**    | Chất lượng cao, chi phí thấp/free.              |
+| **Vector DB**     | **LanceDB** (Node)       | Serverless, chạy file local, nhanh hơn SQLite.  |
+| **Queue**         | **FastQ** / **BullMQ**   | Quản lý Worker xử lý background.                |
+| **File Watcher**  | **Chokidar**             | Theo dõi thay đổi file code.                    |
+| **Binary Check**  | **isbinaryfile**         | Thư viện NodeJS kiểm tra file binary heuristic. |
+| **CLI Framework** | **Commander.js**         | Xây dựng giao diện dòng lệnh.                   |
 
 ---
 
@@ -189,3 +140,9 @@ File này giúp hệ thống khởi động cực nhanh (O(1) Access).
     - Worker ngầm tóm tắt hội thoại -> Update Summary.
     - Index code mới nếu User sửa file.
 5.  **Finish**: Khi tắt, mọi thứ đã được lưu. Không cần thao tác "Save".
+
+---
+
+## 7. Phụ Lục: Dữ Liệu Mẫu (Sample Content)
+
+(Đã xóa các nội dung mẫu file .md riêng lẻ để chuyển sang cơ chế lưu trữ theo session)
