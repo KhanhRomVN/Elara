@@ -203,12 +203,20 @@ export function setupWorkspaceHandlers() {
     return await gitService.getDiffNumStat(repoPath);
   });
 
+  ipcMain.handle('git:diff', async (_, repoPath: string, staged: boolean = false) => {
+    return await gitService.getDiff(repoPath, staged);
+  });
+
   ipcMain.handle('git:add', async (_, repoPath: string, files: string[]) => {
     return await gitService.add(repoPath, files);
   });
 
   ipcMain.handle('git:commit', async (_, repoPath: string, message: string) => {
     return await gitService.commit(repoPath, message);
+  });
+
+  ipcMain.handle('git:push', async (_, repoPath: string) => {
+    return await gitService.push(repoPath);
   });
 
   // Watcher Handlers

@@ -7,7 +7,8 @@
     "is_search": false,
     "is_upload": false,
     "auth_method": ["google"],
-    "is_temperature": false
+    "is_temperature": false,
+    "connection_mode": "https_spoofing"
   },
   {
     "provider_id": "claude",
@@ -31,7 +32,8 @@
         "is_thinking": false,
         "context_length": null
       }
-    ]
+    ],
+    "connection_mode": "https_spoofing"
   },
   {
     "provider_id": "cohere",
@@ -41,7 +43,8 @@
     "is_search": false,
     "is_upload": false,
     "auth_method": ["basic"],
-    "is_temperature": true
+    "is_temperature": true,
+    "connection_mode": "https_spoofing"
   },
   {
     "provider_id": "deepseek",
@@ -59,7 +62,8 @@
         "is_thinking": true,
         "context_length": null
       }
-    ]
+    ],
+    "connection_mode": "https_spoofing"
   },
   {
     "provider_id": "gemini",
@@ -89,7 +93,8 @@
         "is_thinking": false,
         "context_length": null
       }
-    ]
+    ],
+    "connection_mode": "https_spoofing"
   },
   {
     "provider_id": "groq",
@@ -99,7 +104,8 @@
     "is_search": false,
     "is_upload": false,
     "auth_method": ["basic"],
-    "is_temperature": false
+    "is_temperature": false,
+    "connection_mode": "https_spoofing"
   },
   {
     "provider_id": "huggingchat",
@@ -109,7 +115,8 @@
     "is_search": false,
     "is_upload": false,
     "auth_method": ["basic"],
-    "is_temperature": false
+    "is_temperature": false,
+    "connection_mode": "https_spoofing"
   },
   {
     "provider_id": "kimi",
@@ -119,7 +126,8 @@
     "is_search": false,
     "is_upload": false,
     "auth_method": ["basic"],
-    "is_temperature": false
+    "is_temperature": false,
+    "connection_mode": "https_spoofing"
   },
   {
     "provider_id": "lmarena",
@@ -129,7 +137,8 @@
     "is_search": false,
     "is_upload": false,
     "auth_method": ["basic"],
-    "is_temperature": false
+    "is_temperature": false,
+    "connection_mode": "https_spoofing"
   },
   {
     "provider_id": "mistral",
@@ -139,7 +148,8 @@
     "is_search": false,
     "is_upload": false,
     "auth_method": ["basic"],
-    "is_temperature": false
+    "is_temperature": false,
+    "connection_mode": "https_spoofing"
   },
   {
     "provider_id": "perplexity",
@@ -149,7 +159,8 @@
     "is_search": false,
     "is_upload": false,
     "auth_method": ["basic"],
-    "is_temperature": false
+    "is_temperature": false,
+    "connection_mode": "https_spoofing"
   },
   {
     "provider_id": "qwen",
@@ -159,7 +170,8 @@
     "is_search": false,
     "is_upload": false,
     "auth_method": ["basic", "google"],
-    "is_temperature": false
+    "is_temperature": false,
+    "connection_mode": "https_spoofing"
   },
   {
     "provider_id": "qwq",
@@ -169,7 +181,8 @@
     "is_search": false,
     "is_upload": false,
     "auth_method": [],
-    "is_temperature": false
+    "is_temperature": false,
+    "connection_mode": "https_spoofing"
   },
   {
     "provider_id": "stepfun",
@@ -179,7 +192,8 @@
     "is_search": false,
     "is_upload": false,
     "auth_method": ["basic"],
-    "is_temperature": false
+    "is_temperature": false,
+    "connection_mode": "https_spoofing"
   },
   {
     "provider_id": "cerebras",
@@ -189,7 +203,8 @@
     "is_search": false,
     "is_upload": false,
     "auth_method": ["basic", "google"],
-    "is_temperature": true
+    "is_temperature": false,
+    "connection_mode": "https_spoofing"
   },
   {
     "provider_id": "googlestudio",
@@ -199,6 +214,18 @@
     "is_search": false,
     "is_upload": true,
     "auth_method": ["google"],
-    "is_temperature": true
+    "is_temperature": false,
+    "connection_mode": "https_spoofing"
+  },
+  {
+    "provider_id": "z",
+    "provider_name": "Z",
+    "is_enabled": true,
+    "website": "https://chat.z.ai/",
+    "is_search": false,
+    "is_upload": false,
+    "auth_method": ["google", "basic"],
+    "is_temperature": false,
+    "connection_mode": "headless_browser"
   }
 ]

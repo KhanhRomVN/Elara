@@ -35,6 +35,15 @@ interface WelcomeScreenProps {
   onToggleSettings?: () => void;
   onNavigateToSettings?: () => void;
   availableWorkspaces?: any[];
+  isMentionOpen?: boolean;
+  setIsMentionOpen?: (val: boolean) => void;
+  mentionSearch?: string;
+  mentionIndex?: number;
+  mentionOptions?: any[];
+  mentionMode?: 'initial' | 'file' | 'folder' | 'mcp' | 'skill';
+  handleSelectMention?: (option: any) => void;
+  selectedMentions?: any[];
+  removeMention?: (id: string) => void;
 }
 
 export const WelcomeScreen = ({
@@ -70,6 +79,15 @@ export const WelcomeScreen = ({
   onToggleSettings,
   onNavigateToSettings,
   availableWorkspaces,
+  isMentionOpen,
+  setIsMentionOpen,
+  mentionSearch,
+  mentionIndex,
+  mentionOptions,
+  mentionMode,
+  handleSelectMention,
+  selectedMentions,
+  removeMention,
 }: WelcomeScreenProps) => {
   return (
     <div className="h-full flex flex-col items-center justify-center text-center space-y-6 animate-in fade-in zoom-in-95 duration-500">
@@ -117,6 +135,14 @@ export const WelcomeScreen = ({
           onToggleSettings={onToggleSettings}
           onNavigateToSettings={onNavigateToSettings}
           availableWorkspaces={availableWorkspaces}
+          isMentionOpen={isMentionOpen}
+          setIsMentionOpen={setIsMentionOpen}
+          mentionSearch={mentionSearch}
+          mentionMode={mentionMode}
+          mentionOptions={mentionOptions}
+          handleSelectMention={handleSelectMention}
+          selectedMentions={selectedMentions}
+          removeMention={removeMention}
         />
       </div>
     </div>

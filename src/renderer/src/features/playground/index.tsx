@@ -64,13 +64,11 @@ export const PlaygroundPage = ({
     providerModelsList,
     groqSettings,
     setGroqSettings,
-    history,
-    handleSend,
-    handleStop,
     handleInput,
     handleKeyDown,
+    handleSend,
+    handleStop,
     startNewChat,
-    loadConversation,
     providersList,
     streamEnabled,
     setStreamEnabled,
@@ -91,6 +89,17 @@ export const PlaygroundPage = ({
     setActivePreviewFile,
     previewFiles,
     setPreviewFiles,
+    selectedQuickModel,
+    setSelectedQuickModel,
+    isMentionOpen,
+    setIsMentionOpen,
+    mentionSearch,
+    mentionIndex,
+    mentionOptions,
+    mentionMode,
+    selectedMentions,
+    removeMention,
+    handleSelectMention,
   } = usePlaygroundLogic({ activeTab, activeTabId, onUpdateTab });
 
   const { setIsMainSidebarCollapsed } = useUI();
@@ -114,6 +123,58 @@ export const PlaygroundPage = ({
 
   // Git Status
   const { gitStatus, diffStats } = useGitStatus(selectedWorkspacePath);
+  const [generatedCommitMessage, setGeneratedCommitMessage] = useState<string | null>(null);
+  const [isPushing, setIsPushing] = useState(false);
+
+  // Extract commit msg when assistant responds
+  useEffect(() => {
+    if (messages.length > 0 && !isStreaming) {
+      const lastMsg = messages[messages.length - 1];
+      const prevMsg = messages.length > 1 ? messages[messages.length - 2] : null;
+
+      if (
+        lastMsg.role === 'assistant' &&
+        prevMsg?.role === 'user' &&
+        prevMsg.content.includes(COMMIT_MESSAGE_PROMPT)
+      ) {
+        // Find markdown code block
+        const match = lastMsg.content.match(/```(?:[a-zA-Z]*)?\n([\s\S]*?)\n```/);
+        if (match) {
+          setGeneratedCommitMessage(match[1].trim());
+        }
+      }
+    }
+  }, [messages, isStreaming]);
+
+  // Reset preview state when workspace changes
+  useEffect(() => {
+    if (selectedWorkspacePath) {
+      console.log('[Playground] Workspace changed, resetting preview state');
+      setPreviewFiles({});
+      setActivePreviewFile(null);
+      setGeneratedCommitMessage(null);
+    }
+  }, [selectedWorkspacePath]);
+
+  const handleGitPush = async (message: string) => {
+    if (!selectedWorkspacePath) return;
+    setIsPushing(true);
+    try {
+      toast.loading('Committing and pushing...', { id: 'git-push' });
+      await window.api.git.commit(selectedWorkspacePath, message);
+      await window.api.git.push(selectedWorkspacePath);
+      toast.success('Successfully pushed changes!', { id: 'git-push' });
+      setGeneratedCommitMessage(null);
+    } catch (error: any) {
+      console.error('Git Push failed:', error);
+      toast.error('Push Error', {
+        id: 'git-push',
+        description: error.message || 'Failed to push changes.',
+      });
+    } finally {
+      setIsPushing(false);
+    }
+  };
 
   const startResizingSidebar = (e: React.MouseEvent) => {
     setIsResizing('sidebar');
@@ -157,6 +218,7 @@ export const PlaygroundPage = ({
     const correctLanguage = LANGUAGE_MAP[ext] || ext || 'text';
 
     if (previewFiles[file.path]) {
+      console.log('[Playground] File already open, switching tab:', file.path);
       // Fix persisted language if it's wrong (e.g. 'py' instead of 'python')
       if (previewFiles[file.path].language !== correctLanguage) {
         setPreviewFiles((prev: any) => ({
@@ -167,6 +229,8 @@ export const PlaygroundPage = ({
       setActivePreviewFile(file.path);
       return;
     }
+
+    console.log('[Playground] Opening new file:', file.path);
 
     try {
       const fullPath = `${selectedWorkspacePath}/${file.path}`;
@@ -188,19 +252,63 @@ export const PlaygroundPage = ({
   };
 
   const handleClosePreviewTab = (path: string) => {
+    const filePaths = Object.keys(previewFiles);
+    const currentIndex = filePaths.indexOf(path);
+
+    if (activePreviewFile === path) {
+      if (filePaths.length > 1) {
+        const nextPath = filePaths[currentIndex + 1] || filePaths[currentIndex - 1];
+        setActivePreviewFile(nextPath);
+      } else {
+        setActivePreviewFile(null);
+      }
+    }
+
     setPreviewFiles((prev: any) => {
       const newFiles = { ...prev };
       delete newFiles[path];
       return newFiles;
     });
-    if (activePreviewFile === path) {
-      setActivePreviewFile(null);
-    }
   };
 
-  const handleGitCommit = () => {
-    handleInput({ target: { value: COMMIT_MESSAGE_PROMPT } } as any);
-    // Focus input? InputArea handles focus usually.
+  const handleGitCommit = async () => {
+    if (!selectedWorkspacePath) return;
+
+    try {
+      toast.loading('Preparing Git changes...', { id: 'git-commit' });
+
+      // 1. Git Add .
+      await window.api.git.add(selectedWorkspacePath, ['.']);
+
+      // 2. Get staged diff
+      const diff = await window.api.git.diff(selectedWorkspacePath, true);
+
+      if (!diff) {
+        toast.error('No changes to commit', { id: 'git-commit' });
+        return;
+      }
+
+      // 3. Prepare AI Prompt
+      const fullPrompt = `${COMMIT_MESSAGE_PROMPT}\n\nHere are the staged changes:\n\`\`\`diff\n${diff}\n\`\`\``;
+
+      // 4. Start New Chat & Send
+      startNewChat();
+
+      // We need a small delay or use a more robust way to ensure startNewChat finished state updates
+      // However, handleSend usually uses the current state.
+      // In usePlaygroundLogic, handleSend uses messages from state.
+      // Since startNewChat is sync (it just sets state), we can call handleSend.
+      setTimeout(() => {
+        handleSend(fullPrompt);
+        toast.success('Generating commit message...', { id: 'git-commit' });
+      }, 0);
+    } catch (error: any) {
+      console.error('Git Commit Automation failed:', error);
+      toast.error('Git Error', {
+        id: 'git-commit',
+        description: error.message || 'Failed to automate git commit.',
+      });
+    }
   };
 
   useEffect(() => {
@@ -234,6 +342,24 @@ export const PlaygroundPage = ({
     };
   }, [isResizing]);
 
+  const handleFileContentChange = (path: string, content: string) => {
+    setPreviewFiles((prev: any) => ({
+      ...prev,
+      [path]: { ...prev[path], content },
+    }));
+    // Auto-save to disk
+    if (selectedWorkspacePath) {
+      const fullPath = `${selectedWorkspacePath}/${path}`;
+      window.api.commands.writeFile(fullPath, content).catch((err: any) => {
+        console.error('Failed to save file:', err);
+      });
+    }
+  };
+
+  const handleUpdateCommitMessage = (message: string) => {
+    setGeneratedCommitMessage(message);
+  };
+
   const filteredAccounts = selectedProvider
     ? accounts.filter((acc) => acc.provider_id.toLowerCase() === selectedProvider.toLowerCase())
     : [];
@@ -250,19 +376,16 @@ export const PlaygroundPage = ({
             sidebarWidth={sidebarWidth}
             selectedProvider={selectedProvider}
             providersList={providersList}
-            history={history}
             activeChatId={activeChatId}
             startNewChat={startNewChat}
-            loadConversation={loadConversation}
             account={account || undefined}
             groqSettings={groqSettings}
             setGroqSettings={setGroqSettings}
             taskProgress={taskProgress}
           />
         </div>
-        {/* Resizer Handle */}
         <div
-          className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50 transition-colors z-10"
+          className="absolute top-0 right-0 w-1 h-full cursor-col-resize bg-primary/10 hover:bg-primary/50 transition-colors z-10"
           onMouseDown={startResizingSidebar}
         />
       </div>
@@ -278,9 +401,8 @@ export const PlaygroundPage = ({
             diffStats={diffStats}
             onFileSelect={handleOpenPreviewFile}
           />
-          {/* Resizer Handle */}
           <div
-            className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50 transition-colors z-10"
+            className="absolute top-0 right-0 w-1 h-full cursor-col-resize bg-primary/10 hover:bg-primary/50 transition-colors z-10"
             onMouseDown={startResizingTreeView}
           />
         </div>
@@ -313,9 +435,14 @@ export const PlaygroundPage = ({
                 onCloseTab={handleClosePreviewTab}
                 onSetActiveTab={setActivePreviewFile}
                 width={previewPanelWidth}
+                commitMessage={generatedCommitMessage}
+                onPush={handleGitPush}
+                isPushing={isPushing}
+                onFileContentChange={handleFileContentChange}
+                onCommitMessageChange={handleUpdateCommitMessage}
               />
               <div
-                className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50 transition-colors z-10"
+                className="absolute top-0 right-0 w-1 h-full cursor-col-resize bg-primary/10 hover:bg-primary/50 transition-colors z-10"
                 onMouseDown={startResizingPreview}
               />
             </div>
@@ -451,6 +578,14 @@ export const PlaygroundPage = ({
                 }
                 onToggleSettings={() => setIsSettingsOpen(!isSettingsOpen)}
                 onNavigateToSettings={() => navigate('/settings')}
+                isMentionOpen={isMentionOpen}
+                setIsMentionOpen={setIsMentionOpen}
+                mentionSearch={mentionSearch}
+                mentionMode={mentionMode}
+                mentionOptions={mentionOptions}
+                handleSelectMention={handleSelectMention}
+                selectedMentions={selectedMentions}
+                removeMention={removeMention}
               />
             ) : (
               <>
@@ -566,6 +701,19 @@ export const PlaygroundPage = ({
                   }
                   onToggleSettings={() => setIsSettingsOpen(!isSettingsOpen)}
                   onGitCommit={handleGitCommit}
+                  isGitRepo={gitStatus.isRepo}
+                  selectedQuickModel={selectedQuickModel}
+                  onQuickModelSelect={setSelectedQuickModel}
+                  providersList={providersList}
+                  accounts={accounts}
+                  isMentionOpen={isMentionOpen}
+                  setIsMentionOpen={setIsMentionOpen}
+                  mentionSearch={mentionSearch}
+                  mentionMode={mentionMode}
+                  mentionOptions={mentionOptions}
+                  handleSelectMention={handleSelectMention}
+                  selectedMentions={selectedMentions}
+                  removeMention={removeMention}
                 />
               </>
             )}

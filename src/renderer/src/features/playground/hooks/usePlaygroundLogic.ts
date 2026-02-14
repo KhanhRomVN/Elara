@@ -1,18 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  Message,
-  Account,
-  PendingAttachment,
-  ConversationTab,
-  FunctionParams,
-  HistoryItem,
-} from '../types';
+import { Message, Account, PendingAttachment, ConversationTab, FunctionParams } from '../types';
 import { fetchProviders } from '../../../config/providers';
-import {
-  getHistoryEndpoint,
-  getConversationDetailEndpoint,
-  parseConversationList,
-} from '../utils/conversation-utils';
+
 import { getCachedModels, fetchAndCacheModels } from '../../../utils/model-cache';
 import { combinePrompts } from '../prompts';
 import { FuzzyMatcher } from '../../../utils/FuzzyMatcher';
@@ -52,10 +41,12 @@ export const usePlaygroundLogic = ({
     current: {
       taskName: string;
       tasks: { text: string; status: 'todo' | 'done' }[];
+      files: string[];
     } | null;
     history: {
       taskName: string;
       tasks: { text: string; status: 'todo' | 'done' }[];
+      files: string[];
     }[];
   }>(() => activeTab?.taskProgress || { current: null, history: [] });
 
@@ -65,6 +56,23 @@ export const usePlaygroundLogic = ({
   const [previewFiles, setPreviewFiles] = useState<Record<string, any>>(
     () => activeTab?.previewFiles || {},
   );
+
+  // Quick Model Switcher State
+  const [selectedQuickModel, setSelectedQuickModel] = useState<{
+    providerId: string;
+    modelId: string;
+    accountId?: string;
+  } | null>(null);
+
+  // Mention Dropdown State
+  const [isMentionOpen, setIsMentionOpen] = useState(false);
+  const [mentionSearch, setMentionSearch] = useState('');
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const [mentionOptions, setMentionOptions] = useState<any[]>([]);
+  const [mentionMode, setMentionMode] = useState<'initial' | 'file' | 'folder' | 'mcp' | 'skill'>(
+    'initial',
+  );
+  const [selectedMentions, setSelectedMentions] = useState<any[]>([]);
 
   // Note: Persist functionality is now handled by the parent PlaygroundWithTabs
   // via the tabs array and onUpdateTab callback. We remove the individual
@@ -83,8 +91,11 @@ export const usePlaygroundLogic = ({
       return;
     }
 
-    const allSessions: { taskName: string; tasks: { text: string; status: 'todo' | 'done' }[] }[] =
-      [];
+    const allSessions: {
+      taskName: string;
+      tasks: { text: string; status: 'todo' | 'done' }[];
+      files: string[];
+    }[] = [];
 
     assistantMessages.forEach((msg) => {
       const content = msg.content;
@@ -105,12 +116,19 @@ export const usePlaygroundLogic = ({
             });
           }
 
-          if (tasks.length > 0) {
+          const files: string[] = [];
+          const fileRegex = /<task_file>([\s\S]*?)<\/task_file>/g;
+          let fMatch;
+          while ((fMatch = fileRegex.exec(block)) !== null) {
+            files.push(fMatch[1].trim());
+          }
+
+          if (tasks.length > 0 || files.length > 0) {
             const existingIdx = allSessions.findIndex((s) => s.taskName === taskName);
             if (existingIdx !== -1) {
-              allSessions[existingIdx] = { taskName, tasks };
+              allSessions[existingIdx] = { taskName, tasks, files };
             } else {
-              allSessions.push({ taskName, tasks });
+              allSessions.push({ taskName, tasks, files });
             }
           }
         });
@@ -269,15 +287,6 @@ export const usePlaygroundLogic = ({
       },
   );
 
-  const [history, setHistory] = useState<HistoryItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('elara_playground_history_cache');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-
   const parseTagArguments = (tagContent: string) => {
     const args: Record<string, string> = {};
     const tagRegex = /<(\w+)>([\s\S]*?)<\/\1>/g;
@@ -286,6 +295,11 @@ export const usePlaygroundLogic = ({
       args[match[1]] = match[2].trim();
     }
     return args;
+  };
+
+  const estimateTokens = (text: string): number => {
+    if (!text) return 0;
+    return Math.ceil(text.length / 4);
   };
 
   const applyDiff = (content: string, diff: string): string => {
@@ -939,35 +953,6 @@ export const usePlaygroundLogic = ({
     fetchModels();
   }, [selectedProvider, providersList]);
 
-  // Fetch History
-  useEffect(() => {
-    const fetchHistory = async () => {
-      if (!selectedProvider || !selectedAccount) {
-        setHistory([]);
-        return;
-      }
-      const acc = accounts.find((a) => a.id === selectedAccount);
-      if (!acc) return;
-
-      try {
-        const status = await window.api.server.start();
-        const port = status.port || 11434;
-        // Use new unified endpoint with accountId
-        const endpoint = getHistoryEndpoint(selectedProvider, port, acc.id);
-        const response = await fetch(`${endpoint}?page=1&limit=30`);
-        if (response.ok) {
-          const result = await response.json();
-          // New API returns { data: { conversations: [...] } }
-          const conversations = result.data?.conversations || [];
-          setHistory(parseConversationList(conversations));
-        }
-      } catch (error) {
-        console.error('History fetch error', error);
-      }
-    };
-    fetchHistory();
-  }, [selectedProvider, selectedAccount, accounts]);
-
   // Input Token Count
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -981,13 +966,119 @@ export const usePlaygroundLogic = ({
     return () => clearTimeout(timer);
   }, [input, selectedProvider, providerModels]);
 
+  useEffect(() => {
+    if (!isMentionOpen || !selectedWorkspacePath) {
+      setMentionOptions([]);
+      setMentionMode('initial');
+      return;
+    }
+
+    const fetchMentionResults = async () => {
+      try {
+        const results: any[] = [];
+        const normalizedSearch = mentionSearch.toLowerCase();
+
+        if (mentionMode === 'initial' && !mentionSearch) {
+          setMentionOptions([]);
+          return;
+        }
+
+        // 1. Search Files & Folders
+        if (
+          (mentionMode === 'file' || mentionMode === 'folder' || mentionMode === 'initial') &&
+          selectedWorkspacePath
+        ) {
+          try {
+            // Use the same tree as FileTreeView for consistency and performance
+            // @ts-ignore
+            const tree = await window.api.workspaces.getTree(selectedWorkspacePath);
+
+            const flattenAndFilter = (entries: any[]) => {
+              entries.forEach((entry) => {
+                const isMatch =
+                  !mentionSearch || entry.name.toLowerCase().includes(mentionSearch.toLowerCase());
+
+                if (isMatch) {
+                  if (mentionMode === 'file' && !entry.isDirectory) {
+                    results.push({
+                      id: `ws-${entry.path}`,
+                      label: entry.path,
+                      type: 'File',
+                    });
+                  } else if (mentionMode === 'folder' && entry.isDirectory) {
+                    results.push({
+                      id: `ws-${entry.path}`,
+                      label: entry.path,
+                      type: 'Folder',
+                    });
+                  } else if (mentionMode === 'initial') {
+                    results.push({
+                      id: `ws-${entry.path}`,
+                      label: entry.path,
+                      type: entry.isDirectory ? 'Folder' : 'File',
+                    });
+                  }
+                }
+
+                if (entry.children && entry.children.length > 0) {
+                  flattenAndFilter(entry.children);
+                }
+              });
+            };
+
+            flattenAndFilter(tree);
+          } catch (err) {
+            console.error('Failed to fetch workspace tree for mentions:', err);
+          }
+        }
+
+        // 2. Search MCP
+        if (mentionMode === 'mcp' || mentionMode === 'initial') {
+          const mcpList = ['GitHub', 'Slack', 'Linear', 'Database'];
+          mcpList.forEach((mcp) => {
+            if (!normalizedSearch || mcp.toLowerCase().includes(normalizedSearch)) {
+              results.push({ id: `mcp-${mcp}`, label: mcp, type: 'MCP' });
+            }
+          });
+        }
+
+        // 3. Search Skills
+        if (mentionMode === 'skill' || mentionMode === 'initial') {
+          const skillList = ['CodeInterpreter', 'WebSearch', 'ImageGen'];
+          skillList.forEach((skill) => {
+            if (!normalizedSearch || skill.toLowerCase().includes(normalizedSearch)) {
+              results.push({ id: `skill-${skill}`, label: skill, type: 'Skill' });
+            }
+          });
+        }
+
+        // Sort by relevance (shortest name first for now)
+        results.sort((a, b) => a.label.length - b.label.length);
+
+        setMentionOptions(results.slice(0, 30));
+      } catch (err) {
+        console.error('Mention search error:', err);
+      }
+    };
+
+    const timer = setTimeout(fetchMentionResults, mentionSearch ? 200 : 0);
+    return () => clearTimeout(timer);
+  }, [mentionSearch, isMentionOpen, selectedWorkspacePath, mentionMode]);
+
   const handleSend = async (
     overrideContent?: string,
     hiddenContent?: string,
     uiHidden?: boolean,
   ) => {
     const finalInput = overrideContent ?? input;
-    if (!finalInput.trim()) return;
+    if (!finalInput.trim() && selectedMentions.length === 0) return;
+
+    // Append mentions to the input content
+    const mentionContext =
+      selectedMentions.length > 0
+        ? `\n\nMentions context:\n${selectedMentions.map((m) => `- ${m.path}`).join('\n')}`
+        : '';
+    const finalInputWithMentions = finalInput + mentionContext;
 
     if (!selectedProvider) {
       console.warn('[Chat] No provider selected');
@@ -1022,7 +1113,7 @@ export const usePlaygroundLogic = ({
     const userMessage: Message = {
       id: crypto.randomUUID(),
       role: 'user',
-      content: finalInput,
+      content: finalInputWithMentions,
       hiddenText: hiddenContent,
       uiHidden: uiHidden,
       timestamp: new Date(),
@@ -1035,6 +1126,7 @@ export const usePlaygroundLogic = ({
     if (!overrideContent) {
       setInput('');
       setAttachments([]);
+      setSelectedMentions([]);
     }
     setLoading(true);
 
@@ -1067,6 +1159,12 @@ export const usePlaygroundLogic = ({
 
       // Helper to get model ID for providers without explicit state
       const getProviderModel = (providerId: string): string => {
+        if (
+          selectedQuickModel &&
+          selectedQuickModel.providerId.toLowerCase() === providerId.toLowerCase()
+        ) {
+          return selectedQuickModel.modelId;
+        }
         const id = providerModels[providerId.toLowerCase()];
         if (id) return id;
         const cached = getCachedModels(providerId);
@@ -1074,8 +1172,10 @@ export const usePlaygroundLogic = ({
       };
 
       // Build first message content with codebase context if enabled
-      let firstMessageContent = hiddenContent ?? finalInput;
-      if (messages.length === 0 && !overrideContent) {
+      let firstMessageContent = hiddenContent ?? finalInputWithMentions;
+      const forceContextInjection = !!selectedQuickModel;
+
+      if ((messages.length === 0 && !overrideContent) || forceContextInjection) {
         let contextSection = '';
         let agentPrompt = '';
 
@@ -1141,9 +1241,35 @@ export const usePlaygroundLogic = ({
                         cwd: selectedWorkspacePath,
                       },
                     });
+
+                    // 5. Inject Summary Context
+                    // @ts-ignore
+                    const summary = await window.api.workspaces.getSummary?.(wsId, activeChatId);
+                    if (summary) {
+                      contextSection += `\n\n## Conversation Summary (summary.md)\n\`\`\`\n${summary}\n\`\`\``;
+                    }
                   } catch (err) {
-                    console.error('Failed to create session file:', err);
+                    console.error('Failed to create/get session info:', err);
                   }
+                }
+
+                // 6. Inject Task Progress (History + Current) in Markdown format
+                const formatTP = (tp: any) => {
+                  if (!tp) return '';
+                  let md = `### ${tp.taskName}\n`;
+                  tp.tasks.forEach((t: any) => {
+                    md += `- [${t.status === 'done' ? 'x' : ' '}] ${t.text}\n`;
+                  });
+                  return md;
+                };
+
+                const historyMd = taskProgress.history.map(formatTP).join('\n');
+                const currentMd = formatTP(taskProgress.current);
+                const allTasksMd = [historyMd, currentMd].filter(Boolean).join('\n');
+
+                const hasTodoTasks = taskProgress.current?.tasks.some((t) => t.status === 'todo');
+                if (allTasksMd && (hasTodoTasks || !!selectedQuickModel)) {
+                  contextSection += `\n\n## TASK\n${allTasksMd}`;
                 }
               }
             } catch (e) {
@@ -1153,7 +1279,14 @@ export const usePlaygroundLogic = ({
         }
 
         if (agentPrompt || contextSection) {
-          firstMessageContent = `${agentPrompt}${contextSection}\n\n## User Request\n${finalInput}`;
+          const fullContent = `${agentPrompt}${contextSection}\n\n## User Request\n${finalInput}`;
+          firstMessageContent = fullContent;
+
+          // Critical Fix: Persist context in message state specifically for the first message
+          // so it is included in subsequent requests' history.
+          setMessages((prev) =>
+            prev.map((m) => (m.id === userMessage.id ? { ...m, hiddenText: fullContent } : m)),
+          );
         }
       }
 
@@ -1172,22 +1305,46 @@ export const usePlaygroundLogic = ({
         }
       }
 
+      // Estimate input tokens
+      const currentInputTokens =
+        inputTokenCount > 0
+          ? inputTokenCount
+          : estimateTokens(JSON.stringify(messages) + firstMessageContent);
+
+      console.log(
+        '[TokenDebug] currentInputTokens:',
+        currentInputTokens,
+        'inputTokenCount:',
+        inputTokenCount,
+      );
+
+      const targetProviderId =
+        selectedQuickModel?.providerId || account?.provider_id || selectedProvider;
+      const targetAccountId = selectedQuickModel?.accountId || account?.id || null;
+      const targetModelId = getProviderModel(targetProviderId);
+
       const response = await fetch(url, {
         signal: controller.signal,
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          modelId: getProviderModel(account?.provider_id || selectedProvider),
-          providerId: account?.provider_id || selectedProvider,
-          accountId: account?.id || null,
+          modelId: targetModelId,
+          providerId: targetProviderId,
+          accountId: targetAccountId,
           messages: [
-            ...messages.map((m) => ({ role: m.role, content: m.hiddenText ?? m.content })),
+            ...(selectedQuickModel
+              ? []
+              : messages.map((m) => ({ role: m.role, content: m.hiddenText ?? m.content }))),
             {
               role: 'user',
               content: firstMessageContent,
             },
           ],
-          conversationId: activeChatId && activeChatId !== 'new-session' ? activeChatId : '',
+          conversationId: selectedQuickModel
+            ? ''
+            : activeChatId && activeChatId !== 'new-session'
+              ? activeChatId
+              : '',
           stream: streamEnabled,
           search: searchEnabled,
           ref_file_ids: uploadedFileIds,
@@ -1210,6 +1367,9 @@ export const usePlaygroundLogic = ({
 
       setMessages((prev) => [...prev, assistantMessage]);
       setLoading(false);
+
+      let accumulatedContent = '';
+      let accumulatedMetadata: any = {};
 
       if (streamEnabled) {
         // Handle streaming response
@@ -1240,6 +1400,7 @@ export const usePlaygroundLogic = ({
 
                 // Handle content chunk: { content: "..." }
                 if (parsed.content) {
+                  accumulatedContent += parsed.content;
                   setMessages((prev) =>
                     prev.map((m) =>
                       m.id === assistantMessageId
@@ -1265,6 +1426,7 @@ export const usePlaygroundLogic = ({
 
                 // Handle metadata: { meta: { conversation_id, conversation_title, thinking_elapsed } }
                 if (parsed.meta) {
+                  accumulatedMetadata = { ...accumulatedMetadata, ...parsed.meta };
                   if (parsed.meta.conversation_id) {
                     setActiveChatId(parsed.meta.conversation_id);
                   }
@@ -1272,7 +1434,16 @@ export const usePlaygroundLogic = ({
                     setConversationTitle(parsed.meta.conversation_title);
                   }
                   if (parsed.meta.total_token !== undefined) {
-                    setTokenCount(parsed.meta.total_token);
+                    // Logic fix: Ensure total_token doesn't drop below input tokens
+                    // Some providers might return only output usage in stream
+                    const reportedTotal = parsed.meta.total_token;
+                    const currentOutput = estimateTokens(accumulatedContent);
+                    console.log('[TokenDebug] Stream meta:', {
+                      reportedTotal,
+                      currentOutput,
+                      currentInputTokens,
+                    });
+                    setTokenCount(Math.max(reportedTotal, currentInputTokens + currentOutput));
                   }
                   if (parsed.meta.accountId && !selectedAccount) {
                     setSelectedAccount(parsed.meta.accountId);
@@ -1298,6 +1469,7 @@ export const usePlaygroundLogic = ({
         // Handle non-streaming response
         const result = await response.json();
         if (result.success && result.message) {
+          accumulatedContent = result.message.content;
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantMessageId ? { ...m, content: result.message.content } : m,
@@ -1305,6 +1477,7 @@ export const usePlaygroundLogic = ({
           );
         }
         if (result.metadata) {
+          accumulatedMetadata = result.metadata;
           if (result.metadata.conversation_id) {
             setActiveChatId(result.metadata.conversation_id);
           }
@@ -1320,45 +1493,55 @@ export const usePlaygroundLogic = ({
         }
       }
 
-      // Fetch updated title if still "New Chat"
+      // Calculate and report metrics
+      const finalInputTokens = currentInputTokens;
+      const finalOutputTokens = estimateTokens(accumulatedContent);
+      // Prefer provider metadata if available and reasonable
+      const providerTotal = accumulatedMetadata?.total_token || 0;
+      const totalTokens = Math.max(providerTotal, finalInputTokens + finalOutputTokens);
+
+      console.log('[TokenDebug] Final Metrics:', {
+        finalInputTokens,
+        finalOutputTokens,
+        providerTotal,
+        totalTokens,
+        accumulatedMetadata,
+      });
+
+      // Report to backend
+      if (account) {
+        try {
+          const metricsUrl = `${baseUrl}/v1/stats/metrics`;
+          fetch(metricsUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              account_id: account.id,
+              provider_id: account.provider_id,
+              model_id: getProviderModel(account.provider_id),
+              conversation_id: activeChatId, // Session ID is updated during stream
+              total_tokens: totalTokens,
+              timestamp: Date.now(),
+            }),
+          }).catch((err) => console.error('Failed to report metrics', err));
+        } catch (e) {
+          console.error('Error reporting metrics', e);
+        }
+      }
+
+      // Fetch updated title if still "New Chat" (REMOVED HISTORY FETCH)
       if (
         !conversationTitle ||
         conversationTitle === 'New Chat' ||
         conversationTitle === 'Untitled'
       ) {
-        try {
-          const providerId = account?.provider_id || selectedProvider;
-          const accountId = account?.id || 'public'; // Fallback for no-auth providers
-
-          const endpoint = getHistoryEndpoint(providerId, port || 11434, accountId);
-          const historyRes = await fetch(`${endpoint}?page=1&limit=30`);
-          if (historyRes.ok) {
-            const resultData = await historyRes.json();
-            const conversations = resultData.data?.conversations || resultData;
-            const historyList = parseConversationList(conversations);
-            const currentConvId = activeChatId;
-            let targetChat = currentConvId ? historyList.find((c) => c.id === currentConvId) : null;
-            if (!targetChat && historyList.length > 0) {
-              targetChat = historyList[0];
-            }
-            if (targetChat && targetChat.title && targetChat.title !== 'New Chat') {
-              setConversationTitle(targetChat.title);
-              if (!activeChatId || activeChatId === 'new-session') {
-                setActiveChatId(targetChat.id);
-              }
-            }
-          }
-        } catch (e) {
-          console.error('Failed to update title', e);
-        }
+        // Logic to update title from history removed
       }
     } catch (error) {
       if (
         error instanceof Error &&
         (error.name === 'AbortError' || error.message.includes('aborted'))
       ) {
-        setLoading(false);
-        setIsStreaming(false);
         return;
       }
       console.error('Failed to send message:', error);
@@ -1369,8 +1552,12 @@ export const usePlaygroundLogic = ({
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
+    } finally {
       setLoading(false);
       setIsStreaming(false);
+      if (selectedQuickModel) {
+        setSelectedQuickModel(null);
+      }
     }
   };
 
@@ -1382,90 +1569,142 @@ export const usePlaygroundLogic = ({
     executedTagsRef.current.clear();
   };
 
-  const loadConversation = async (conversationId: string) => {
-    try {
-      const account = accounts.find((a) => a.id === selectedAccount);
-      if (!account) return;
-      const status = await window.api.server.start();
-      const port = status.port || 11434;
-
-      const endpoint = getConversationDetailEndpoint(port, account.id, conversationId);
-
-      const response = await fetch(endpoint);
-      if (response.ok) {
-        const json = await response.json();
-        if (!json.success || !json.data) {
-          throw new Error(json.message || 'Failed to load conversation details');
-        }
-
-        const data = json.data;
-        const title = data.conversation_title || 'Untitled';
-        const messagesData = data.messages || [];
-
-        setConversationTitle(title);
-        if (data.total_token !== undefined) {
-          setTokenCount(data.total_token);
-        }
-        if (data.temperature !== undefined) {
-          setTemperature(data.temperature);
-        }
-
-        const formattedMessages: Message[] = messagesData.map((m: any) => {
-          let timestamp = m.created_at || m.timestamp || Date.now();
-          if (typeof timestamp === 'number' && timestamp < 10000000000) {
-            timestamp *= 1000;
-          }
-
-          return {
-            id:
-              m.uuid ||
-              m.message_id ||
-              m.id ||
-              window.crypto?.randomUUID?.() ||
-              Math.random().toString(36).substring(2),
-            role: m.role?.toLowerCase() === 'assistant' ? 'assistant' : 'user',
-            content: m.content || m.text || '',
-            timestamp: new Date(timestamp),
-          };
-        });
-
-        setMessages(formattedMessages);
-        setActiveChatId(conversationId);
-
-        // Auto-detect Agent Mode
-        const agentToolTags = [
-          'read_file',
-          'replace_in_file',
-          'write_to_file',
-          'list_file',
-          'list_files',
-          'execute_command',
-          'search_files',
-        ];
-        const hasAgentTools = formattedMessages.some((m) =>
-          agentToolTags.some((tag) => m.content.includes(`<${tag}`)),
-        );
-        setAgentMode(hasAgentTools);
-      }
-    } catch (e) {
-      console.error('Failed to load conversation', e);
-    }
-  };
-
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const target = e.target;
     target.style.height = 'auto';
     const maxHeight = 240;
     const newHeight = Math.min(target.scrollHeight, maxHeight);
     target.style.height = `${newHeight}px`;
-    setInput(target.value);
+    const newValue = target.value;
+    setInput(newValue);
+
+    // Mention detection logic
+    if (agentMode) {
+      const cursorPosition = target.selectionStart;
+      const textUntilCursor = newValue.slice(0, cursorPosition);
+      const mentionMatch = textUntilCursor.match(/(^|\s)@(\w*)$/);
+
+      if (mentionMatch) {
+        setIsMentionOpen(true);
+        setMentionSearch(mentionMatch[2]);
+        setMentionIndex(0);
+      } else {
+        setIsMentionOpen(false);
+      }
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (isMentionOpen) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const total = mentionSearch || mentionMode !== 'initial' ? mentionOptions.length : 4;
+        setMentionIndex((prev) => (prev + 1) % Math.max(1, total));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const total = mentionSearch || mentionMode !== 'initial' ? mentionOptions.length : 4;
+        setMentionIndex((prev) => (prev - 1 + total) % Math.max(1, total));
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const options =
+          mentionSearch || mentionMode !== 'initial'
+            ? mentionOptions
+            : [
+                { id: 'file', label: 'File', type: 'File' },
+                { id: 'folder', label: 'Folder', type: 'Folder' },
+                { id: 'mcp', label: 'MCP', type: 'MCP' },
+                { id: 'skill', label: 'Skill', type: 'Skill' },
+              ];
+        if (options[mentionIndex]) {
+          handleSelectMention(options[mentionIndex]);
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        setIsMentionOpen(false);
+        setMentionMode('initial');
+        return;
+      }
+      if (e.key === 'Backspace' && !mentionSearch && mentionMode !== 'initial') {
+        setMentionMode('initial');
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const handleSelectMention = (option: any) => {
+    // If selecting a category in initial mode, transition to search mode for that category
+    if (mentionMode === 'initial' && !mentionSearch) {
+      if (option.id === 'file') {
+        setMentionMode('file');
+        setMentionIndex(0);
+        return;
+      }
+      if (option.id === 'folder') {
+        setMentionMode('folder');
+        setMentionIndex(0);
+        return;
+      }
+      if (option.id === 'mcp') {
+        setMentionMode('mcp');
+        setMentionIndex(0);
+        return;
+      }
+      if (option.id === 'skill') {
+        setMentionMode('skill');
+        setMentionIndex(0);
+        return;
+      }
+    }
+
+    const targetInput = document.querySelector('textarea');
+    if (!targetInput) return;
+
+    const cursorPosition = targetInput.selectionStart;
+    const textUntilCursor = input.slice(0, cursorPosition);
+    const textAfterCursor = input.slice(cursorPosition);
+
+    const mentionRegex = /@\w*$/;
+
+    if (option.type === 'File' || option.type === 'Folder') {
+      // Add to selected mentions instead of inserting text
+      const newMention = {
+        id: option.id || `${option.type}-${option.label}-${Date.now()}`,
+        label: option.label,
+        type: option.type,
+        path: option.path || option.label,
+      };
+
+      // Avoid duplicates
+      setSelectedMentions((prev) => {
+        if (prev.some((m) => m.path === newMention.path)) return prev;
+        return [...prev, newMention];
+      });
+
+      // Remove the @mention text from input
+      const newInput = textUntilCursor.replace(mentionRegex, '') + textAfterCursor;
+      setInput(newInput);
+    } else {
+      // For MCP/Skill, keep the text behavior for now or handle them as badges too if needed
+      const label = option.label;
+      const newInput = textUntilCursor.replace(mentionRegex, `${label} `) + textAfterCursor;
+      setInput(newInput);
+    }
+
+    setIsMentionOpen(false);
+    setMentionMode('initial');
+
+    // Auto-focus back to textarea
+    setTimeout(() => targetInput.focus(), 0);
   };
 
   return {
@@ -1503,14 +1742,12 @@ export const usePlaygroundLogic = ({
     setStreamEnabled,
     groqSettings,
     setGroqSettings,
-    history,
     handleQuickSelectWorkspace,
     handleSend,
     handleStop,
     handleInput,
     handleKeyDown,
     startNewChat,
-    loadConversation,
     temperature,
     setTemperature,
     language,
@@ -1534,5 +1771,19 @@ export const usePlaygroundLogic = ({
     setActivePreviewFile,
     previewFiles,
     setPreviewFiles,
+    selectedQuickModel,
+    setSelectedQuickModel,
+    isMentionOpen,
+    setIsMentionOpen,
+    mentionSearch,
+    mentionIndex,
+    mentionOptions,
+    mentionMode,
+    selectedMentions,
+    setSelectedMentions,
+    handleSelectMention,
+    removeMention: (id: string) => {
+      setSelectedMentions((prev) => prev.filter((m) => m.id !== id));
+    },
   };
 };

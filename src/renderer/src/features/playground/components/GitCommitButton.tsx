@@ -25,10 +25,10 @@ export const GitCommitButton = ({
 
       // 2. Trigger AI generation
       onGenerateMessage();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Git add failed:', error);
       toast.error('Git Error', {
-        description: 'Failed to stage changes.',
+        description: error.message || 'Failed to stage changes.',
       });
     } finally {
       setLoading(false);

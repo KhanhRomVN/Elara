@@ -29,6 +29,7 @@ export interface Provider {
     max_req_conversation?: number;
     max_token_conversation?: number;
   }[];
+  connection_mode?: string;
 }
 
 const PROVIDERS_URL =

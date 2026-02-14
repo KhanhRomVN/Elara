@@ -13,6 +13,19 @@
   }
 }
 
+@layer components {
+  .code-line-deleted {
+    background-color: rgba(239, 68, 68, 0.1);
+    width: 100% !important;
+    display: inline-block !important;
+  }
+  .code-line-added {
+    background-color: rgba(34, 197, 94, 0.1);
+    width: 100% !important;
+    display: inline-block !important;
+  }
+}
+
 @layer base {
   :root {
     /* DefaultLight Theme Variables */

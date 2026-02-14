@@ -7,6 +7,7 @@ export interface GitStatus {
   conflicted: string[];
   ahead: number;
   behind: number;
+  isRepo: boolean;
 }
 
 export interface DiffStats {
@@ -22,6 +23,7 @@ export const useGitStatus = (workspacePath: string | undefined) => {
     conflicted: [],
     ahead: 0,
     behind: 0,
+    isRepo: false,
   });
   const [diffStats, setDiffStats] = useState<DiffStats>({
     files: {},
@@ -32,6 +34,13 @@ export const useGitStatus = (workspacePath: string | undefined) => {
   const fetchStatus = useCallback(async () => {
     if (!workspacePath) return;
     try {
+      if (!window.api || !window.api.git) {
+        console.warn('[useGitStatus] window.api.git is undefined. Git features will be disabled.', {
+          api: !!window.api,
+          git: !!(window.api && window.api.git),
+        });
+        return;
+      }
       const status = await window.api.git.status(workspacePath);
       // @ts-ignore
       setGitStatus(status);
@@ -50,13 +59,15 @@ export const useGitStatus = (workspacePath: string | undefined) => {
     fetchStatus();
 
     // Start watching
-    if (window.api.watcher) {
+    if (window.api && window.api.watcher) {
       window.api.watcher.watch(workspacePath).then(() => setIsWatching(true));
     } else {
       console.warn('Watcher API not available. Restart application required.');
     }
 
     // Listen for watcher events
+    if (!window.api || !window.api.on) return;
+
     const removeListener = window.api.on('watcher:file-change', () => {
       // Debounce simple refresh
       fetchStatus();

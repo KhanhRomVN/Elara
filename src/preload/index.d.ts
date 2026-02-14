@@ -161,6 +161,8 @@ interface API {
     }>;
     add: (repoPath: string, files: string[]) => Promise<void>;
     commit: (repoPath: string, message: string) => Promise<void>;
+    diff: (repoPath: string, staged?: boolean) => Promise<string>;
+    push: (repoPath: string) => Promise<void>;
   };
   watcher: {
     watch: (folderPath: string) => Promise<void>;

@@ -1,3 +1,4 @@
+import { useRef, useEffect } from 'react';
 import { X, Plus } from 'lucide-react';
 import { cn } from '../../../shared/lib/utils';
 import { ConversationTab } from '../types';
@@ -18,11 +19,24 @@ export const TabBar = ({
   onNewTab,
   providersList = [],
 }: TabBarProps) => {
+  const tabRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  useEffect(() => {
+    if (activeTabId && tabRefs.current[activeTabId]) {
+      tabRefs.current[activeTabId]?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'center',
+      });
+    }
+  }, [activeTabId]);
+
   return (
-    <div className="flex items-center h-12 bg-card/30 border-b overflow-x-auto">
+    <div className="flex items-center h-12 bg-card/30 border-b overflow-x-auto no-scrollbar">
       {tabs.map((tab) => (
         <div
           key={tab.id}
+          ref={(el) => (tabRefs.current[tab.id] = el)}
           onClick={() => onTabClick(tab.id)}
           className={cn(
             'group flex items-center gap-1.5 px-3 h-full cursor-pointer select-none transition-all min-w-[120px] max-w-[200px] border-r border-border/50',

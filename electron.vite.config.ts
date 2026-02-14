@@ -4,7 +4,11 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [
+      externalizeDepsPlugin({
+        exclude: ['chokidar', 'ignore'],
+      }),
+    ],
     resolve: {
       alias: {
         '@main': resolve('src/main'),
@@ -18,7 +22,7 @@ export default defineConfig({
           'electron',
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           ...Object.keys(require('./package.json').dependencies || {}).filter(
-            (d) => d !== 'http-mitm-proxy',
+            (d) => d !== 'http-mitm-proxy' && d !== 'chokidar' && d !== 'ignore',
           ),
         ],
       },

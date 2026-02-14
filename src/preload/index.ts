@@ -89,6 +89,8 @@ const api = {
     add: (repoPath: string, files: string[]) => ipcRenderer.invoke('git:add', repoPath, files),
     commit: (repoPath: string, message: string) =>
       ipcRenderer.invoke('git:commit', repoPath, message),
+    diff: (repoPath: string, staged?: boolean) => ipcRenderer.invoke('git:diff', repoPath, staged),
+    push: (repoPath: string) => ipcRenderer.invoke('git:push', repoPath),
   },
   watcher: {
     watch: (folderPath: string) => ipcRenderer.invoke('watcher:watch', folderPath),
@@ -101,9 +103,10 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('electron', electronAPI);
     contextBridge.exposeInMainWorld('api', api);
     console.log('[Preload] APIs exposed to main world (contextIsolated)');
+    console.log('[Preload] API root keys:', Object.keys(api));
     console.log('[Preload] Workspaces API keys:', Object.keys(api.workspaces));
-    console.log('[Preload] Server API keys:', Object.keys(api.server));
-    console.log('[Preload] getTree API exists:', typeof api.workspaces.getTree);
+    console.log('[Preload] Git API keys:', api.git ? Object.keys(api.git) : 'MISSING');
+    console.log('[Preload] Watcher API keys:', api.watcher ? Object.keys(api.watcher) : 'MISSING');
   } catch (error) {
     console.error(error);
   }

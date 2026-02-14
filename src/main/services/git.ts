@@ -9,6 +9,7 @@ export interface GitStatusSummary {
   behind: number;
   current: string;
   tracking: string;
+  isRepo: boolean;
 }
 
 export interface FileDiffStats {
@@ -40,6 +41,7 @@ export class GitService {
           behind: 0,
           current: '',
           tracking: '',
+          isRepo: false,
         };
       }
 
@@ -53,6 +55,7 @@ export class GitService {
         behind: status.behind,
         current: status.current || '',
         tracking: status.tracking || '',
+        isRepo: true,
       };
     } catch (error) {
       console.warn(`Failed to get git status for ${repoPath}:`, error);
@@ -65,25 +68,38 @@ export class GitService {
         behind: 0,
         current: '',
         tracking: '',
+        isRepo: false,
       };
     }
   }
 
   async add(repoPath: string, files: string[] = ['.']): Promise<void> {
     const git = this.getGit(repoPath);
+    if (!(await git.checkIsRepo())) return;
     await git.add(files);
   }
 
   async commit(repoPath: string, message: string): Promise<void> {
     const git = this.getGit(repoPath);
+    if (!(await git.checkIsRepo())) return;
     await git.commit(message);
   }
 
   async getDiffNumStat(repoPath: string): Promise<FileDiffStats> {
     try {
       const git = this.getGit(repoPath);
-      // Get diff of unstaged changes
-      const diffSummary = await git.diffSummary();
+      if (!(await git.checkIsRepo())) {
+        return { files: {}, total: { insertions: 0, deletions: 0 } };
+      }
+
+      // Try to get diff against HEAD to include both staged and unstaged
+      // Fallback to plain diffSummary if HEAD doesn't exist (new repo)
+      let diffSummary;
+      try {
+        diffSummary = await git.diffSummary(['HEAD']);
+      } catch {
+        diffSummary = await git.diffSummary();
+      }
 
       const files: FileDiffStats['files'] = {};
 
@@ -104,11 +120,26 @@ export class GitService {
       };
     } catch (error) {
       console.warn(`Failed to get git diff stats for ${repoPath}:`, error);
-      return {
-        files: {},
-        total: { insertions: 0, deletions: 0 },
-      };
+      return { files: {}, total: { insertions: 0, deletions: 0 } };
     }
+  }
+
+  async getDiff(repoPath: string, staged: boolean = false): Promise<string> {
+    try {
+      const git = this.getGit(repoPath);
+      if (!(await git.checkIsRepo())) return '';
+      const options = staged ? ['--cached'] : [];
+      return await git.diff(options);
+    } catch (error) {
+      console.warn(`Failed to get git diff for ${repoPath}:`, error);
+      return '';
+    }
+  }
+
+  async push(repoPath: string): Promise<void> {
+    const git = this.getGit(repoPath);
+    if (!(await git.checkIsRepo())) return;
+    await git.push();
   }
 }
 

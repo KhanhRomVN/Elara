@@ -45,14 +45,43 @@ const getMonacoLanguage = (extension: string): string => {
   return map[extension.toLowerCase()] || 'plaintext';
 };
 
-const FileHeader: React.FC<{ path: string; label?: string }> = ({ path, label }) => {
+const FileHeader: React.FC<{
+  path: string;
+  label?: string;
+  stats?: { added: number; removed: number };
+}> = ({ path, label, stats }) => {
   const iconPath = getFileIconPath(path);
 
   return (
-    <div className="flex items-center gap-2 px-3 py-2 bg-secondary/30 border-b border-border rounded-t-md text-xs font-medium text-muted-foreground select-none">
-      <img src={iconPath} alt="" className="w-4 h-4 object-contain" />
-      <span className="text-foreground">{path}</span>
-      {label && <span className="ml-auto text-[10px] uppercase tracking-wider">{label}</span>}
+    <div className="flex items-center gap-2 px-3 py-1.5 bg-secondary/20 border-b border-border text-[10px] font-bold text-muted-foreground/70 select-none uppercase tracking-wider">
+      <img src={iconPath} alt="" className="w-3.5 h-3.5 object-contain opacity-70" />
+      <span className="text-foreground/80">{path}</span>
+      {stats && (
+        <div className="flex items-center gap-2 ml-2 text-[9px] font-mono leading-none">
+          <span className="text-green-500">+{stats.added}</span>
+          <span className="text-red-500">-{stats.removed}</span>
+        </div>
+      )}
+      {label && <span className="ml-auto">{label}</span>}
+    </div>
+  );
+};
+
+const ToolActionHeader: React.FC<{ path: string; action: string; dotColor?: string }> = ({
+  path,
+  action,
+  dotColor = 'bg-green-500',
+}) => {
+  const iconPath = getFileIconPath(path);
+
+  return (
+    <div className="flex items-center gap-2 mb-2 text-[13px] font-medium font-mono leading-none">
+      <div className={`w-1.5 h-1.5 rounded-full ${dotColor} flex-shrink-0`} />
+      <span className="text-foreground opacity-80">{action}</span>
+      <div className="inline-flex items-center gap-1.5 py-0.5 text-xs select-none">
+        <img src={iconPath} alt="file" className="w-3.5 h-3.5 object-contain opacity-80" />
+        <span className="text-foreground/90 truncate max-w-[200px]">{path}</span>
+      </div>
     </div>
   );
 };
@@ -185,14 +214,38 @@ export const ReplaceInFileRenderer: React.FC<ReplaceInFileProps> = ({ path, repl
   const extension = path.split('.').pop() || 'plaintext';
   const language = getMonacoLanguage(extension);
 
+  const stats = useMemo(() => {
+    let added = 0;
+    let removed = 0;
+
+    replacements.forEach((chunk) => {
+      const { originalDecorations, replacementDecorations } = computeDiffDecorations(
+        chunk.target,
+        chunk.replacement,
+      );
+
+      originalDecorations.forEach((d) => {
+        removed += d.endLine - d.startLine + 1;
+      });
+
+      replacementDecorations.forEach((d) => {
+        added += d.endLine - d.startLine + 1;
+      });
+    });
+
+    return { added, removed };
+  }, [replacements]);
+
   return (
-    <div className="my-4 border border-border rounded-md overflow-hidden bg-background">
-      <FileHeader path={path} label="Modification" />
-      <FileHeader path={path} label="Modification" />
-      <div className="flex flex-col">
-        {replacements.map((chunk, index) => (
-          <ReplacementChunkRenderer key={index} chunk={chunk} language={language} />
-        ))}
+    <div className="my-4">
+      <ToolActionHeader path={path} action="Edit" dotColor="bg-green-500" />
+      <div className="border border-border rounded-md overflow-hidden bg-background shadow-sm">
+        <FileHeader path={path} label="Modification" stats={stats} />
+        <div className="flex flex-col">
+          {replacements.map((chunk, index) => (
+            <ReplacementChunkRenderer key={index} chunk={chunk} language={language} />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -203,21 +256,23 @@ export const WriteToFileRenderer: React.FC<WriteToFileProps> = ({ path, content 
   const language = getMonacoLanguage(extension);
 
   return (
-    <div className="my-4 border border-border rounded-md overflow-hidden bg-background">
-      <FileHeader path={path} label="Write" />
-      <div className="bg-background">
-        <CodeBlock
-          code={content}
-          language={language}
-          showLineNumbers={true}
-          maxLines={30} // Limit height for large writes
-          disableClick={true}
-          editorOptions={{
-            padding: { top: 8, bottom: 8 },
-            renderLineHighlight: 'none',
-            scrollbar: { vertical: 'hidden', horizontal: 'auto' },
-          }}
-        />
+    <div className="my-4">
+      <ToolActionHeader path={path} action="Create" dotColor="bg-blue-500" />
+      <div className="border border-border rounded-md overflow-hidden bg-background shadow-sm">
+        <FileHeader path={path} label="Write" />
+        <div className="bg-background">
+          <CodeBlock
+            code={content}
+            language={language}
+            showLineNumbers={true}
+            maxLines={30} // Limit height for large writes
+            disableClick={true}
+            editorOptions={{
+              padding: { top: 8, bottom: 8 },
+              renderLineHighlight: 'none',
+            }}
+          />
+        </div>
       </div>
     </div>
   );

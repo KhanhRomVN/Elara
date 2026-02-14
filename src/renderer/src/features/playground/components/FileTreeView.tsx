@@ -58,18 +58,23 @@ export const FileTreeView = ({
     setExpandedFolders(newExpanded);
   };
 
-  const getFileColor = (path: string) => {
+  const getStatusColor = (path: string, isDirectory: boolean) => {
     if (!gitStatus) return '';
-    // Path normalization might be needed depending on OS and scanner output
-    // Scanner outputs relative path like "src/main.ts" or "package.json"
-    // Git status outputs relative path like "src/main.ts"
 
-    // Check exact match
-    if (gitStatus.modified.includes(path) || gitStatus.staged.includes(path))
-      return 'text-yellow-400';
-    if (gitStatus.untracked.includes(path)) return 'text-green-400';
-    if (gitStatus.conflicted.includes(path)) return 'text-red-500';
-    return '';
+    const checkPath = (p: string) => {
+      if (gitStatus.conflicted.some((f) => f === p || (isDirectory && f.startsWith(p + '/'))))
+        return 'text-red-500';
+      if (
+        gitStatus.modified.some((f) => f === p || (isDirectory && f.startsWith(p + '/'))) ||
+        gitStatus.staged.some((f) => f === p || (isDirectory && f.startsWith(p + '/')))
+      )
+        return 'text-yellow-400';
+      if (gitStatus.untracked.some((f) => f === p || (isDirectory && f.startsWith(p + '/'))))
+        return 'text-green-400';
+      return '';
+    };
+
+    return checkPath(path);
   };
 
   const getFileDiff = (path: string) => {
@@ -90,7 +95,7 @@ export const FileTreeView = ({
     if (!isMatch && entry.isDirectory && (!entry.children || entry.children.length === 0))
       return null;
 
-    const fileColor = !entry.isDirectory ? getFileColor(entry.path) : '';
+    const statusColor = getStatusColor(entry.path, entry.isDirectory);
     const diff = !entry.isDirectory ? getFileDiff(entry.path) : null;
 
     return (
@@ -131,17 +136,17 @@ export const FileTreeView = ({
           <span
             className={cn(
               'text-[11px] truncate select-none flex-1',
-              entry.isDirectory ? 'font-bold text-foreground/80' : 'text-muted-foreground',
-              !entry.isDirectory && fileColor,
+              entry.isDirectory ? 'font-bold' : 'text-muted-foreground',
+              statusColor || (entry.isDirectory ? 'text-foreground/80' : ''),
             )}
           >
             {entry.name}
           </span>
 
           {diff && (
-            <span className="text-[9px] font-mono opacity-70 ml-1 flex items-center gap-0.5">
-              {diff.insertions > 0 && <span className="text-green-500">+{diff.insertions}</span>}
-              {diff.deletions > 0 && <span className="text-red-500">-{diff.deletions}</span>}
+            <span className="text-[9px] font-bold ml-auto flex items-center gap-1 shrink-0 bg-background/50 px-1 rounded border border-border/30">
+              {diff.insertions > 0 && <span className="text-green-500/90">+{diff.insertions}</span>}
+              {diff.deletions > 0 && <span className="text-red-500/90">-{diff.deletions}</span>}
             </span>
           )}
         </div>
@@ -159,7 +164,7 @@ export const FileTreeView = ({
     <div className={cn('flex flex-col h-full bg-card/20 border-r overflow-hidden', className)}>
       <div className="h-12 px-3 border-b border-border/50 bg-secondary/10 flex items-center justify-between shrink-0">
         <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground truncate flex-1">
-          {workspacePath.split('/').pop() || 'Explorer'}
+          {workspacePath.split(/[/\\]/).pop() || 'Explorer'}
         </h3>
         <button
           onClick={fetchTree}

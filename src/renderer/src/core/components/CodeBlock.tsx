@@ -46,9 +46,11 @@ interface CodeBlockProps {
   editorOptions?: any; // Additional Monaco editor options
   disableClick?: boolean; // New prop to disable interaction
   decorations?: CodeBlockDecoration[];
+  id?: string; // For logging/debugging
 }
 
 const CodeBlock: React.FC<CodeBlockProps> = ({
+  id,
   code,
   language = 'json',
   className,
@@ -69,6 +71,13 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
   const [currentHeight, setCurrentHeight] = useState<number>(0);
   const [editorReady, setEditorReady] = useState(false);
   const decorationIds_ = useRef<string[]>([]);
+  const isProgrammaticChange = useRef(false);
+
+  console.log(`[CodeBlock${id ? `:${id}` : ''}] Render`, {
+    codeLength: code?.length,
+    language,
+    editorReady,
+  });
 
   // Initial estimate to avoid huge layout shift before Monaco loads
   useEffect(() => {
@@ -129,7 +138,15 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
           automaticLayout: true,
           padding: { top: 16, bottom: 16 },
           wordWrap: wordWrap,
+          wrappingStrategy: 'advanced',
+          wrappingIndent: 'same',
           lineNumbers: showLineNumbers ? 'on' : 'off',
+          scrollbar: {
+            horizontal: wordWrap === 'on' ? 'hidden' : 'auto',
+            vertical: 'auto',
+            verticalScrollbarSize: 10,
+            horizontalScrollbarSize: 10,
+          },
           ...editorOptions, // Allow custom options to override defaults
         };
 
@@ -190,7 +207,9 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
 
         if (onChange) {
           editorInstance.current.onDidChangeModelContent(() => {
-            if (mounted) onChange(editorInstance.current.getValue());
+            if (mounted && !isProgrammaticChange.current) {
+              onChange(editorInstance.current.getValue());
+            }
           });
         }
       } catch (error) {
@@ -258,15 +277,27 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
         editorInstance.current.dispose();
       }
     };
-    // Use JSON.stringify for deep comparison of themeConfig/currentPreset to avoid re-init on every render
-  }, [JSON.stringify(themeConfig), currentPreset?.name, language, wordWrap]); // Re-init if config/preset/wrap/language changes
+    // Re-init only when theme or critical layout options change
+  }, [JSON.stringify(themeConfig), currentPreset?.name, wordWrap]);
 
-  // Update value
   useEffect(() => {
-    if (editorInstance.current && editorInstance.current.getValue() !== code) {
-      editorInstance.current.setValue(code);
+    if (editorReady && editorInstance.current) {
+      const currentVal = editorInstance.current.getValue();
+      console.log(`[CodeBlock${id ? `:${id}` : ''}] useEffect Code Update`, {
+        matched: currentVal === code,
+        newCodeLength: code?.length,
+        editorValueLength: currentVal?.length,
+      });
+      if (currentVal !== code) {
+        try {
+          isProgrammaticChange.current = true;
+          editorInstance.current.setValue(code || '');
+        } finally {
+          isProgrammaticChange.current = false;
+        }
+      }
     }
-  }, [code]);
+  }, [code, editorReady, id]);
 
   // Update language dynamically without re-creating editor
   useEffect(() => {
@@ -286,10 +317,14 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
     }
   }, [currentPreset?.name, editorReady]);
 
-  // Update word wrap dynamically
   useEffect(() => {
     if (editorInstance.current) {
-      editorInstance.current.updateOptions({ wordWrap });
+      editorInstance.current.updateOptions({
+        wordWrap,
+        scrollbar: {
+          horizontal: wordWrap === 'on' ? 'hidden' : 'auto',
+        },
+      });
     }
   }, [wordWrap]);
 
@@ -298,7 +333,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
     if (!editorReady || !editorInstance.current || !decorations) return;
 
     // Map props to Monaco decorations
-    const newDecorations = decorations.map((d) => ({
+    const newDecorations = decorations.map((d: CodeBlockDecoration) => ({
       range: new window.monaco.Range(d.startLine, 1, d.endLine, 1),
       options: {
         isWholeLine: d.isWholeLine !== false,

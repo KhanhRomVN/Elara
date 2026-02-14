@@ -300,15 +300,8 @@ export const completionController = async (
         res.write(`event: session_created\ndata: ${sessionId}\n\n`);
       },
       onDone: () => {
-        // Record success
-        const tokens = accumulatedMetadata.total_token || 0;
-        recordSuccess(
-          account.id,
-          account.provider_id,
-          model || 'unknown',
-          tokens,
-          activeConversationId,
-        );
+        // Updated: Logic tính toán token và ghi metrics đã được chuyển về Client
+        // Backend chỉ đóng vai trò forward stream và lưu session
 
         res.write('data: [DONE]\n\n');
         res.end();
@@ -527,23 +520,8 @@ export const sendMessageController = async (
           // Note: added thinking handling for consistency if needed
         },
         onDone: () => {
-          // Record success
-          let tokens = (accumulatedMetadata as any).total_token || 0;
-
-          // Fallback: Calculate tokens manually if provider didn't return usage
-          if (tokens === 0) {
-            const inputTokens = countMessagesTokens(messages);
-            const outputTokens = countTokens(accumulatedContent);
-            tokens = inputTokens + outputTokens;
-          }
-
-          recordSuccess(
-            account.id,
-            account.provider_id,
-            model,
-            tokens,
-            activeConversationId,
-          );
+          // Updated: Logic tính toán token và ghi metrics đã được chuyển về Client
+          // Backend chỉ đóng vai trò forward stream và lưu session
 
           if (stream !== false) {
             res.write('data: [DONE]\n\n');
@@ -593,78 +571,6 @@ export const sendMessageController = async (
     if (!res.headersSent) {
       res.status(500).json({ error: 'Internal server error' });
     }
-  }
-};
-
-// GET /v1/chat/history/:accountId/:conversationId
-export const getChatHistoryController = async (
-  req: Request,
-  res: Response,
-): Promise<void> => {
-  try {
-    const { account_id, conversation_id } = req.params;
-
-    if (!account_id || !conversation_id) {
-      res.status(400).json({
-        success: false,
-        message: 'Missing required parameters: account_id, conversation_id',
-        error: { code: 'INVALID_INPUT' },
-        meta: { timestamp: new Date().toISOString() },
-      });
-      return;
-    }
-
-    // Get account from database (synchronous)
-    const db = getDb();
-    const account = db
-      .prepare('SELECT * FROM accounts WHERE id = ?')
-      .get(account_id) as any;
-
-    if (!account) {
-      res.status(404).json({
-        success: false,
-        message: 'Account not found',
-        error: { code: 'NOT_FOUND' },
-        meta: { timestamp: new Date().toISOString() },
-      });
-      return;
-    }
-
-    try {
-      // Fetch conversation detail from provider
-      const conversation = await getConversationDetail({
-        credential: account.credential,
-        provider_id: account.provider_id,
-        conversationId: conversation_id,
-      });
-
-      res.status(200).json({
-        success: true,
-        message: 'Conversation details retrieved successfully',
-        data: conversation,
-
-        meta: { timestamp: new Date().toISOString() },
-      });
-    } catch (providerError: any) {
-      logger.error(
-        'Error fetching conversation detail from provider',
-        providerError,
-      );
-      res.status(500).json({
-        success: false,
-        message: `Failed to fetch conversation: ${providerError.message}`,
-        error: { code: 'PROVIDER_ERROR' },
-        meta: { timestamp: new Date().toISOString() },
-      });
-    }
-  } catch (error) {
-    logger.error('Error in getChatHistoryController', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      error: { code: 'INTERNAL_ERROR' },
-      meta: { timestamp: new Date().toISOString() },
-    });
   }
 };
 

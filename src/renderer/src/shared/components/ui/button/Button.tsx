@@ -50,9 +50,12 @@ const Button: React.FC<ButtonProps> = ({
 
     if (!icon) return null;
 
-    // Nếu icon là LucideIcon
-    if (typeof icon === 'function') {
-      const IconComponent = icon as LucideIcon;
+    // Nếu icon là LucideIcon hoặc React Component (Function hoặc Object với $$typeof/render)
+    if (
+      typeof icon === 'function' ||
+      (typeof icon === 'object' && icon !== null && (icon as any).$$typeof)
+    ) {
+      const IconComponent = icon as any;
       return <IconComponent size={iconSize} />;
     }
 
@@ -68,7 +71,7 @@ const Button: React.FC<ButtonProps> = ({
           justifyContent: 'center',
         }}
       >
-        {icon}
+        {icon as React.ReactNode}
       </span>
     );
   };

@@ -43,12 +43,6 @@ export interface Account {
   status?: 'Active' | 'Rate Limit' | 'Error';
 }
 
-export interface HistoryItem {
-  id: string;
-  title: string;
-  updated_at: number;
-}
-
 export interface FunctionParams {
   name: string;
   description: string;
@@ -103,10 +97,12 @@ export interface ConversationTab {
     current: {
       taskName: string;
       tasks: { text: string; status: 'todo' | 'done' }[];
+      files: string[];
     } | null;
     history: {
       taskName: string;
       tasks: { text: string; status: 'todo' | 'done' }[];
+      files: string[];
     }[];
   };
   activePreviewFile?: string | null;

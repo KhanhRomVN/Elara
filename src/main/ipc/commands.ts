@@ -105,17 +105,30 @@ export function setupCommandsHandlers(): void {
       const listDir = (dir: string, currentDepth: number): string[] => {
         const results: string[] = [];
         const files = fs.readdirSync(dir);
+        const IGNORE_DIRS = ['node_modules', '.git', 'dist', 'build', '.next', 'out', 'vendor'];
+
         for (const file of files) {
+          if (IGNORE_DIRS.includes(file)) continue;
+
           const fullPath = `${dir}/${file}`;
-          const stat = fs.statSync(fullPath);
-          if (stat.isDirectory()) {
-            results.push(`${fullPath}/`);
-            if (recursive && currentDepth < 5) {
-              results.push(...listDir(fullPath, currentDepth + 1));
+          try {
+            const stat = fs.statSync(fullPath);
+            if (stat.isDirectory()) {
+              results.push(`${fullPath}/`);
+              if (recursive && currentDepth < 3) {
+                // Reduced depth for mention search
+                results.push(...listDir(fullPath, currentDepth + 1));
+              }
+            } else {
+              results.push(fullPath);
             }
-          } else {
-            results.push(fullPath);
+          } catch (e) {
+            // Ignore files that can't be stat-ed (busy, restricted, etc.)
+            continue;
           }
+
+          // Safety limit
+          if (results.length > 500) break;
         }
         return results;
       };

@@ -29,6 +29,8 @@ export interface ProviderConfig {
   color?: string;
   conflict_search_with_upload?: boolean;
   is_temperature?: boolean;
+  models?: any[];
+  connection_mode?: 'https_spoofing' | 'headless_browser';
 }
 
 // Cache for provider data
@@ -91,6 +93,8 @@ export async function fetchProviders(port: number = 11434): Promise<ProviderConf
         color: p.color,
         conflict_search_with_upload: p.conflict_search_with_upload,
         is_temperature: p.is_temperature ?? false,
+        models: p.models,
+        connection_mode: p.connection_mode,
       };
     });
 

@@ -309,10 +309,33 @@ const InlineFolderViewer: React.FC<{
   );
 };
 
+const InlineFileRef: React.FC<{ filePath: string; onClick?: (path: string) => void }> = ({
+  filePath,
+  onClick,
+}) => {
+  const iconPath = getFileIconPath(filePath);
+  return (
+    <span
+      onClick={() => onClick?.(filePath)}
+      className="inline-flex items-center gap-1 mx-0.5 cursor-pointer hover:opacity-70 transition-opacity align-baseline"
+      title={`Open ${filePath}`}
+    >
+      <img src={iconPath} alt="" className="w-3.5 h-3.5 object-contain" />
+      <span className="font-medium underline decoration-border hover:decoration-primary underline-offset-2">
+        {filePath}
+      </span>
+    </span>
+  );
+};
+
 /**
  * Parses markdown content and renders code blocks with syntax highlighting
  */
-export const MessageContent: React.FC<MessageContentProps> = ({ content, workspacePath }) => {
+export const MessageContent: React.FC<MessageContentProps> = ({
+  content,
+  workspacePath,
+  onFileClick,
+}) => {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
   const handleCopy = (code: string, index: number) => {
@@ -336,8 +359,28 @@ export const MessageContent: React.FC<MessageContentProps> = ({ content, workspa
 
   const formatToolCalls = (text: string) => {
     if (!text) return '';
+
+    // console.log('[formatToolCalls] Input:', text);
     let formatted = text;
 
+    // 1. Dọn dẹp các thẻ metadata và toolcalls không cần hiển thị NGAY LẬP TỨC
+    // Bao gồm cả các ký tự xuống dòng xung quanh để tránh tạo khoảng trống lớn
+    formatted = formatted.replace(/\n?\s*<temp\s*>([\s\S]*?)(<\/temp>|$)\s*\n?/gi, '\n');
+    formatted = formatted.replace(/\n?\s*<read_file\s*>([\s\S]*?)(<\/read_file>|$)\s*\n?/gi, '\n');
+    formatted = formatted.replace(
+      /\n?\s*<task_progress\s*>([\s\S]*?)(<\/task_progress>|$)\s*\n?/gi,
+      '\n',
+    );
+    formatted = formatted.replace(
+      /\n?\s*<(task_name|task|task_done)\s*>([\s\S]*?)(<\/\1>|$)\s*\n?/gi,
+      '\n',
+    );
+
+    // 2. Unwrap content tags
+    // Chỉnh sửa để hỗ trợ cả thẻ chưa đóng (cho streaming)
+    formatted = formatted.replace(/<(text|code|language)\s*>([\s\S]*?)(<\/\1>|$)/gi, '$2');
+
+    // 3. Xử lý các tool calls khác
     formatted = formatted.replace(
       /<read_file(?: \/>|\/>|>([\s\S]*?)<\/read_file>)/g,
       (match, inner) => {
@@ -420,20 +463,17 @@ export const MessageContent: React.FC<MessageContentProps> = ({ content, workspa
 
     formatted = formatted.replace(/<tool_result name="(\w+)">([\s\S]*?)<\/tool_result>/g, '');
 
-    formatted = formatted.replace(/<(text|code|language)>([\s\S]*?)<\/\1>/g, '$2');
-
     // Hide any trailing partial/incomplete XML tags during streaming
     // 1. Remove trailing "<tag" or "<tag " (incomplete tag start)
     formatted = formatted.replace(/<[a-zA-Z0-9_]+[^>]*$/g, '');
 
     // 2. Remove trailing "<tag>..." if the closing tag "</tag>" is missing at the end
-    // This uses a backreference to match any tag name and ensure it's not closed
     formatted = formatted.replace(/<([a-zA-Z0-9_]+)>((?!<\/\1>)[\s\S])*$/g, '');
 
-    // Hide metadata tags like <task_progress> and its children from the main chat
-    formatted = formatted.replace(/<task_progress>([\s\S]*?)<\/task_progress>/g, '');
-    formatted = formatted.replace(/<(task_name|task|task_done)>([\s\S]*?)<\/\1>/g, '');
+    // Thu dọn các dòng trống dư thừa (max 2 dòng liên tiếp) và trim
+    formatted = formatted.replace(/\n{3,}/g, '\n\n').trim();
 
+    // console.log('[formatToolCalls] Output:', formatted);
     return formatted;
   };
 
@@ -621,10 +661,10 @@ export const MessageContent: React.FC<MessageContentProps> = ({ content, workspa
       } else if (fullMatch.startsWith('<file>')) {
         const filePath = match[11];
         parts.push(
-          <InlineFileViewer
-            key={`file-${key++}`}
+          <InlineFileRef
+            key={`file-ref-${key++}`}
             filePath={filePath}
-            workspacePath={workspacePath}
+            onClick={workspacePath ? (path) => onFileClick?.(path) : undefined}
           />,
         );
       } else if (fullMatch.startsWith('**')) {
