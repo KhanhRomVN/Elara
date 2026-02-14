@@ -264,14 +264,8 @@ export function AddAccountDialog({
         <div className="flex flex-col space-y-1.5 p-6 pb-4 border-b border-border/50">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Mail className="h-5 w-5 text-primary" />
-              </div>
               <div>
                 <h3 className="font-semibold text-lg tracking-tight">Add New Account</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Select a provider to connect your account
-                </p>
               </div>
             </div>
             <button
@@ -286,7 +280,7 @@ export function AddAccountDialog({
           </div>
         </div>
 
-        <div className="p-6 h-[600px] flex flex-col">
+        <div className="h-[600px] flex flex-col">
           {error && (
             <div className="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 p-3.5 text-destructive animate-in fade-in slide-in-from-top-2 duration-200">
               <div className="flex gap-2 items-center text-sm font-medium">
@@ -303,25 +297,25 @@ export function AddAccountDialog({
               <span className="text-sm text-muted-foreground">Loading providers...</span>
             </div>
           ) : (
-            <div className="flex-1 flex gap-6 overflow-hidden">
+            <div className="flex-1 flex overflow-hidden">
               {/* Providers List - Left Side */}
-              <div className="w-80 overflow-y-auto pr-2 border-r border-border/50 custom-scrollbar">
-                <div className="space-y-2">
+              <div className="w-80 overflow-y-auto border-r border-border/50 custom-scrollbar bg-card/10">
+                <div className="space-y-0 divide-y divide-border/20">
                   {providers.map((p) => (
                     <div
                       key={p.provider_id}
                       onClick={() => p.is_enabled !== false && setProvider(p.provider_id)}
                       className={cn(
-                        'p-3.5 transition-all rounded-lg border cursor-pointer group',
+                        'px-4 py-3 transition-all cursor-pointer group relative',
                         p.is_enabled === false
-                          ? 'opacity-50 grayscale cursor-not-allowed bg-muted/20 border-dashed'
-                          : 'hover:bg-accent/50 hover:border-accent-foreground/20',
+                          ? 'opacity-50 grayscale cursor-not-allowed bg-muted/5'
+                          : 'hover:bg-accent/40',
                         provider === p.provider_id && p.is_enabled !== false
-                          ? 'bg-primary/5 border-primary/30 ring-1 ring-primary/20 shadow-sm'
-                          : 'bg-card/50 border-border/50',
+                          ? 'bg-primary/5 border-l-2 border-primary'
+                          : 'border-l-2 border-transparent',
                       )}
                     >
-                      <div className="flex items-start gap-3">
+                      <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-md overflow-hidden flex items-center justify-center p-0 relative shrink-0 bg-background/50 border border-border/50">
                           <img
                             src={p.icon}
@@ -344,6 +338,11 @@ export function AddAccountDialog({
                                 Soon
                               </span>
                             )}
+                            {p.connection_mode === 'headless_browser' && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-orange-500/10 text-orange-600 dark:text-orange-400 font-medium uppercase tracking-wide border border-orange-200 dark:border-orange-900/50">
+                                Browser
+                              </span>
+                            )}
                           </div>
 
                           {/* Auth Methods Badges */}
@@ -356,26 +355,22 @@ export function AddAccountDialog({
                               let icon: JSX.Element | null = null;
                               const methodStr = String(method);
                               let label = methodStr.charAt(0).toUpperCase() + methodStr.slice(1);
-                              let customStyle = 'bg-muted/50 text-muted-foreground border-muted';
+                              let customStyle = 'bg-input-background text-muted-foreground';
 
                               if (method === 'basic') {
                                 icon = <Mail className="w-3 h-3" />;
-                                if (isSelected)
-                                  customStyle = 'bg-primary/10 text-primary border-primary/30';
+                                if (isSelected) customStyle = 'bg-input-background text-primary';
                               } else if (method === 'google') {
                                 icon = <img src={googleIcon} alt="Google" className="w-3 h-3" />;
                                 if (isSelected)
-                                  customStyle = 'bg-blue-500/10 text-blue-600 border-blue-500/30';
+                                  customStyle =
+                                    'bg-input-background text-blue-600 dark:text-blue-400';
                               } else if (method === 'apple') {
                                 icon = <img src={appleIcon} alt="Apple" className="w-3 h-3" />;
-                                if (isSelected)
-                                  customStyle =
-                                    'bg-foreground/5 text-foreground border-foreground/20';
+                                if (isSelected) customStyle = 'bg-input-background text-foreground';
                               } else if (method === 'github') {
                                 icon = <img src={githubIcon} alt="GitHub" className="w-3 h-3" />;
-                                if (isSelected)
-                                  customStyle =
-                                    'bg-foreground/5 text-foreground border-foreground/20';
+                                if (isSelected) customStyle = 'bg-input-background text-foreground';
                               }
 
                               return (
@@ -391,7 +386,7 @@ export function AddAccountDialog({
                                       : undefined
                                   }
                                   className={cn(
-                                    'flex items-center gap-1 px-2 py-1 rounded-md border text-[10px] font-medium transition-all',
+                                    'flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-all',
                                     isInteractive && 'cursor-pointer hover:bg-accent/50',
                                     customStyle,
                                   )}

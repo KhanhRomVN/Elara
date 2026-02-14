@@ -39,7 +39,7 @@ interface SettingsConfig {
   rerank_enabled: boolean;
 }
 
-type SidebarOption = 'indexing' | 'general';
+type SidebarOption = 'indexing' | 'general' | 'provider';
 
 const SettingsPage = () => {
   const [config, setConfig] = useState<SettingsConfig>({
@@ -278,6 +278,12 @@ const SettingsPage = () => {
   const sidebarItems = [
     { id: 'general' as SidebarOption, label: 'General', icon: Settings, color: '#94a3b8' }, // Slate
     {
+      id: 'provider' as SidebarOption,
+      label: 'Provider',
+      icon: Server,
+      color: '#8b5cf6', // Purple
+    },
+    {
       id: 'indexing' as SidebarOption,
       label: 'Indexing Codebase (Disabled)',
       icon: FolderSearch,
@@ -411,6 +417,33 @@ const SettingsPage = () => {
                       )}
                       {saving ? 'Saving...' : 'Save General Settings'}
                     </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeSection === 'provider' && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-2xl font-bold tracking-tight">Provider Settings</h3>
+                  <p className="text-base text-muted-foreground mt-1">
+                    Configure AI providers and API keys.
+                  </p>
+                </div>
+
+                <div className="p-12 rounded-lg border border-border bg-card/20 flex flex-col items-center justify-center text-center space-y-4">
+                  <Server className="w-16 h-16 text-muted-foreground/30" />
+                  <div>
+                    <h4 className="text-lg font-medium">Coming Soon</h4>
+                    <p className="text-sm text-muted-foreground max-w-md mt-1">
+                      Provider management interface is currently under development. This section
+                      will allow you to configure and manage AI providers, API keys, and model
+                      settings.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground/50 mt-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-yellow-500/50"></div>
+                    <span>Temporary placeholder - full functionality coming soon</span>
                   </div>
                 </div>
               </div>

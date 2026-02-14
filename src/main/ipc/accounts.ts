@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { ipcMain, dialog, app, session } from 'electron';
+import { ipcMain, dialog, app, session, BrowserWindow } from 'electron';
 import { getDb } from '@backend/services/db';
 import fs from 'fs';
 import path from 'path';
@@ -61,28 +61,34 @@ if (!fs.existsSync(DATA_FILE)) {
 import type { Account } from '@backend/types';
 export type { Account };
 
-// REMOVED: Provider modules glob - providers are now handled by backend
-// const providerModulesGlob = import.meta.glob('../server/provider/*/index.ts', { eager: true });
+// Provider Auth Configuration Map - REMOVED (Handled by provider modules)
 
 /**
  * REMOVED: Provider modules are now handled by the backend service
  * This function is kept as a stub to prevent breaking existing code
  */
-async function loadProviderModule(providerId: string): Promise<any | null> {
-  console.warn(
-    `[Accounts] loadProviderModule called for ${providerId} - providers are now handled by backend`,
-  );
-  return null;
-}
+const providerModulesGlob = import.meta.glob('../server/provider/*/index.ts', { eager: true });
 
 /**
- * Get login function from provider module
+ * Dynamically load a provider module from the provider folder (using glob for bundler support)
  */
-function getLoginFunction(providerModule: any): Function | null {
-  // Providers export login as a function
-  if (typeof providerModule.login === 'function') {
-    return providerModule.login;
+async function loadProviderModule(providerId: string): Promise<any | null> {
+  const normalizedId = providerId.toLowerCase();
+  const moduleKey = Object.keys(providerModulesGlob).find((key) => {
+    const parts = key.split('/');
+    const folderName = parts[parts.length - 2];
+    return (
+      folderName.toLowerCase() === normalizedId ||
+      folderName.toLowerCase().replace('-', '') === normalizedId
+    );
+  });
+
+  if (moduleKey) {
+    console.log(`[Accounts] Found provider module for ${providerId}: ${moduleKey}`);
+    return providerModulesGlob[moduleKey];
   }
+
+  console.warn(`[Accounts] No module found for provider: ${providerId}`);
   return null;
 }
 
@@ -114,15 +120,9 @@ export const setupAccountsHandlers = () => {
     return new Promise(async (resolve) => {
       try {
         const normalizedProviderId = providerId.toLowerCase();
-        const partition = `persist:${normalizedProviderId}`;
-        const authSession = session.fromPartition(partition);
-
-        // Clear previous session data
-        await authSession.clearStorageData();
 
         // Special handling for Antigravity (OAuth flow)
         if (normalizedProviderId === 'antigravity') {
-          // Antigravity uses OAuth, handle separately
           resolve({ success: false, error: 'Use antigravity:prepare-oauth instead' });
           return;
         }
@@ -130,46 +130,30 @@ export const setupAccountsHandlers = () => {
         // Load provider module dynamically
         const providerModule = await loadProviderModule(providerId);
 
-        if (!providerModule) {
+        if (!providerModule || typeof providerModule.login !== 'function') {
+          // Fallback or error
+          console.warn(`[Accounts] No login function found for ${providerId} in module`);
           resolve({
             success: false,
-            error: `Provider module not found for: ${providerId}`,
+            error: `Login not supported or module missing for: ${providerId}`,
           });
           return;
         }
 
-        const loginFn = getLoginFunction(providerModule);
+        // Call the provider's login function (which uses loginWithRealBrowser internally)
+        const result = await providerModule.login(options);
 
-        if (!loginFn) {
-          resolve({
-            success: false,
-            error: `Login function not found for provider: ${providerId}`,
-          });
-          return;
+        if (result && result.cookies) {
+          const newAccount: Account = {
+            id: crypto.randomUUID(),
+            provider_id: normalizedProviderId,
+            email: result.email || `${normalizedProviderId}@user.com`,
+            credential: result.cookies,
+          };
+          resolve({ success: true, account: newAccount });
+        } else {
+          resolve({ success: false, error: 'Login failed: No credentials captured' });
         }
-
-        // Call the provider's login function
-        const result = await loginFn(options);
-
-        if (!result || (!result.cookies && !result.credential)) {
-          resolve({
-            success: false,
-            error: `Login failed for ${providerId}: No credentials returned`,
-          });
-          return;
-        }
-
-        // Create account object
-        const newAccount: Account = {
-          id: crypto.randomUUID(),
-          provider_id: normalizedProviderId,
-          email: result.email || `${normalizedProviderId}@user.com`,
-          credential: result.cookies || result.credential,
-        };
-
-        // Do not save automatically anymore. Return to frontend for confirmation.
-        // saveAccount(newAccount);
-        resolve({ success: true, account: newAccount });
       } catch (e: any) {
         console.error(`[Accounts] Login error for ${providerId}:`, e);
         resolve({ success: false, error: e.message || `${providerId} login failed` });

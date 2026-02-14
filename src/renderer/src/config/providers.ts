@@ -57,7 +57,10 @@ export function getFaviconUrl(websiteUrl?: string): string {
 /**
  * Fetch providers from API
  */
-export async function fetchProviders(port: number = 11434): Promise<ProviderConfig[]> {
+/**
+ * Internal helper to fetch from API and update cache
+ */
+async function fetchProvidersFromApi(port: number): Promise<ProviderConfig[]> {
   try {
     const baseUrl = getApiBaseUrl(port);
     const res = await fetch(`${baseUrl}/v1/providers`);
@@ -103,6 +106,25 @@ export async function fetchProviders(port: number = 11434): Promise<ProviderConf
     console.error('[providers] Error fetching providers:', e);
     return cachedProviders || [];
   }
+}
+
+/**
+ * Fetch providers from API with Caching strategy
+ * - Returns cached data immediately if available (stale-while-revalidate)
+ * - Refreshes cache in background
+ */
+export async function fetchProviders(port: number = 11434): Promise<ProviderConfig[]> {
+  // If we have cached data, return it immediately to unblock UI
+  if (cachedProviders && cachedProviders.length > 0) {
+    // Trigger background update
+    fetchProvidersFromApi(port).catch((err) =>
+      console.error('[providers] Background update failed:', err),
+    );
+    return cachedProviders;
+  }
+
+  // First fetch or empty cache - must wait
+  return fetchProvidersFromApi(port);
 }
 
 /**

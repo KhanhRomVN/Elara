@@ -7,8 +7,14 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
-const BACKEND_PORT = 11434;
-const BACKEND_URL = `http://localhost:${BACKEND_PORT}`;
+export let BACKEND_PORT = 11434;
+let BACKEND_URL = `http://localhost:${BACKEND_PORT}`;
+
+export const setBackendPort = (port: number) => {
+  BACKEND_PORT = port;
+  BACKEND_URL = `http://localhost:${BACKEND_PORT}`;
+  console.log(`[IPC] Backend port updated to ${BACKEND_PORT}`);
+};
 
 interface PlatformInfo {
   platform: NodeJS.Platform;

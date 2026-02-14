@@ -9,6 +9,8 @@ import { setupEventHandlers } from './core/events';
 import { setupAccountsHandlers } from './ipc/accounts';
 import { setupServerHandlers } from './ipc/server';
 import { setupAppHandlers } from './ipc/app';
+import { setBackendPort } from './ipc/server';
+import { findAvailablePort } from './utils/port-finder';
 import path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 
@@ -39,10 +41,14 @@ console.log('[Main] Requesting single instance lock...');
 const gotTheLock = app.requestSingleInstanceLock();
 console.log('[Main] Got lock:', gotTheLock);
 
-if (!gotTheLock) {
+if (!gotTheLock && app.isPackaged) {
   console.log('[Main] Another instance is already running - quitting!');
   app.quit();
 } else {
+  if (!gotTheLock) {
+    console.log('[Main] Another instance is running, but in DEV mode. Allowing multi-instance.');
+  }
+
   app.on('second-instance', (_event, _commandLine, _workingDirectory) => {
     // Someone tried to run a second instance, we should focus our window.
     const mainWindow = windowManager.getMainWindow();
@@ -112,7 +118,7 @@ if (!gotTheLock) {
 
     // Start Backend Server
 
-    const startBackend = () => {
+    const startBackend = async () => {
       if (app.isPackaged) {
         // Platform specific binary name
         let backendExecutable = 'server';
@@ -135,6 +141,11 @@ if (!gotTheLock) {
           console.log('[Main] Starting backend with DB path:', dbPath);
           console.log('[Main] Backend CWD:', backendCwd);
 
+          // Find available port
+          const availablePort = await findAvailablePort(11434);
+          console.log(`[Main] Found available port for backend: ${availablePort}`);
+          setBackendPort(availablePort);
+
           // Use spawn directly on the binary
           backendProcess = spawn(backendPath, [], {
             cwd: backendCwd,
@@ -143,7 +154,7 @@ if (!gotTheLock) {
               // Pass any strictly necessary env vars here
               DATABASE_PATH: dbPath,
               // If your backend reads port from env
-              PORT: '11434',
+              PORT: String(availablePort),
             },
             stdio: 'pipe',
           });
@@ -174,6 +185,45 @@ if (!gotTheLock) {
         }
       } else {
         console.log('[Main] Development mode: Backend should be running in a separate terminal.');
+        // In dev mode, we might want to check what port the separate backend is running on,
+        // but typically it's fixed at 11434 or configured via env.
+        // For multi-instance dev, we'd need the external backend to also support dynamic ports,
+        // which is complex.
+        // However, if the USER implies 'npm run dev' runs everything, then we rely near the top
+        // scripts/dev-setup.js to handle things.
+        // BUT, looking at package.json: "dev": "node scripts/dev-setup.js && electron-vite dev"
+        // And "dev:server": "cd backend && npm run dev"
+        // It seems the backend is NOT started by main in dev mode.
+        // If we want multi-count in dev, we should actually be using port finding here too IF we were spawning it.
+        // Since we are NOT spawning it in dev (it's likely separate), we can just set the port to 11434 default,
+        // OR we can try to find where the dev backend is.
+        // ACTUALLY, the request says "npm run dev ... start electron app ... Another instance is already running".
+        // This implies the Electron app itself is conflicting on the single-instance lock.
+        // The backend conflict is a secondary issue if they run "npm run dev:server" separately or if "npm run dev" starts it.
+        // Wait, "npm run dev" -> "electron-vite dev".
+        // "electron-vite dev" usually starts the renderer and main.
+        // Does it start the backend? The logs say "dev server running for the electron renderer process".
+        // The logs do NOT show backend starting in the "npm run dev" output provided in the prompt.
+        // It seems the user might be running backend separately or expecting it to work.
+        // IF the backend is hardcoded to 11434 in dev, multi-instance will clash on backend port if they try to run multiple backends.
+        // But if they just run multiple Electrons connecting to ONE backend, that's fine.
+        // The prompt says "thêm cơ chế trùng port sẽ nhảy sang port + 1".
+        // This likely refers to the ELECTRON APP preventing multiple instances due to the lock,
+        // AND potentially the backend port if it WAS spawned.
+        // Since `startBackend` has an `if (app.isPackaged)` block, it does NOTHING in dev.
+        // So in dev, we just need to bypass the lock (which we did).
+
+        // HOWEVER, if the user WANTS separate backends in dev, they'd need to run separate backend processes.
+        // If they just want multiple windows, bypassing the lock is enough.
+        // Let's assume the user just wants to run the APP multiple times.
+
+        // One detail: The `window.api.server.start` in the renderer (usePlaygroundLogic) calls `ipcMain.handle('server:start')`.
+        // That handler checks `BACKEND_URL`.
+        // In dev, `BACKEND_URL` is 11434.
+        // If we want to support dynamic backend ports in dev (e.g. if the user runs `PORT=11435 npm run dev:server`),
+        // we might need a way to tell the main process which port to use.
+        // For now, let's Stick to the requested task: Multi-instance support.
+        // We've already handled the lock bypass.
       }
     };
 
