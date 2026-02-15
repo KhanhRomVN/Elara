@@ -19,6 +19,15 @@ import { getAccountSelector } from '../services/account-selector';
 import { countTokens, countMessagesTokens } from '../utils/tokenizer';
 
 const logger = createLogger('ChatController');
+const unescapeHtml = (str: string): string => {
+  return str
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'");
+};
 
 // updateModelPerformance: removed
 
@@ -283,7 +292,7 @@ export const completionController = async (
       temperature,
       onContent: (content) => {
         res.write(
-          `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`,
+          `data: ${JSON.stringify({ choices: [{ delta: { content: unescapeHtml(content) } }] })}\n\n`,
         );
       },
       onMetadata: (metadata) => {
@@ -501,7 +510,9 @@ export const sendMessageController = async (
         ref_file_ids,
         onContent: (content) => {
           if (stream !== false) {
-            res.write(`data: ${JSON.stringify({ content })}\n\n`);
+            res.write(
+              `data: ${JSON.stringify({ content: unescapeHtml(content) })}\n\n`,
+            );
           } else {
             accumulatedContent += content;
           }
@@ -532,7 +543,7 @@ export const sendMessageController = async (
                 success: true,
                 message: {
                   role: 'assistant',
-                  content: accumulatedContent,
+                  content: unescapeHtml(accumulatedContent),
                 },
                 metadata: accumulatedMetadata,
               });
@@ -680,7 +691,7 @@ export const claudeMessagesController = async (
             `data: ${JSON.stringify({
               type: 'content_block_delta',
               index: 0,
-              delta: { type: 'text_delta', text: content },
+              delta: { type: 'text_delta', text: unescapeHtml(content) },
             })}\n\n`,
           );
         },
@@ -724,7 +735,7 @@ export const claudeMessagesController = async (
             id: `msg_${crypto.randomUUID()}`,
             type: 'message',
             role: 'assistant',
-            content: [{ type: 'text', text: accumulatedContent }],
+            content: [{ type: 'text', text: unescapeHtml(accumulatedContent) }],
             model: finalModel,
             stop_reason: 'end_turn',
             stop_sequence: null,
