@@ -28,14 +28,14 @@ export const useAgentHistory = (): UseAgentHistoryReturn => {
   const loadSessions = useCallback(async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
       // TODO: Implement actual IPC call to read from context_tool_data
       // This is a placeholder that will be replaced with real implementation
-      
+
       // Attempt to read from context_tool_data directory
       const basePath = 'context_tool_data';
-      
+
       // Mock data for now - will be replaced with actual file system reading
       const mockSessions: AgentSession[] = [
         {
@@ -69,7 +69,7 @@ export const useAgentHistory = (): UseAgentHistoryReturn => {
           files: ['Button.tsx', 'Card.tsx', 'Modal.tsx', 'index.ts']
         },
       ];
-      
+
       setSessions(mockSessions);
     } catch (err: any) {
       console.error('Failed to load agent sessions:', err);
@@ -101,7 +101,7 @@ export const useAgentHistory = (): UseAgentHistoryReturn => {
       // TODO: Implement loading of session content (messages, context, etc.)
       const session = sessions.find(s => s.id === sessionId);
       if (!session) throw new Error('Session not found');
-      
+
       // Placeholder - will be replaced with actual file reading
       return {
         id: sessionId,

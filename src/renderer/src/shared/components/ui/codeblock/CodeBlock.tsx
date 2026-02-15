@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+
 import { CodeBlockProps, CodeBlockContextValue, CodeBlockItem } from './CodeBlock.types';
 import { CodeBlockContext } from './CodeBlockContext';
 import CodeBlockHeader from './CodeBlockHeader';
@@ -52,6 +53,7 @@ const CodeBlock: React.FC<CodeBlockProps> = (props) => {
       return initialItems.map((item, index) => ({
         id: item.id || `code-item-${index}`,
         ...item,
+        code: item.code || '',
       }));
     } else if (code) {
       // Legacy/Single mode

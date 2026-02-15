@@ -28,6 +28,7 @@ interface WelcomeScreenProps {
   setAgentMode?: (enabled: boolean) => void;
   selectedWorkspacePath?: string;
   handleSelectWorkspace?: () => void;
+  handleDeleteWorkspace?: (id: string) => void;
   handleQuickSelectWorkspace?: (path: string) => void;
   temperature?: number;
   setTemperature?: (val: number) => void;
@@ -72,6 +73,7 @@ export const WelcomeScreen = ({
   setAgentMode,
   selectedWorkspacePath,
   handleSelectWorkspace,
+  handleDeleteWorkspace,
   handleQuickSelectWorkspace,
   temperature,
   setTemperature,
@@ -128,6 +130,7 @@ export const WelcomeScreen = ({
           setAgentMode={setAgentMode}
           selectedWorkspacePath={selectedWorkspacePath}
           handleSelectWorkspace={handleSelectWorkspace}
+          handleDeleteWorkspace={handleDeleteWorkspace}
           handleQuickSelectWorkspace={handleQuickSelectWorkspace}
           temperature={temperature}
           setTemperature={setTemperature}

@@ -1,0 +1,249 @@
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __commonJS = (cb, mod) => function __require() {
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+};
+
+// package.json
+var require_package = __commonJS({
+  "package.json"(exports, module) {
+    module.exports = {
+      name: "elara",
+      version: "1.1.12",
+      publishConfig: {
+        access: "public"
+      },
+      description: "AI-powered developer productivity desktop app with CLI integration for commit message generation and more",
+      bin: {
+        elara: "./cli/bin/run.js"
+      },
+      files: [
+        "bin",
+        "src",
+        "resources",
+        "out",
+        "package.json",
+        "electron.vite.config.ts"
+      ],
+      main: "./out/main/index.js",
+      author: "KhanhRomVN",
+      scripts: {
+        dev: "node scripts/dev-setup.js && electron-vite dev",
+        "dev:electron": "node scripts/dev-setup.js && electron-vite dev",
+        "dev:server": "cd backend && npm run dev",
+        "watch:server": "tail -f server.log",
+        "build:backend": "cd backend && npm install && npm run build:bin",
+        build: "npm run build:backend && npm run typecheck && electron-vite build && electron-builder --win --linux",
+        preview: "electron-vite preview",
+        typecheck: "npm run typecheck:node && npm run typecheck:web",
+        "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
+        "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
+        lint: "eslint .",
+        "lint:fix": "eslint . --fix",
+        "lint:security": 'secretlint "**/*"',
+        format: 'prettier --write "src/**/*.{ts,tsx,json,css}"',
+        test: "node scripts/dev-setup.js && electron-vite build --mode development && electron-vite preview",
+        "test:unit": "vitest run",
+        "test:watch": "vitest",
+        "test:coverage": "vitest run --coverage",
+        postinstall: "electron-builder install-app-deps && node scripts/dev-setup.js",
+        "build:all": "npm run build:backend && npm run build",
+        "build:win": "npm run build:backend && npm run typecheck && electron-vite build && electron-builder --win",
+        "build:mac": "npm run build:backend && npm run typecheck && electron-vite build && electron-builder --mac",
+        "build:linux": "npm run build:backend && npm run typecheck && electron-vite build && electron-builder --linux",
+        "build:lite": "npm run build:backend && npm run typecheck && electron-vite build && electron-builder --linux deb --x64",
+        "install-cli": "node scripts/install-cli.js",
+        "uninstall-cli": "node scripts/uninstall-cli.js",
+        "setup-cli": "node scripts/dev-setup.js",
+        prepare: "husky"
+      },
+      dependencies: {
+        "@arcjet/node": "^1.0.0-beta.17",
+        "@electron-toolkit/preload": "^2.0.0",
+        "@electron-toolkit/utils": "^2.0.0",
+        "@monaco-editor/react": "^4.7.0",
+        "@oneidentity/zstd-js": "^1.0.3",
+        "@radix-ui/react-label": "^2.0.2",
+        "@radix-ui/react-slot": "^1.0.2",
+        "@radix-ui/react-tooltip": "^1.2.8",
+        "@rollup/rollup-win32-x64-msvc": "^4.57.1",
+        "@tanstack/query-sync-storage-persister": "^5.90.22",
+        "@tanstack/react-query": "^5.0.0",
+        "@tanstack/react-query-persist-client": "^5.90.22",
+        "@types/better-sqlite3": "^7.6.13",
+        "@types/cors": "^2.8.19",
+        "@types/express": "^5.0.6",
+        "@types/fs-extra": "^11.0.4",
+        "@types/jsonwebtoken": "^9.0.10",
+        "@types/multer": "^2.0.0",
+        "@types/node-fetch": "^2.6.13",
+        "@types/node-forge": "^1.3.14",
+        "@types/tough-cookie": "^4.0.5",
+        "@xenova/transformers": "^2.17.2",
+        "better-sqlite3": "^11.0.0",
+        chokidar: "^5.0.0",
+        "class-variance-authority": "^0.7.0",
+        clsx: "^2.0.0",
+        "cookie-parser": "^1.4.7",
+        cors: "^2.8.5",
+        "country-flag-icons": "^1.6.12",
+        "date-fns": "^4.1.0",
+        "electron-updater": "^6.1.7",
+        express: "^5.2.1",
+        "express-rate-limit": "^8.2.1",
+        "framer-motion": "^12.29.0",
+        "fs-extra": "^11.3.3",
+        "fuse.js": "^7.1.0",
+        helmet: "^8.1.0",
+        "http-mitm-proxy": "^1.1.0",
+        ignore: "^7.0.5",
+        "js-tiktoken": "^1.0.21",
+        jsonwebtoken: "^9.0.3",
+        "lucide-react": "^0.294.0",
+        "monaco-editor": "^0.55.1",
+        mongoose: "^9.1.4",
+        multer: "^2.0.2",
+        "node-fetch": "^2.7.0",
+        "node-forge": "^1.3.3",
+        react: "^18.2.0",
+        "react-dom": "^18.2.0",
+        "react-router-dom": "^6.20.0",
+        reactflow: "^11.11.4",
+        recharts: "^3.6.0",
+        "simple-git": "^3.30.0",
+        sonner: "^2.0.7",
+        "tailwind-merge": "^2.0.0",
+        "tailwindcss-animate": "^1.0.7",
+        "tough-cookie": "^6.0.0",
+        uuid: "^13.0.0",
+        "vscode-icons-js": "^11.6.1",
+        winston: "^3.19.0",
+        zod: "^4.3.5"
+      },
+      devDependencies: {
+        "@electron-toolkit/eslint-config-prettier": "^1.0.1",
+        "@electron-toolkit/eslint-config-ts": "^1.0.0",
+        "@electron-toolkit/tsconfig": "^1.0.1",
+        "@secretlint/secretlint-rule-preset-recommend": "^11.3.0",
+        "@testing-library/jest-dom": "^6.9.1",
+        "@testing-library/react": "^16.3.1",
+        "@types/node": "^20.0.0",
+        "@types/react": "^18.2.0",
+        "@types/react-dom": "^18.2.0",
+        "@vitejs/plugin-react": "^4.2.0",
+        autoprefixer: "^10.4.16",
+        concurrently: "^9.2.1",
+        "cross-env": "^7.0.3",
+        electron: "^28.1.0",
+        "electron-builder": "^24.9.0",
+        "electron-vite": "^2.0.0",
+        eslint: "^8.56.0",
+        "eslint-plugin-react": "^7.33.0",
+        "eslint-plugin-react-hooks": "^4.6.0",
+        "eslint-plugin-react-refresh": "^0.4.5",
+        gitleaks: "^1.0.0",
+        globals: "^16.5.0",
+        husky: "^9.0.0",
+        jsdom: "^27.3.0",
+        "lint-staged": "^15.2.0",
+        postcss: "^8.4.32",
+        prettier: "^3.1.0",
+        secretlint: "^11.3.0",
+        tailwindcss: "^3.3.0",
+        talisman: "^1.1.4",
+        typescript: "^5.3.0",
+        "typescript-eslint": "^8.50.0",
+        vite: "^5.0.0",
+        vitest: "^4.0.15"
+      },
+      "lint-staged": {
+        "*.{ts,tsx}": [
+          `bash -c 'echo "\u{1F50D} Running ESLint..."'`,
+          "eslint --fix",
+          `bash -c 'echo "\u2728 Running Prettier..."'`,
+          "prettier --write",
+          `bash -c 'echo "\u{1F527} Running TypeScript compiler check..."'`,
+          "bash -c 'tsc --noEmit -p tsconfig.json'",
+          `bash -c 'echo "\u{1F6E1}\uFE0F  Running njsscan security scan..." && /home/khanhromvn/.local/bin/njsscan --sarif --output njsscan.sarif . || true'`
+        ],
+        "*.{json,css,md}": [
+          `bash -c 'echo "\u2728 Running Prettier..."'`,
+          "prettier --write"
+        ],
+        "*": [
+          `bash -c 'echo "\u{1F510} Running secretlint..."'`,
+          "secretlint --maskSecrets",
+          `bash -c 'echo "\u{1F6E1}\uFE0F  Running GitGuardian (ggshield)..." && /home/khanhromvn/.local/bin/ggshield secret scan pre-commit --exit-zero || true'`,
+          `bash -c 'echo "\u{1F50D} Running Gitleaks..." && /home/khanhromvn/.local/bin/gitleaks protect --staged --redact --verbose || true'`,
+          `bash -c 'echo "\u{1F512} Running Talisman..." && /home/khanhromvn/.local/bin/talisman --pattern staged || true'`
+        ]
+      }
+    };
+  }
+});
+
+// electron.vite.config.ts
+import { resolve } from "path";
+import { defineConfig, externalizeDepsPlugin } from "electron-vite";
+import react from "@vitejs/plugin-react";
+var __electron_vite_injected_dirname = "D:\\KhanhRom\\Elara";
+var electron_vite_config_default = defineConfig({
+  main: {
+    plugins: [
+      externalizeDepsPlugin({
+        exclude: ["chokidar", "ignore"]
+      })
+    ],
+    resolve: {
+      alias: {
+        "@main": resolve("src/main"),
+        "@backend": resolve("backend/src")
+      }
+    },
+    build: {
+      outDir: "out/main",
+      rollupOptions: {
+        external: [
+          "electron",
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          ...Object.keys(require_package().dependencies || {}).filter(
+            (d) => d !== "http-mitm-proxy" && d !== "chokidar" && d !== "ignore"
+          )
+        ]
+      }
+    }
+  },
+  preload: {
+    plugins: [externalizeDepsPlugin()],
+    resolve: {
+      alias: {
+        "@preload": resolve("src/preload")
+      }
+    },
+    build: {
+      outDir: "out/preload",
+      rollupOptions: {
+        input: {
+          index: resolve(__electron_vite_injected_dirname, "src/preload/index.ts"),
+          "auth-preload": resolve(__electron_vite_injected_dirname, "src/preload/auth-preload.ts")
+        }
+      }
+    }
+  },
+  renderer: {
+    resolve: {
+      alias: {
+        "@renderer": resolve("src/renderer/src"),
+        "@shared": resolve("src/renderer/src/shared"),
+        "@core": resolve("src/renderer/src/core"),
+        "@features": resolve("src/renderer/src/features")
+      }
+    },
+    plugins: [react()],
+    build: {
+      outDir: "out/renderer"
+    }
+  }
+});
+export {
+  electron_vite_config_default as default
+};

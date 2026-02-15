@@ -199,7 +199,7 @@ export function getUsageHistory(
     const rows = db
       .prepare(
         `
-      SELECT 
+      SELECT
         strftime(?, datetime(timestamp / 1000, 'unixepoch', 'localtime')) as date,
         COUNT(*) as requests,
         SUM(total_tokens) as tokens
@@ -232,7 +232,7 @@ export function getAccountStatsByPeriod(
   return db
     .prepare(
       `
-    SELECT 
+    SELECT
       a.id, a.email, a.provider_id,
       COUNT(m.id) as total_requests,
       SUM(CASE WHEN m.total_tokens > 0 THEN 1 ELSE 0 END) as successful_requests,
@@ -256,7 +256,7 @@ export function getModelStatsByPeriod(
   return db
     .prepare(
       `
-    SELECT 
+    SELECT
       m.model_id, m.provider_id,
       COUNT(met.id) as total_requests,
       SUM(met.total_tokens) as total_tokens,

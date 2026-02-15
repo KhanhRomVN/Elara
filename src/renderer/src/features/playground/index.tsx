@@ -77,6 +77,7 @@ export const PlaygroundPage = ({
     setAgentMode,
     selectedWorkspacePath,
     handleSelectWorkspace,
+    handleDeleteWorkspace,
     handleQuickSelectWorkspace,
     temperature,
     setTemperature,
@@ -588,6 +589,7 @@ export const PlaygroundPage = ({
                 handleSelectWorkspace={handleSelectWorkspace}
                 handleQuickSelectWorkspace={handleQuickSelectWorkspace}
                 availableWorkspaces={availableWorkspaces}
+                handleDeleteWorkspace={handleDeleteWorkspace}
                 temperature={temperature}
                 setTemperature={setTemperature}
                 isTemperatureSupported={
