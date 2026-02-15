@@ -71,6 +71,7 @@ const api = {
     },
     // ...
     link: (folderPath: string) => ipcRenderer.invoke('workspaces:link', folderPath),
+    unlink: (id: string) => ipcRenderer.invoke('workspaces:unlink', id),
     getContext: (id: string) => ipcRenderer.invoke('workspaces:get-context', id),
     updateContext: (id: string, type: 'workspace' | 'rules', content: string) =>
       ipcRenderer.invoke('workspaces:update-context', id, type, content),

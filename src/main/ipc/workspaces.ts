@@ -242,6 +242,11 @@ class WorkspaceContextService {
       .filter((session): session is NonNullable<typeof session> => session !== null)
       .sort((a, b) => b.lastModified.getTime() - a.lastModified.getTime());
   }
+  async unlinkWorkspace(id: string): Promise<void> {
+    const config = await this.getConfig();
+    config.workspaces = config.workspaces.filter((w) => w.id !== id);
+    await fs.writeJson(this.rootJson, config, { spaces: 2 });
+  }
 }
 
 const service = new WorkspaceContextService();
@@ -254,6 +259,9 @@ export function setupWorkspaceHandlers() {
 
   ipcMain.handle('workspaces:link', async (_, folderPath: string) => {
     return await service.findOrCreateWorkspace(folderPath);
+  });
+  ipcMain.handle('workspaces:unlink', async (_, id: string) => {
+    return await service.unlinkWorkspace(id);
   });
   ipcMain.handle('workspaces:get-context', async (_, id: string) => {
     return await service.getContextFiles(id);

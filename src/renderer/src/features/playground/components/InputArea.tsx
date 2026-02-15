@@ -12,7 +12,7 @@ import {
   Search,
   Cpu,
   Check,
-  ChevronDown,
+  Trash2,
 } from 'lucide-react';
 import {
   ChangeEvent,
@@ -70,6 +70,7 @@ interface InputAreaProps {
   setAgentMode?: (enabled: boolean) => void;
   selectedWorkspacePath?: string;
   handleSelectWorkspace?: () => void;
+  handleDeleteWorkspace?: (id: string) => void;
   handleQuickSelectWorkspace?: (path: string) => void;
   availableWorkspaces?: any[];
   isGitRepo?: boolean;
@@ -122,6 +123,7 @@ export const InputArea = ({
   setAgentMode,
   selectedWorkspacePath,
   handleSelectWorkspace,
+  handleDeleteWorkspace,
   handleQuickSelectWorkspace,
   availableWorkspaces = [],
   isConversationActive,
@@ -598,29 +600,40 @@ export const InputArea = ({
                               Saved Workspaces
                             </div>
                             {availableWorkspaces.map((ws: any) => (
-                              <button
-                                key={ws.id}
-                                onClick={() => {
-                                  handleQuickSelectWorkspace?.(ws.path);
-                                  setIsWorkspaceDropdownOpen(false);
-                                }}
-                                className={cn(
-                                  'flex flex-col items-start px-2 py-2 rounded-lg text-left transition-colors',
-                                  selectedWorkspacePath === ws.path
-                                    ? 'bg-primary/10 text-primary'
-                                    : 'hover:bg-muted text-foreground',
-                                )}
-                              >
-                                <span className="text-xs font-medium truncate w-full">
-                                  {ws.name}
-                                </span>
-                                <span
-                                  className="text-[10px] text-muted-foreground truncate w-full"
-                                  title={ws.path}
+                              <div key={ws.id} className="relative group/ws">
+                                <button
+                                  onClick={() => {
+                                    handleQuickSelectWorkspace?.(ws.path);
+                                    setIsWorkspaceDropdownOpen(false);
+                                  }}
+                                  className={cn(
+                                    'flex flex-col items-start px-2 py-2 rounded-lg text-left transition-colors w-full',
+                                    selectedWorkspacePath === ws.path
+                                      ? 'bg-primary/10 text-primary'
+                                      : 'hover:bg-muted text-foreground',
+                                  )}
                                 >
-                                  {formatWorkspacePath(ws.path)}
-                                </span>
-                              </button>
+                                  <span className="text-xs font-medium truncate w-full pr-6">
+                                    {ws.name}
+                                  </span>
+                                  <span
+                                    className="text-[10px] text-muted-foreground truncate w-full pr-6"
+                                    title={ws.path}
+                                  >
+                                    {formatWorkspacePath(ws.path)}
+                                  </span>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteWorkspace?.(ws.id);
+                                  }}
+                                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md opacity-0 group-hover/ws:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all"
+                                  title="Remove from saved"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
                             ))}
                             <div className="h-px bg-border my-1" />
                           </>

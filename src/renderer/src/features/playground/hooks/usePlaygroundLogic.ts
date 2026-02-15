@@ -677,6 +677,25 @@ export const usePlaygroundLogic = ({
     uploadPendingFiles();
   }, [attachments, selectedAccount, selectedProvider, accounts]);
 
+  const handleDeleteWorkspace = async (id: string) => {
+    try {
+      // @ts-ignore
+      await window.api.workspaces.unlink(id);
+      // Refresh list
+      // @ts-ignore
+      const updatedList = await window.api.workspaces.list();
+      setAvailableWorkspaces(updatedList);
+
+      const deletedWs = availableWorkspaces.find((w) => w.id === id);
+      if (deletedWs && selectedWorkspacePath === deletedWs.path) {
+        setSelectedWorkspacePath(undefined);
+        setCurrentWorkspaceId(undefined);
+      }
+    } catch (error) {
+      console.error('Failed to delete workspace:', error);
+    }
+  };
+
   const handleSelectWorkspace = async () => {
     try {
       // @ts-ignore
@@ -1803,6 +1822,7 @@ export const usePlaygroundLogic = ({
     isLoadingContext,
     handleUpdateContextFile,
     handleSelectWorkspace,
+    handleDeleteWorkspace,
     selectedWorkspacePath,
     currentWorkspaceId,
     taskProgress,
