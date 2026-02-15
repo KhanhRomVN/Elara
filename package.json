@@ -77,6 +77,7 @@
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "country-flag-icons": "^1.6.12",
+    "date-fns": "^4.1.0",
     "electron-updater": "^6.1.7",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",

@@ -5,6 +5,7 @@ import { CustomSelect } from './components/CustomSelect';
 import { AccountAvatar } from '../accounts/components/AccountAvatar';
 
 import { Sidebar } from './components/Sidebar';
+import { AgentHistorySidebar } from './components/AgentHistorySidebar';
 import { ChatArea } from './components/ChatArea';
 import { InputArea } from './components/InputArea';
 import { WelcomeScreen } from './components/WelcomeScreen';
@@ -369,26 +370,45 @@ export const PlaygroundPage = ({
   // Layout Logic
   const innerContent = (
     <div className="flex-1 flex overflow-hidden relative">
-      {/* Task/Chat Sidebar */}
-      <div ref={sidebarRef} className="relative flex-shrink-0" style={{ width: sidebarWidth }}>
-        <div className="h-full overflow-y-auto border-r bg-card/30 w-full">
+      {/* Left Sidebar - Conditional rendering based on mode and message state */}
+      {agentMode && messages.length === 0 ? (
+        /* Agent Mode + Welcome Screen: Show Agent History Sidebar */
+        <div ref={sidebarRef} className="relative flex-shrink-0" style={{ width: sidebarWidth }}>
+          <div className="h-full overflow-y-auto border-r bg-card/30 w-full">
+            <AgentHistorySidebar
+              width={sidebarWidth}
+              currentWorkspaceId={currentWorkspaceId || undefined}
+              onSelectSession={(session) => {
+                // TODO: Load selected agent session
+                console.log('Selected session:', session);
+              }}
+            />
+          </div>
+          <div
+            className="absolute top-0 right-0 w-1 h-full cursor-col-resize bg-primary/10 hover:bg-primary/50 transition-colors z-10"
+            onMouseDown={startResizingSidebar}
+          />
+        </div>
+      ) : agentMode && (taskProgress.current || taskProgress.history.length > 0) ? (
+        /* Agent Mode + Active Task: Show Task Sidebar */
+        <div ref={sidebarRef} className="relative flex-shrink-0" style={{ width: sidebarWidth }}>
           <Sidebar
             sidebarWidth={sidebarWidth}
             selectedProvider={selectedProvider}
             providersList={providersList}
-            activeChatId={activeChatId}
             startNewChat={startNewChat}
-            account={account || undefined}
+            activeChatId={activeChatId}
+            account={account}
             groqSettings={groqSettings}
             setGroqSettings={setGroqSettings}
             taskProgress={taskProgress}
           />
+          <div
+            className="absolute top-0 right-0 w-1 h-full cursor-col-resize bg-primary/10 hover:bg-primary/50 transition-colors z-10"
+            onMouseDown={startResizingSidebar}
+          />
         </div>
-        <div
-          className="absolute top-0 right-0 w-1 h-full cursor-col-resize bg-primary/10 hover:bg-primary/50 transition-colors z-10"
-          onMouseDown={startResizingSidebar}
-        />
-      </div>
+      ) : null}
 
       {/* Workspace TreeView Sidebar (Agent Mode only) */}
       {/* Workspace TreeView Sidebar (Agent Mode only) */}
@@ -624,9 +644,9 @@ export const PlaygroundPage = ({
                   </div>
                   <div className="text-sm font-semibold truncate flex-1 text-center flex items-center justify-center gap-2">
                     {conversationTitle || 'New Chat'}
-                    {currentWorkspaceId && (
-                      <span className="text-[9px] font-mono text-muted-foreground bg-secondary/30 border border-border px-1.5 py-0.5 rounded uppercase">
-                        ID: {currentWorkspaceId.substring(0, 8)}
+                    {activeChatId && activeChatId !== 'new-session' && (
+                      <span className="text-[9px] font-mono text-muted-foreground bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded uppercase">
+                        #{activeChatId.substring(0, 8)}
                       </span>
                     )}
                   </div>

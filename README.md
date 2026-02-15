@@ -86,17 +86,27 @@ Elara provides a powerful embedded server API for programmatic access to AI prov
 
 ### Quick Example
 
+## Configuration
+
+The backend port can be configured via `.env` file in the root directory:
+
+```bash
+VITE_BACKEND_PORT=8888
+```
+
+## API Usage
+
 ```bash
 # Get all accounts
-curl "http://localhost:11434/v1/accounts"
+curl "http://localhost:8888/v1/accounts"
 
 # Send a message
-curl -X POST "http://localhost:11434/v1/chat/accounts/ACC_ID/messages" \
+curl -X POST "http://localhost:8888/v1/chat/accounts/ACC_ID/messages" \
   -H "Content-Type: application/json" \
   -d '{"model": "deepseek-chat", "messages": [{"role": "user", "content": "Hello!"}]}'
 ```
 
-The embedded server runs on `http://localhost:11434` and provides endpoints for:
+The embedded server runs on `http://localhost:8888` and provides endpoints for:
 
 - 🔐 Account Management
 - 🤖 Model Discovery

@@ -39,7 +39,7 @@ export const fetchAllHistory = async (
 
     try {
       const status = await window.api.server.start();
-      const port = status.port || 11434;
+      const port = status.port || Number(import.meta.env.VITE_BACKEND_PORT) || 8888;
 
       // Standardize usage of "sessions" or "conversations" endpoint
       // The backend maps both to the same logic essentially

@@ -7,7 +7,7 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
-export let BACKEND_PORT = 11434;
+export let BACKEND_PORT = Number(process.env.VITE_BACKEND_PORT) || 8888;
 let BACKEND_URL = `http://localhost:${BACKEND_PORT}`;
 
 export const setBackendPort = (port: number) => {

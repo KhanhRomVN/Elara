@@ -25,12 +25,12 @@ Toàn bộ dữ liệu nằm tại thư mục gốc của người dùng:
 
 ```
 ~/.context_tool_data/
-├── global_rules.md          # [NEW] Quy tắc chung của user, dùng cho toàn bộ dự án
+├── root.json
 └── projects/                # Nơi chứa dữ liệu thực tế của từng Project
-    ├── workspace_rules.md  # Quy tắc riêng (long context) cho workspace này
-    ├── workspace.md        # Thông tin cơ bản dự án
-    ├── <hash>_<conv_id>_<ts>.json         # Chat log (Max 30)
-    └── <hash>_<conv_id>_<ts>_summary.md   # Tóm tắt riêng cho session đó
+    └── <project_hash_id>/   # Thư mục riêng của từng dự án (theo hash path)
+        ├── workspace_rules.md  # Quy tắc riêng (long context) cho workspace này
+        ├── workspace.md        # Thông tin cơ bản dự án
+        └── <hash>_<conv_id>_<ts>.json         # Chat log (Max 30)
     └── ...
     └── ...
 ```
@@ -88,8 +88,7 @@ Thay vì chờ hết token mới tóm tắt (dễ gây lỗi mất dữ liệu),
 2.  **Immediate Action**: Đẩy cặp {Hỏi - Trả lời} vào **Queue**.
 3.  **Background Worker**:
     - Lấy job từ Queue.
-    - Dùng một **Small Model** (Gemini Flash / Gemma 2B) để đọc hội thoại vừa rồi.
-    - **Update Summary**: Tạo file tóm tắt `<hash>_<conv_id>_<ts>_summary.md` cho phiên làm việc.
+    - Dùng một **Small Model** (Gemini Flash / Gemma 2B) để phân tích (nếu cần).
     - **Save History**: Lưu trữ raw messages vào `<hash>_<conv_id>_<ts>.json`.
 
 ### 3.3 Context Rolling (Cuộn Ngữ Cảnh)
@@ -134,10 +133,10 @@ Hệ thống sử dụng các file Markdown để quản lý quy tắc và thôn
 2.  **Chat**: User chat với AI qua giao diện (CLI/Extension).
 3.  **Process**:
     - Tool search Vector DB (Code + History).
-    - Tool lấy Summary mới nhất.
+    - Tool lấy History mới nhất.
     - Ghép thành Prompt -> Gửi AI.
 4.  **Update**:
-    - Worker ngầm tóm tắt hội thoại -> Update Summary.
+    - Worker ngầm cập nhật History vào JSON.
     - Index code mới nếu User sửa file.
 5.  **Finish**: Khi tắt, mọi thứ đã được lưu. Không cần thao tác "Save".
 

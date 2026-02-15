@@ -618,7 +618,7 @@ export const usePlaygroundLogic = ({
 
       try {
         const serverStatus = await window.api.server.start();
-        const port = serverStatus.port || 11434;
+        const port = serverStatus.port || Number(import.meta.env.VITE_BACKEND_PORT) || 8888;
 
         // Process uploads in parallel
         itemsToUpload.forEach(async (att) => {
@@ -846,7 +846,7 @@ export const usePlaygroundLogic = ({
     const loadProviders = async () => {
       try {
         const serverStatus = await window.api.server.start();
-        const port = serverStatus.port || 11434;
+        const port = serverStatus.port || Number(import.meta.env.VITE_BACKEND_PORT) || 8888;
         const allProviders = await fetchProviders(port);
         setProvidersList(allProviders);
       } catch (error) {
@@ -867,7 +867,7 @@ export const usePlaygroundLogic = ({
 
       try {
         const status = await window.api.server.start();
-        const port = status.port || 11434;
+        const port = status.port || Number(import.meta.env.VITE_BACKEND_PORT) || 8888;
 
         // Use lowercase provider_id from configuration
         const providerId = selectedProvider.toLowerCase();
@@ -904,7 +904,7 @@ export const usePlaygroundLogic = ({
 
       try {
         const status = await window.api.server.start();
-        const port = status.port || 11434;
+        const port = status.port || Number(import.meta.env.VITE_BACKEND_PORT) || 8888;
 
         // Find the correct provider ID from the list
         // selectedProvider currently holds the provider NAME (e.g. "QwQ")
@@ -1526,6 +1526,45 @@ export const usePlaygroundLogic = ({
           }).catch((err) => console.error('Failed to report metrics', err));
         } catch (e) {
           console.error('Error reporting metrics', e);
+        }
+      }
+
+      // Update Agent Session (ProjectContext)
+      if (agentMode && selectedWorkspacePath && currentWorkspaceId) {
+        // We need to save the session to preserve history
+        // If activeChatId is null/new-session, we need a new ID.
+        // But wait, the backend response might have given us a conversation_id if we sent one or if it generated one?
+        // Actually, for Agent Mode, we want to control the session ID or use the one from metadata.
+
+        const sessionId =
+          activeChatId === 'new-session' || !activeChatId
+            ? accumulatedMetadata?.conversation_id || crypto.randomUUID()
+            : activeChatId;
+
+        if (sessionId !== activeChatId) {
+          setActiveChatId(sessionId);
+        }
+
+        // Construct session data
+        const sessionData = {
+          messages: [
+            ...messages,
+            userMessage,
+            { ...assistantMessage, content: accumulatedContent }, // Use accumulated content
+          ],
+          model: targetModelId,
+          provider: targetProviderId,
+          tokenUsage: totalTokens,
+          taskName: accumulatedMetadata?.conversation_title || conversationTitle || 'Untitled Task',
+          taskProgress: taskProgress, // Save current task progress
+          timestamp: Date.now(),
+        };
+
+        try {
+          // @ts-ignore
+          await window.api.workspaces.createSession(currentWorkspaceId, sessionId, sessionData);
+        } catch (err) {
+          console.error('Failed to save agent session:', err);
         }
       }
 

@@ -14,7 +14,10 @@ export interface ServerConfig {
 
 // Default configuration
 export const defaultConfig: ServerConfig = {
-  port: parseInt(process.env.PORT || '11434', 10),
+  port: parseInt(
+    process.env.VITE_BACKEND_PORT || process.env.PORT || '8888',
+    10,
+  ),
   host: '0.0.0.0',
   tls: {
     enable: false,

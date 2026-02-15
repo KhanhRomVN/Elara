@@ -46,6 +46,9 @@ export const Sidebar = ({
       ? taskProgress.history[selectedHistoryTask]
       : taskProgress.current;
 
+  // Don't render anything if in agent mode + welcome screen (handled by parent)
+  // This is a safety check to ensure Task sidebar is hidden in that condition
+
   return (
     <div
       className="flex flex-col h-full shrink-0 border-r bg-card/30"

@@ -465,7 +465,7 @@ file: [binary file data]`,
     "filename": "document.pdf",
     "size": 1024000,
     "mime_type": "application/pdf",
-    "url": "http://localhost:11434/uploads/file_abc123"
+    "url": "http://localhost:8888/uploads/file_abc123"
   }
 }`,
         responseFields: [

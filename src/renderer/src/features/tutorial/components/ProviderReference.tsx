@@ -30,7 +30,7 @@ export const ProviderReference = () => {
       try {
         // 1. Start Server & Get Port
         const serverRes = await window.api.server.start();
-        const port = serverRes.port || 11434;
+        const port = serverRes.port || Number(import.meta.env.VITE_BACKEND_PORT) || 8888;
 
         // 2. Get Accounts
         const accounts: Account[] = await window.api.accounts.getAll();

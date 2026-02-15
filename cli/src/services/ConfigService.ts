@@ -9,7 +9,7 @@ interface CliConfig {
 const CONFIG_DIR = path.join(os.homedir(), '.config', 'elara-cli');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 const DEFAULT_CONFIG: CliConfig = {
-  url: 'http://0.0.0.0:11434',
+  url: 'http://0.0.0.0:8888',
 };
 
 export class ConfigService {

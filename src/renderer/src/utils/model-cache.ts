@@ -29,7 +29,7 @@ const SYNC_INTERVAL = 1000 * 60 * 5; // 5 minutes
 
 let syncIntervalId: NodeJS.Timeout | null = null;
 let currentAccounts: any[] = [];
-let currentPort: number = 11434;
+let currentPort: number = Number(import.meta.env.VITE_BACKEND_PORT) || 8888;
 
 /**
  * Get cached models for a provider

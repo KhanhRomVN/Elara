@@ -113,7 +113,9 @@ async function fetchProvidersFromApi(port: number): Promise<ProviderConfig[]> {
  * - Returns cached data immediately if available (stale-while-revalidate)
  * - Refreshes cache in background
  */
-export async function fetchProviders(port: number = 11434): Promise<ProviderConfig[]> {
+export async function fetchProviders(
+  port: number = Number(import.meta.env.VITE_BACKEND_PORT) || 8888,
+): Promise<ProviderConfig[]> {
   // If we have cached data, return it immediately to unblock UI
   if (cachedProviders && cachedProviders.length > 0) {
     // Trigger background update

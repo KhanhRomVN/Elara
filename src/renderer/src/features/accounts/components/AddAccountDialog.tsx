@@ -42,7 +42,7 @@ export function AddAccountDialog({
       const fetchProvidersData = async () => {
         setFetchingProviders(true);
         try {
-          const port = serverPort || 11434;
+          const port = serverPort || Number(import.meta.env.VITE_BACKEND_PORT) || 8888;
           const allProviders = await fetchProviders(port);
 
           setProviders(allProviders);

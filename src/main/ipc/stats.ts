@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 
-const BACKEND_URL = process.env.BACKEND_API_URL || 'http://localhost:11434';
+const BACKEND_URL =
+  process.env.BACKEND_API_URL || `http://localhost:${process.env.VITE_BACKEND_PORT || 8888}`;
 
 export const setupStatsHandlers = () => {
   ipcMain.handle(

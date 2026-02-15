@@ -1,13 +1,19 @@
-import { buildCorePrompt } from './core';
-import { TOOLS } from './tools';
-import { buildRulesPrompt } from './rules';
-import { buildSystemPrompt, SystemInfo } from './system';
+import { buildIdentityPrompt } from './identity';
+import { CONSTRAINTS } from './constraints';
+import { WORKFLOW } from './workflow';
+import { TOOLS_REFERENCE } from './tools-reference';
+import { buildSystemContext } from './system-context';
+import type { SystemInfo } from './system-context';
+import { EXAMPLES } from './examples';
 
-// Export individual modules
-export { buildCorePrompt } from './core';
-export { TOOLS } from './tools';
-export { buildRulesPrompt } from './rules';
-export { buildSystemPrompt } from './system';
+// Export individual modules for flexibility
+export { buildIdentityPrompt } from './identity';
+export { CONSTRAINTS } from './constraints';
+export { WORKFLOW } from './workflow';
+export { TOOLS_REFERENCE } from './tools-reference';
+export { buildSystemContext } from './system-context';
+export type { SystemInfo } from './system-context';
+export { EXAMPLES } from './examples';
 
 interface PromptConfig {
   language: string;
@@ -17,11 +23,10 @@ interface PromptConfig {
 export const combinePrompts = (config: PromptConfig): string => {
   const { language, systemInfo } = config;
 
-  const core = buildCorePrompt(language);
-  const rules = buildRulesPrompt();
-  const system = buildSystemPrompt(systemInfo);
+  const identity = buildIdentityPrompt(language);
+  const system = buildSystemContext(systemInfo);
 
-  return [core, TOOLS, rules, system].join('\n\n');
+  return [identity, CONSTRAINTS, WORKFLOW, TOOLS_REFERENCE, system, EXAMPLES].join('\n\n---\n\n');
 };
 
 /**

@@ -251,28 +251,12 @@ export const ReplaceInFileRenderer: React.FC<ReplaceInFileProps> = ({ path, repl
   );
 };
 
-export const WriteToFileRenderer: React.FC<WriteToFileProps> = ({ path, content }) => {
-  const extension = path.split('.').pop() || 'plaintext';
-  const language = getMonacoLanguage(extension);
-
+export const WriteToFileRenderer: React.FC<WriteToFileProps> = ({ path }) => {
   return (
     <div className="my-4">
       <ToolActionHeader path={path} action="Create" dotColor="bg-blue-500" />
       <div className="border border-border rounded-md overflow-hidden bg-background shadow-sm">
-        <FileHeader path={path} label="Write" />
-        <div className="bg-background">
-          <CodeBlock
-            code={content}
-            language={language}
-            showLineNumbers={true}
-            maxLines={30} // Limit height for large writes
-            disableClick={true}
-            editorOptions={{
-              padding: { top: 8, bottom: 8 },
-              renderLineHighlight: 'none',
-            }}
-          />
-        </div>
+        <FileHeader path={path.toUpperCase()} label="WRITE" />
       </div>
     </div>
   );

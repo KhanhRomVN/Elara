@@ -81,6 +81,8 @@ const api = {
       ipcRenderer.invoke('workspaces:update-summary', workspaceId, conversationId, content),
     createSession: (workspaceId: string, conversationId: string, data: any) =>
       ipcRenderer.invoke('workspaces:create-session', workspaceId, conversationId, data),
+    getSessions: (workspaceId: string) =>
+      ipcRenderer.invoke('workspaces:get-sessions', workspaceId),
     getTree: (folderPath: string) => ipcRenderer.invoke('workspaces:get-tree', folderPath),
   },
   git: {

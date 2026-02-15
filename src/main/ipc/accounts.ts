@@ -9,7 +9,7 @@ const crypto = require('crypto');
 
 // Backend API URL for providers
 const getBackendApiUrl = () => {
-  return process.env.BACKEND_API_URL || 'http://localhost:11434';
+  return process.env.BACKEND_API_URL || `http://localhost:${process.env.VITE_BACKEND_PORT || 8888}`;
 };
 let cachedProviderIds: string[] = [];
 

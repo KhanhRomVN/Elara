@@ -58,7 +58,9 @@ const SettingsPage = () => {
   const [showGeminiForm, setShowGeminiForm] = useState(false);
   const [activeSection, setActiveSection] = useState<SidebarOption>('general');
   const [generalConfig, setGeneralConfig] = useState({
-    apiUrl: localStorage.getItem('ELARA_API_URL') || 'http://localhost:11434',
+    apiUrl:
+      localStorage.getItem('ELARA_API_URL') ||
+      `http://localhost:${import.meta.env.VITE_BACKEND_PORT || 8888}`,
     language: localStorage.getItem('elara_preferred_language') || null,
   });
 
@@ -70,7 +72,7 @@ const SettingsPage = () => {
     try {
       setLoading(true);
       const serverStatus = await window.api.server.start();
-      const port = serverStatus.port || 11434;
+      const port = serverStatus.port || Number(import.meta.env.VITE_BACKEND_PORT) || 8888;
 
       const response = await fetch(`http://localhost:${port}/v1/config/rag`);
       if (response.ok) {
@@ -142,7 +144,7 @@ const SettingsPage = () => {
       setSaving(true);
 
       const serverStatus = await window.api.server.start();
-      const port = serverStatus.port || 11434;
+      const port = serverStatus.port || Number(import.meta.env.VITE_BACKEND_PORT) || 8888;
 
       const response = await fetch(`http://localhost:${port}/v1/config/rag`, {
         method: 'PUT',
@@ -376,7 +378,7 @@ const SettingsPage = () => {
                       onChange={(e) =>
                         setGeneralConfig({ ...generalConfig, apiUrl: e.target.value })
                       }
-                      placeholder="http://localhost:11434"
+                      placeholder={`http://localhost:${import.meta.env.VITE_BACKEND_PORT || 8888}`}
                       className="w-full px-3 py-2 text-sm bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 font-mono"
                     />
                     <p className="text-[13px] text-muted-foreground leading-relaxed">

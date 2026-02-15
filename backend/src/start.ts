@@ -1,3 +1,4 @@
+import './env';
 import { startServer } from './server';
 import { createLogger } from './utils/logger';
 import { initDatabase } from './services/db';
