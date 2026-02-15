@@ -37,7 +37,7 @@ interface InputAreaProps {
   input: string;
   handleInput: (e: ChangeEvent<HTMLTextAreaElement>) => void;
   handleKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => void;
-  handleSend: () => void;
+  handleSend: (overrideContent?: string, hiddenContent?: string, uiHidden?: boolean) => void;
   handleStop?: () => void;
   loading: boolean;
   isStreaming: boolean;
@@ -801,7 +801,7 @@ export const InputArea = ({
                 )
               ) : (
                 <button
-                  onClick={handleSend}
+                  onClick={() => handleSend()}
                   disabled={disabled || !input.trim()}
                   className={cn(
                     'h-8 w-8 flex items-center justify-center rounded-lg transition-all shadow-sm',
