@@ -389,13 +389,14 @@ export const InputArea = ({
               : 'border rounded-xl shadow-sm focus-within:ring-1 focus-within:ring-ring bg-muted/20',
             'flex flex-col relative w-full h-full min-h-[44px] bg-muted/20 transition-all duration-300 group',
             agentMode && !selectedQuickModel && 'border-dashed border-primary/40 bg-primary/[0.02]',
-            selectedQuickModel && 'border-blue-500 ring-1 ring-blue-500/20 bg-blue-500/[0.03]',
+            selectedQuickModel &&
+              'border-blue-500 ring-1 ring-blue-500/20 bg-blue-500/[0.03] shadow-[0_0_20px_rgba(59,130,246,0.15)]',
             isFocused &&
               !selectedQuickModel &&
               'border-primary ring-4 ring-primary/10 bg-background',
             isFocused &&
               selectedQuickModel &&
-              'border-blue-500 ring-4 ring-blue-500/20 bg-background',
+              'border-blue-500 ring-4 ring-blue-500/20 bg-background shadow-[0_0_25px_rgba(59,130,246,0.2)]',
             disabled && 'opacity-60 cursor-not-allowed',
           )}
           onDragOver={handleDragOver}
@@ -414,8 +415,14 @@ export const InputArea = ({
           )}
           {/* Quick Model Continuity Banner */}
           {selectedQuickModel && (
-            <div className="absolute -top-7 left-2 flex items-center gap-2 px-2.5 py-1 rounded-t-lg border-x border-t border-blue-500/20 text-[10px] font-bold text-blue-500/80 animate-in slide-in-from-bottom-2 fade-in">
-              <span className="opacity-60">Continue conversation with</span>
+            <div className="absolute -top-7 left-2 flex items-center gap-2 px-2.5 py-1 rounded-t-lg border-x border-t border-blue-500/30 bg-blue-500/5 text-[10px] font-bold text-blue-500 animate-in slide-in-from-bottom-2 fade-in">
+              <span className="opacity-70 flex items-center gap-1.5">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-blue-500"></span>
+                </span>
+                Continue with
+              </span>
               <div className="flex items-center gap-1.5 px-1 py-0.5">
                 {allModels.find((m) => m.id === selectedQuickModel.modelId)?.favicon && (
                   <img
@@ -673,7 +680,7 @@ export const InputArea = ({
                     className={cn(
                       'h-8 px-3 flex items-center gap-2 rounded-lg border transition-all text-[11px] font-bold shadow-sm',
                       selectedQuickModel
-                        ? 'bg-blue-500/10 text-blue-500 border-blue-500/30 hover:bg-blue-500/20'
+                        ? 'bg-blue-600/15 text-blue-600 border-blue-500/40 hover:bg-blue-600/25 ring-2 ring-blue-500/10'
                         : 'bg-muted/30 text-muted-foreground border-border/50 hover:bg-muted/50 hover:text-foreground',
                     )}
                     title={

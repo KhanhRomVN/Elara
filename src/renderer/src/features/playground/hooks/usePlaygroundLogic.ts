@@ -1339,7 +1339,9 @@ export const usePlaygroundLogic = ({
 
       const targetProviderId =
         selectedQuickModel?.providerId || account?.provider_id || selectedProvider;
-      const targetAccountId = selectedQuickModel?.accountId || account?.id || null;
+      const targetAccountId = selectedQuickModel
+        ? selectedQuickModel.accountId || null
+        : account?.id || null;
       const targetModelId = getProviderModel(targetProviderId);
 
       const response = await fetch(url, {
