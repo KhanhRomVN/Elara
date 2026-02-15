@@ -28,7 +28,7 @@ grep -n "StreamGenerate" "$CAPTURE_FILE" | while read -r line; do
     LINE_NUM=$(echo "$line" | cut -d: -f1)
     # Extract the token starting with ! inside the request body
     OPAQUE=$(sed -n "${LINE_NUM},$(($LINE_NUM + 150))p" "$CAPTURE_FILE" | grep -o '![A-Za-z0-9_-]\{20,\}' | head -n 1)
-    
+
     if [ ! -z "$OPAQUE" ]; then
         # Try to find user message nearby to identify the turn
         MSG=$(sed -n "$(($LINE_NUM - 20)),$(($LINE_NUM + 200))p" "$CAPTURE_FILE" | grep -o '"xin chào [0-9]"' | head -n 1)

@@ -28,7 +28,7 @@ MULTI-TOOL BATCHING ENFORCEMENT (Critical - No Exceptions):
 COUNT YOUR OPERATIONS FIRST:
 Before responding, count how many files need:
 - Reading? If 2+ → Batch ALL reads in ONE message
-- Modifying? If 2+ → Batch ALL modifications in ONE message  
+- Modifying? If 2+ → Batch ALL modifications in ONE message
 - Creating? If 2+ → Batch ALL writes in ONE message
 
 DECISION TREE:

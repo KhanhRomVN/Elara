@@ -196,7 +196,7 @@ const createTables = (): void => {
                     provider_id, model_id, model_name, is_thinking, context_length, updated_at,
                     max_req_conversation, max_token_conversation
                 )
-                SELECT 
+                SELECT
                     provider_id, model_id, model_name, is_thinking, context_length, updated_at,
                     max_req_conversation, max_token_conversation
                 FROM provider_models
@@ -229,7 +229,7 @@ const createTables = (): void => {
           INSERT INTO provider_models_new (
             provider_id, model_id, model_name, is_thinking, context_length, updated_at
           )
-          SELECT 
+          SELECT
             provider_id, model_id, model_name, is_thinking, context_length, updated_at
           FROM provider_models
         `);

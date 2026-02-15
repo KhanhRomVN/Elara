@@ -49,7 +49,7 @@ export class CloudflareBypasser {
           // Check text content
           const bodyText = document.body.innerText;
           if (bodyText.includes('Verifying you are human') || bodyText.includes('Checking your browser')) return true;
-          
+
           return false;
         })()
       `,

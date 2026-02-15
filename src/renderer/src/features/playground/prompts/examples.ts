@@ -408,12 +408,12 @@ Please provide these details so I can fix it accurately.
   <task_summary>
     What: Modernize auth system from session-based to JWT
     Why: Improve scalability for microservices architecture
-    
+
     Key decisions:
     - Using RS256 (asymmetric) instead of HS256 for multi-service support
     - Access token: 15min expiry, Refresh token: 7 days
     - Dual-mode support: both session and JWT work simultaneously during migration
-    
+
     Current state:
     ✅ JWT generation/verification implemented (src/auth/jwt.service.ts)
     ✅ Token refresh endpoint created (POST /auth/refresh)
@@ -421,13 +421,13 @@ Please provide these details so I can fix it accurately.
     🔄 Testing JWT flow with existing endpoints
     ⏳ Migration guide for frontend teams
     ⏳ Database migration for refresh token storage
-    
+
     Critical files:
     - src/auth/jwt.service.ts (NEW - core JWT logic, uses jsonwebtoken lib)
     - src/auth/session.ts (LEGACY - kept for backward compat)
     - src/middleware/auth.middleware.ts (UPDATED - dual-mode checker)
     - src/types/auth.types.ts (UPDATED - added JWTPayload interface)
-    
+
     Gotchas:
     - Must check both session AND JWT on every request (middleware handles this)
     - Refresh tokens stored in separate table (tokens.refresh_tokens)

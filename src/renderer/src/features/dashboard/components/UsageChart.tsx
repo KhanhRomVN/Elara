@@ -154,7 +154,7 @@ export const UsageChart = memo(
         onMouseDown={(e) => e.preventDefault()}
       >
         <style>{`
-          .usage-chart-container *:focus, 
+          .usage-chart-container *:focus,
           .usage-chart-container *:focus-visible,
           .usage-chart-container *:active {
             outline: none !important;

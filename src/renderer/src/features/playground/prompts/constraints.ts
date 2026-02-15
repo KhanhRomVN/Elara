@@ -2,7 +2,7 @@ export const CONSTRAINTS = `# CRITICAL CONSTRAINTS (Non-Negotiable)
 
 ## C1: READ-BEFORE-EDIT (Mandatory)
 **Rule**: MUST read file content before any edit operation.
-**Execution**: 
+**Execution**:
 - Call \`read_file()\` → **STOP response immediately**
 - Wait for system to return content
 - Next turn: call \`replace_in_file()\` or \`write_to_file()\`
