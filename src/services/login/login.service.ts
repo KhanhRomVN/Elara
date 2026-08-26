@@ -2,8 +2,11 @@ import { spawn, execSync, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import fetch from 'node-fetch';
+import WebSocket from 'ws';
 import { createLogger } from '../../utils/logger';
 import { proxyService, proxyEvents } from '../proxy.service';
+import { findAvailablePort } from '../../utils/net';
 
 import { cdpLoginService, CDPLoginOptions } from './cdp-login.service';
 
@@ -44,29 +47,80 @@ export class LoginService {
   private activeProcesses: Map<string, ChildProcess> = new Map();
 
   private findChrome(): string | null {
+    if (process.platform === 'win32') {
+      const progFiles = process.env['ProgramFiles'] || 'C:\\Program Files';
+      const progFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+      const localAppData =
+        process.env['LocalAppData'] ||
+        (process.env['USERPROFILE']
+          ? path.join(process.env['USERPROFILE'], 'AppData', 'Local')
+          : '');
+
+      const candidates = [
+        path.join(progFiles, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+        path.join(progFilesX86, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+        path.join(localAppData, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+        path.join(progFiles, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+        path.join(progFilesX86, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+        path.join(localAppData, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+        path.join(progFiles, 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
+        path.join(progFilesX86, 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
+        path.join(localAppData, 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
+        path.join(progFiles, 'Chromium', 'Application', 'chrome.exe'),
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+        'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+      ];
+
+      for (const cand of candidates) {
+        if (cand && fs.existsSync(cand)) return cand;
+      }
+    } else if (process.platform === 'darwin') {
+      const candidates = [
+        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+        '/Applications/Chromium.app/Contents/MacOS/Chromium',
+        '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+        '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
+      ];
+      for (const cand of candidates) {
+        if (fs.existsSync(cand)) return cand;
+      }
+    }
+
     const commonPaths = [
       '/usr/bin/google-chrome',
       '/usr/bin/google-chrome-stable',
       '/usr/bin/chromium',
       '/usr/bin/chromium-browser',
       '/snap/bin/chromium',
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      '/usr/bin/brave-browser',
+      '/usr/bin/microsoft-edge',
+      '/usr/bin/microsoft-edge-stable',
+      '/var/lib/flatpak/exports/bin/com.google.Chrome',
+      '/var/lib/flatpak/exports/bin/org.chromium.Chromium',
     ];
 
     for (const p of commonPaths) {
       if (fs.existsSync(p)) return p;
     }
 
-    try {
-      const output = execSync('which google-chrome || which chromium', {
-        encoding: 'utf-8',
-        stdio: 'pipe',
-      });
-      if (output.trim()) return output.trim();
-    } catch (e) {
-      // ignore
+    const linuxBrowsers = [
+      'google-chrome',
+      'google-chrome-stable',
+      'chromium',
+      'chromium-browser',
+      'microsoft-edge',
+      'brave-browser',
+    ];
+    for (const b of linuxBrowsers) {
+      try {
+        const output = execSync(`which ${b}`, {
+          encoding: 'utf-8',
+          stdio: 'pipe',
+        });
+        if (output.trim()) return output.trim();
+      } catch (e) {}
     }
 
     return null;
@@ -155,7 +209,10 @@ export class LoginService {
       );
     }
 
-    logger.info(`Spawning Chrome for ${options.providerId}...`);
+    const cdpPort = await findAvailablePort(9222);
+    args.unshift(`--remote-debugging-port=${cdpPort}`);
+
+    logger.info(`Spawning Chrome for ${options.providerId} with CDP port ${cdpPort}...`);
     const chromeProcess = spawn(chromePath, args, {
       detached: false,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -168,10 +225,23 @@ export class LoginService {
       let capturedCookies = '';
       let capturedEmail = '';
       let capturedHeaders = {};
+      let capturedExtraData: any = {};
+      let cdpPoller: NodeJS.Timeout | null = null;
+      let wsClient: WebSocket | null = null;
 
       const cleanup = () => {
         if (!resolved) {
           resolved = true;
+          if (cdpPoller) {
+            clearInterval(cdpPoller);
+            cdpPoller = null;
+          }
+          if (wsClient) {
+            try {
+              wsClient.close();
+            } catch {}
+            wsClient = null;
+          }
           try {
             chromeProcess.kill();
           } catch (e) {}
@@ -192,24 +262,93 @@ export class LoginService {
         }
       };
 
+      // Poll browser localStorage via CDP for tokens (e.g. Kimi refresh_token)
+      if (options.providerId === 'kimi') {
+        cdpPoller = setInterval(async () => {
+          if (resolved) {
+            if (cdpPoller) clearInterval(cdpPoller);
+            return;
+          }
+          try {
+            const listRes = await fetch(`http://127.0.0.1:${cdpPort}/json/list`);
+            if (!listRes.ok) return;
+            const targets = (await listRes.json()) as any[];
+            const pageTarget = targets.find(
+              (t: any) =>
+                t.type === 'page' &&
+                t.webSocketDebuggerUrl &&
+                (t.url?.includes('kimi.ai') || t.url?.includes('kimi.com')),
+            );
+            if (pageTarget && pageTarget.webSocketDebuggerUrl) {
+              if (!wsClient || wsClient.readyState === WebSocket.CLOSED) {
+                wsClient = new WebSocket(pageTarget.webSocketDebuggerUrl);
+                wsClient.on('open', () => {
+                  wsClient?.send(JSON.stringify({ id: 1, method: 'Runtime.enable' }));
+                });
+                wsClient.on('message', (raw: any) => {
+                  try {
+                    const msg = JSON.parse(raw.toString());
+                    if (msg.id === 2 && msg.result?.result?.value) {
+                      const storageData = JSON.parse(msg.result.result.value);
+                      if (storageData.refresh_token && storageData.access_token) {
+                        logger.info('[CDP Poller] Extracted Kimi access_token and refresh_token from browser localStorage!');
+                        const cookieWithRefresh = `kimi-auth=${storageData.access_token}; refresh_token=${storageData.refresh_token}`;
+                        capturedCookies = cookieWithRefresh;
+                        capturedExtraData.refreshToken = storageData.refresh_token;
+                        capturedExtraData.token = storageData.access_token;
+                        proxyEvents.emit('kimi-login-token', {
+                          token: storageData.access_token,
+                          refreshToken: storageData.refresh_token,
+                          cookies: cookieWithRefresh,
+                        });
+                        resolveIfReady();
+                      }
+                    }
+                  } catch {}
+                });
+              }
+
+              if (wsClient && wsClient.readyState === WebSocket.OPEN) {
+                const expr = `JSON.stringify({ access_token: localStorage.getItem('access_token'), refresh_token: localStorage.getItem('refresh_token'), msh_user_id: localStorage.getItem('msh_user_id') })`;
+                wsClient.send(
+                  JSON.stringify({
+                    id: 2,
+                    method: 'Runtime.evaluate',
+                    params: { expression: expr, returnByValue: true },
+                  }),
+                );
+              }
+            }
+          } catch {}
+        }, 1000);
+      }
+
+      let isResolving = false;
       const resolveIfReady = async () => {
-        if (capturedCookies && !resolved) {
+        if (!capturedCookies || resolved || isResolving) {
+          return;
+        }
+        isResolving = true;
+        try {
           // Special handling for Qwen: wait for real bxUa and bxUmidToken headers (not fallback)
           if (options.providerId === 'qwen') {
             const hasBxUa = (capturedHeaders as any)['bx-ua'];
             const hasBxUmidToken = (capturedHeaders as any)['bx-umidtoken'];
             
-            // Check if headers exist and are real (starts with 231!, not fallback)
+            // Check if headers exist and are real (starts with version digits + !, not fallback)
             const isRealBxUa = hasBxUa && 
               typeof hasBxUa === 'string' && 
-              hasBxUa.startsWith('231!') && 
+              /^\d+!/.test(hasBxUa) && 
               hasBxUa.length > 100 &&
-              !hasBxUa.includes('defaultFY');
+              !hasBxUa.includes('default') &&
+              !hasBxUa.includes('not_initialized') &&
+              !hasBxUa.includes('not_fun');
               
             const isRealBxUmidToken = hasBxUmidToken && 
               typeof hasBxUmidToken === 'string' && 
-              hasBxUmidToken.length > 50 && 
-              !hasBxUmidToken.includes('defaultFY');
+              hasBxUmidToken.length > 30 && 
+              !hasBxUmidToken.includes('default') &&
+              !hasBxUmidToken.includes('not_initialized');
             
             logger.debug(`[Login] Qwen headers status - bxUa: ${!!hasBxUa} (real: ${isRealBxUa}, len: ${hasBxUa?.length || 0}), bxUmidToken: ${!!hasBxUmidToken} (real: ${isRealBxUmidToken}, len: ${hasBxUmidToken?.length || 0})`);
             
@@ -228,14 +367,18 @@ export class LoginService {
                 cookies: capturedCookies,
                 headers: capturedHeaders,
                 email: capturedEmail,
+                refreshToken: capturedExtraData.refreshToken || capturedExtraData.refresh_token,
+                ...capturedExtraData,
               });
-              if (result.isValid) {
+              if (result.isValid && !resolved) {
                 logger.info(`Validation success for ${options.providerId}`);
+                const finalCookies = result.cookies || capturedCookies;
                 cleanup();
                 resolve({
-                  cookies: result.cookies || capturedCookies,
+                  cookies: finalCookies,
                   email: result.email || capturedEmail,
                   headers: result.headers || capturedHeaders,
+                  ...capturedExtraData,
                 });
               }
             } catch (e) {
@@ -247,16 +390,30 @@ export class LoginService {
               cookies: capturedCookies,
               email: capturedEmail,
               headers: capturedHeaders,
+              ...capturedExtraData,
             });
           }
+        } finally {
+          isResolving = false;
         }
       };
 
       const onCookie = (data: any) => {
-        if (typeof data === 'string') capturedCookies = data;
-        else if (data && data.cookies) capturedCookies = data.cookies;
-
-        if (data && data.email) capturedEmail = data.email;
+        if (typeof data === 'string') {
+          if (!capturedCookies || !capturedCookies.includes('refresh_token=')) {
+            capturedCookies = data;
+          }
+        } else if (data && typeof data === 'object') {
+          if (data.cookies) {
+            if (!capturedCookies || data.cookies.includes('refresh_token=') || !capturedCookies.includes('refresh_token=')) {
+              capturedCookies = data.cookies;
+            }
+          }
+          if (data.email) capturedEmail = data.email;
+          if (data.headers) capturedHeaders = { ...capturedHeaders, ...data.headers };
+          if (data.refreshToken) capturedExtraData.refreshToken = data.refreshToken;
+          capturedExtraData = { ...capturedExtraData, ...data };
+        }
         resolveIfReady();
       };
 
@@ -267,19 +424,26 @@ export class LoginService {
 
       const onInfo = (data: any) => {
         if (data && data.email) capturedEmail = data.email;
-        // Maybe merge metadata too if needed
+        if (data && typeof data === 'object') capturedExtraData = { ...capturedExtraData, ...data };
         resolveIfReady();
       };
 
       const onExtraEvent = (data: any) => {
         // Handle extra events (provider-specific)
         if (typeof data === 'string') {
-          capturedCookies = data;
-        } else if (data) {
+          if (!capturedCookies || !capturedCookies.includes('refresh_token=')) {
+            capturedCookies = data;
+          }
+        } else if (data && typeof data === 'object') {
           if (data.email) capturedEmail = data.email;
-          if (data.cookies) capturedCookies = data.cookies;
-          // Bridge any other data into headers or info
-          capturedHeaders = { ...capturedHeaders, ...data };
+          if (data.cookies) {
+            if (!capturedCookies || data.cookies.includes('refresh_token=') || !capturedCookies.includes('refresh_token=')) {
+              capturedCookies = data.cookies;
+            }
+          }
+          if (data.headers) capturedHeaders = { ...capturedHeaders, ...data.headers };
+          if (data.refreshToken) capturedExtraData.refreshToken = data.refreshToken;
+          capturedExtraData = { ...capturedExtraData, ...data };
         }
         resolveIfReady();
       };

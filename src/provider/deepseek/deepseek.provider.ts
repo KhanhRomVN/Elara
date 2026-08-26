@@ -120,9 +120,13 @@ export class DeepSeekProvider implements Provider {
   }
 
   private async initWasm() {
+    const execDir = path.dirname(process.execPath);
     const possiblePaths = [
       path.resolve(__dirname, 'sha3_wasm_bg.7b9ca65ddd.wasm'),
+      path.join(execDir, 'resources', 'sha3_wasm_bg.7b9ca65ddd.wasm'),
+      path.join(execDir, 'sha3_wasm_bg.7b9ca65ddd.wasm'),
       path.join(process.cwd(), 'resources', 'sha3_wasm_bg.7b9ca65ddd.wasm'),
+      path.join(process.cwd(), 'sha3_wasm_bg.7b9ca65ddd.wasm'),
       path.join(
         process.cwd(),
         'backend',
@@ -248,10 +252,38 @@ export class DeepSeekProvider implements Provider {
 
     // Declare variables outside try-catch so they're accessible in catch block
     let sessionId: string | undefined = options.conversationId;
+    
+    // DeepSeek API strictly requires chat_session_id to be a valid UUID v4
+    const isUUID = (str?: string) =>
+      str ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str) : false;
+
+    if (sessionId && !isUUID(sessionId)) {
+      logger.warn(
+        `[DeepSeek] Provided conversationId '${sessionId}' is not a valid UUID. Resetting to create a fresh session.`,
+      );
+      sessionId = undefined;
+    }
+
     let currentModel = model;
 
     try {
-      if (!sessionId) {
+      // Determine if sessionId exists on DeepSeek server
+      let needsNewSession = !sessionId;
+
+      if (sessionId && messages.length > 1) {
+        const lastMsgId = await this.getLastMessageId(client, sessionId);
+        if (lastMsgId === null) {
+          logger.info(
+            `[DeepSeek] Session '${sessionId}' not found on DeepSeek server. Creating fresh session.`,
+          );
+          needsNewSession = true;
+        }
+      } else {
+        // First user message in conversation requires a real DeepSeek server session
+        needsNewSession = true;
+      }
+
+      if (needsNewSession) {
         const sessionRes = await client.post('/api/v0/chat_session/create', {
           character_id: null,
         });
@@ -270,6 +302,7 @@ export class DeepSeekProvider implements Provider {
             `Session ID missing from response: ${JSON.stringify(sessionData)}`,
           );
         }
+        logger.info(`[DeepSeek] Successfully created new server chat session: ${sessionId}`);
       }
 
       if (!sessionId) throw new Error('Failed to obtain session ID');

@@ -9,6 +9,8 @@ interface ConnectionPair {
   backgroundWs: WebSocket | null;
   pendingRequests: Map<string, PendingRequest>;
   currentRequestId: string | null;
+  /** Serializes concurrent sendPrompt calls so only one request runs at a time per session */
+  requestLock: Promise<void>;
 }
 
 interface PendingRequest {
@@ -49,6 +51,7 @@ export class ExtensionWebSocketServer extends EventEmitter {
           backgroundWs: null,
           pendingRequests: new Map(),
           currentRequestId: null,
+          requestLock: Promise.resolve(),
         });
       }
 
@@ -256,6 +259,30 @@ export class ExtensionWebSocketServer extends EventEmitter {
     }
 
     const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+    // Serialize concurrent requests for the same session via a Promise chain.
+    // Each new sendPrompt waits for the previous one's response to complete before
+    // sending to the browser — preventing two chats from interleaving in one session.
+    const previousLock = connection.requestLock;
+    let resolveLock!: () => void;
+    connection.requestLock = new Promise<void>((resolve) => {
+      resolveLock = resolve;
+    });
+
+    // Wait for the previous request to finish before sending this one
+    await previousLock;
+
+    // Re-validate connection after waiting (it may have dropped while queued)
+    if (
+      !connection.contentWs ||
+      connection.contentWs.readyState !== WebSocket.OPEN
+    ) {
+      resolveLock();
+      throw new Error(
+        `Extension disconnected while waiting for queue slot for session ${sessionId}.`,
+      );
+    }
+
     connection.currentRequestId = requestId;
 
     const message = JSON.stringify({
@@ -271,6 +298,11 @@ export class ExtensionWebSocketServer extends EventEmitter {
       `[WebSocketServer] Sent prompt to session ${sessionId}: ${prompt.substring(0, 100)}...`,
     );
 
+    // The lock is released when the pending request calls onDone or onError.
+    // We wrap registerRequestHandler to hook into those callbacks.
+    // Store resolveLock so registerRequestHandler can access it.
+    (connection as any).__pendingResolveLock = resolveLock;
+
     return requestId;
   }
 
@@ -280,9 +312,30 @@ export class ExtensionWebSocketServer extends EventEmitter {
     handlers: PendingRequest,
   ): void {
     const connection = this.connections.get(sessionId);
-    if (connection) {
-      connection.pendingRequests.set(requestId, handlers);
+    if (!connection) return;
+
+    // Wrap onDone / onError to release the per-session request lock so the
+    // next queued request can proceed.
+    const resolveLock: (() => void) | undefined = (connection as any).__pendingResolveLock;
+    if (resolveLock) {
+      delete (connection as any).__pendingResolveLock;
     }
+
+    const releaseLock = () => {
+      if (resolveLock) resolveLock();
+    };
+
+    connection.pendingRequests.set(requestId, {
+      ...handlers,
+      onDone: () => {
+        handlers.onDone();
+        releaseLock();
+      },
+      onError: (err: Error) => {
+        handlers.onError(err);
+        releaseLock();
+      },
+    });
   }
 
   async resetPage(sessionId: string): Promise<void> {

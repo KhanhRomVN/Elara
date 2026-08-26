@@ -25,6 +25,7 @@ export interface CodexCLIRequestBody {
   stream: boolean;
   include: string[];
   reasoning: { effort: string };
+  conversation_id?: string;
 }
 
 export interface CodexCLIStreamChunk {

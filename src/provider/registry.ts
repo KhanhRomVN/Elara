@@ -26,6 +26,11 @@ class ProviderRegistry {
       aliases.push('zai-browser', 'zai');
     }
 
+    // Special alias for Kimi
+    if (key === 'kimi') {
+      aliases.push('moonshot', 'moonshotai');
+    }
+
     // General: remove dots, spaces, replace with dash
     const normalized = key.replace(/[.\s]/g, '-');
     if (normalized !== key) {
@@ -78,7 +83,7 @@ class ProviderRegistry {
       const { default: ZaiBrowserProvider } = require('./zai-browser');
       const { default: CerebrasCloudProvider } = require('./cerebras-cloud');
       const { default: GeminiProvider } = require('./gemini');
-      const { default: ZenMuxProvider } = require('./zenmux');
+      const { default: KimiProvider } = require('./kimi');
 
       const providers = [
         ClaudeProvider,
@@ -94,7 +99,7 @@ class ProviderRegistry {
         ZaiBrowserProvider,
         CerebrasCloudProvider,
         GeminiProvider,
-        ZenMuxProvider,
+        KimiProvider,
       ];
       for (const p of providers) {
         if (p && p.name) {
@@ -104,11 +109,10 @@ class ProviderRegistry {
         }
       }
 
-      // Backward-compat aliases: old accounts stored with provider_id='moonshotai'
-      // or 'glm52' must still resolve to ZenMuxProvider.
-      for (const alias of ['moonshotai', 'glm52', 'kimi']) {
-        if (!this.providers.has(alias)) {
-          this.providers.set(alias, ZenMuxProvider);
+      // Aliases for Kimi / Moonshot
+      for (const alias of ['moonshotai', 'moonshot', 'kimi']) {
+        if (!this.providers.has(alias) && KimiProvider) {
+          this.providers.set(alias, KimiProvider);
         }
       }
     } catch (error) {

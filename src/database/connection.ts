@@ -23,6 +23,12 @@ export const initDatabase = (customPath?: string): void => {
 
   try {
     if (isCjsBundle) {
+      // 0. Try path alongside executable (useful for standalone binaries)
+      const exeDirBindingPath = path.join(
+        path.dirname(process.execPath),
+        'better_sqlite3.node',
+      );
+
       // 1. Try local build path (e.g. for pkg binary where we bundle it)
       const distBindingPath = path.join(
         __dirname,
@@ -52,7 +58,9 @@ export const initDatabase = (customPath?: string): void => {
 
       let nativeBinding: string | undefined = undefined;
 
-      if (fs.existsSync(distBindingPath)) {
+      if (fs.existsSync(exeDirBindingPath)) {
+        nativeBinding = exeDirBindingPath;
+      } else if (fs.existsSync(distBindingPath)) {
         nativeBinding = distBindingPath;
       } else if (fs.existsSync(npmBindingPath)) {
         nativeBinding = npmBindingPath;

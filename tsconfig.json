@@ -3,7 +3,8 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "target": "es2018",
-    "ignoreDeprecations": "5.0",
+    "ignoreDeprecations": "6.0",
+    "rootDir": "./src",
     "baseUrl": "./src",
     "paths": {
       "@src": ["./src/*"]
@@ -14,6 +15,6 @@
     "strict": true,
     "skipLibCheck": true
   },
-  "include": ["src/**/*", "src/config", "tsup.config.ts"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "**/*.spec.ts", "**/*.test.ts"]
 }

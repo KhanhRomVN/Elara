@@ -204,6 +204,7 @@ export class CodexCLIProvider implements Provider {
       onDone,
       onError,
       accountId,
+      conversationId,
     } = options;
 
     let tokens: any;
@@ -225,7 +226,7 @@ export class CodexCLIProvider implements Provider {
           payload['https://api.openai.com/auth']?.chatgpt_account_id;
       } catch (e) {}
 
-      const bodyObj = {
+      const bodyObj: any = {
         model: model || this.defaultModel,
         instructions: 'You are Codex, a GPT-5 coding agent.',
         input: messages.map((m: any) => ({
@@ -243,6 +244,12 @@ export class CodexCLIProvider implements Provider {
         include: ['reasoning.encrypted_content'],
         reasoning: { effort: 'medium' },
       };
+
+      // Gửi conversation_id để ChatGPT phân biệt các phiên hội thoại khác nhau
+      // từ cùng một account, tránh bị gộp request.
+      if (conversationId) {
+        bodyObj.conversation_id = conversationId;
+      }
 
       const jsonBody = JSON.stringify(bodyObj);
       let finalBody: any = jsonBody;
