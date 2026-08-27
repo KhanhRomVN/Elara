@@ -2,9 +2,9 @@
   "name": "AIWeb2API",
   "version": "1.2.5",
   "description": "",
-  "main": "dist/start.js",
+  "main": "dist/index.js",
   "bin": {
-    "elara-server": "dist/start.js"
+    "elara-server": "dist/index.js"
   },
   "files": [
     "dist"
@@ -16,9 +16,7 @@
       "node_modules/**/*"
     ],
     "targets": [
-      "node18-linux-x64",
-      "node18-win-x64",
-      "node18-macos-x64"
+      "node18-win-x64"
     ],
     "outputPath": "dist-bin"
   },
@@ -33,7 +31,7 @@
     "obfuscate": "javascript-obfuscator ./dist --output ./dist --compact true --self-defending false --string-array false --exclude \"**/services/db.js,**/utils/database.js\"",
     "build": "tsc && tsc-alias && mkdir -p dist/provider && cp src/provider/*.wasm dist/provider/ && npm run obfuscate || true",
     "build:min": "tsup",
-    "build:bin": "rm -rf dist dist-bin && BUILD_SQLITE_BINDING=true npm run build && npm rebuild better-sqlite3 --target=18.0.0 --target_arch=x64 --target_platform=linux --update-binary && pkg . && cp node_modules/better-sqlite3/build/Release/better_sqlite3.node dist-bin/ && npm rebuild better-sqlite3",
+    "build:bin": "node scripts/build-bin.js",
     "commit": "commit"
   },
   "keywords": [],

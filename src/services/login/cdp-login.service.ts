@@ -9,6 +9,7 @@ export interface CDPLoginOptions {
   loginUrl: string;
   partition?: string;
   timeout?: number;
+  keepBrowserOpen?: boolean;
   validate?: (captured: any) => Promise<{ isValid: boolean; cookies?: string; email?: string }>;
   extraEvents?: string[];
 }

@@ -1,10 +1,83 @@
 import WebSocket from 'ws';
 import { EventEmitter } from 'events';
-import { ChildProcess } from 'child_process';
+import { ChildProcess, spawn, execSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import { createLogger } from '../../utils/logger';
 import { findAvailablePort } from '../../utils/net';
 
 const logger = createLogger('CDPService');
+
+function findBrowserExecutable(): string {
+  if (process.platform === 'win32') {
+    const progFiles = process.env['ProgramFiles'] || 'C:\\Program Files';
+    const progFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+    const localAppData =
+      process.env['LocalAppData'] ||
+      (process.env['USERPROFILE']
+        ? path.join(process.env['USERPROFILE'], 'AppData', 'Local')
+        : '');
+
+    const candidates = [
+      path.join(progFiles, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+      path.join(progFilesX86, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+      path.join(localAppData, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+      path.join(progFiles, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+      path.join(progFilesX86, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+      path.join(localAppData, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+      path.join(progFiles, 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
+      path.join(progFilesX86, 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
+      path.join(localAppData, 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
+      path.join(progFiles, 'Chromium', 'Application', 'chrome.exe'),
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+    ];
+
+    for (const cand of candidates) {
+      if (cand && fs.existsSync(cand)) {
+        logger.info(`[CDP] Found Windows browser executable: ${cand}`);
+        return cand;
+      }
+    }
+  } else if (process.platform === 'darwin') {
+    const candidates = [
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '/Applications/Chromium.app/Contents/MacOS/Chromium',
+      '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+      '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
+    ];
+    for (const cand of candidates) {
+      if (fs.existsSync(cand)) {
+        logger.info(`[CDP] Found macOS browser executable: ${cand}`);
+        return cand;
+      }
+    }
+  }
+
+  // Fallback (Linux or if not found via paths)
+  const browsers = [
+    'google-chrome',
+    'google-chrome-stable',
+    'chromium',
+    'chromium-browser',
+    'microsoft-edge',
+    'brave-browser',
+  ];
+  for (const b of browsers) {
+    try {
+      execSync(`which ${b}`, { stdio: 'ignore' });
+      logger.info(`[CDP] Found browser via which: ${b}`);
+      return b;
+    } catch {
+      continue;
+    }
+  }
+
+  return '';
+}
 
 interface CdpRequest {
   id: number;
@@ -51,38 +124,19 @@ export class CDPService extends EventEmitter {
     this.debugPort = debugPort;
     logger.info(`[CDP] Launching browser with debug port ${debugPort}`);
 
-    // Find available browser
-    const browsers = [
-      'google-chrome',
-      'google-chrome-stable',
-      'chromium',
-      'chromium-browser',
-    ];
-    let executable = '';
-    for (const b of browsers) {
-      try {
-        const { execSync } = await import('child_process');
-        execSync(`which ${b}`, { stdio: 'ignore' });
-        executable = b;
-        break;
-      } catch {
-        continue;
-      }
-    }
-
+    const executable = findBrowserExecutable();
     if (!executable) {
-      logger.error('[CDP] No browser found');
+      logger.error('[CDP] No browser found on system');
       return false;
     }
 
     // Use custom user data dir if provided, otherwise create temp one
     let userDataDir = customUserDataDir;
     if (!userDataDir) {
-      userDataDir = `/tmp/elara-cdp-${this.profileName}-${Date.now()}`;
+      userDataDir = path.join(os.tmpdir(), `elara-cdp-${this.profileName}-${Date.now()}`);
     }
-    
-    const { execSync } = await import('child_process');
-    execSync(`mkdir -p ${userDataDir}`);
+
+    fs.mkdirSync(userDataDir, { recursive: true });
 
     // Build browser arguments
     const args = [
@@ -106,7 +160,6 @@ export class CDPService extends EventEmitter {
     // Add URL at the end
     args.push(url);
 
-    const { spawn } = await import('child_process');
     this.browserProcess = spawn(executable, args, {
       detached: true,
       stdio: 'ignore',

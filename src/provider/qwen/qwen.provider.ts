@@ -15,10 +15,40 @@ export const BASE_URL = 'https://chat.qwen.ai';
 
 const logger = createLogger('QwenProvider');
 
+// ---------------------------------------------------------------------------
+// Per-session request lock: prevents concurrent requests from overlapping.
+// Key = conversationId (or accountId for new chats without a conversationId).
+// ---------------------------------------------------------------------------
+const sessionLocks = new Map<string, Promise<void>>();
+
+function acquireLock(key: string): { promise: Promise<void>; release: () => void } {
+  let release!: () => void;
+  const next = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const previous = sessionLocks.get(key) ?? Promise.resolve();
+  // Chain: wait for the previous holder to finish, then this caller gets the slot
+  sessionLocks.set(
+    key,
+    previous.then(() => next),
+  );
+  return { promise: previous, release };
+}
+
+import { StreamingThinkingParser } from '../../utils/thinking-parser';
+
+// ---------------------------------------------------------------------------
+// Per-conversation parent_id cache.
+// Stores the last assistant response_id returned by Qwen, so the next turn
+// can use it directly as parent_id WITHOUT calling getLastMessageId().
+// This prevents "2/2 siblings" caused by Qwen API eventual consistency.
+// ---------------------------------------------------------------------------
+const lastParentIdCache = new Map<string, string>();
+
 export class QwenProvider implements Provider {
   name = 'Qwen';
   proxyHandler = proxyHandler;
-  defaultModel = 'qwen3.7-plus';
+  defaultModel = 'qwen-3.8-max';
 
   // ===========================================================================
   // TOKEN HELPERS
@@ -229,14 +259,16 @@ export class QwenProvider implements Provider {
           const isFallback =
             bxUa &&
             typeof bxUa === 'string' &&
-            (bxUa.includes('defaultFY') ||
+            (bxUa.includes('default') ||
               bxUa.includes('_load_failed') ||
-              bxUa.includes('not_initialized'));
+              bxUa.includes('not_initialized') ||
+              bxUa.includes('not_fun'));
           const isRealBxUa =
             bxUa &&
             typeof bxUa === 'string' &&
-            bxUa.startsWith('231!') &&
-            bxUa.length > 100;
+            /^\d+!/.test(bxUa) &&
+            bxUa.length > 100 &&
+            !isFallback;
 
           if (isFallback || !isRealBxUa) {
             logger.info('[Qwen] Detected fallback headers, triggering list chats...');
@@ -390,6 +422,7 @@ export class QwenProvider implements Provider {
     bxUa: string,
     bxUmidToken: string,
     userAgent: string,
+    model: string = this.defaultModel,
   ): Promise<string> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -412,12 +445,15 @@ export class QwenProvider implements Provider {
     if (bxUa) headers['bx-ua'] = bxUa;
     if (bxUmidToken) headers['bx-umidtoken'] = bxUmidToken;
 
-    logger.info(`[Qwen] Creating new chat via POST /api/v2/chats/new`);
+    logger.info(`[Qwen] Creating new chat via POST /api/v2/chats/new with model: ${model}`);
     
     const response = await fetch(`${BASE_URL}/api/v2/chats/new`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({}), // Empty body works
+      body: JSON.stringify({
+        models: [model],
+        title: 'New Chat',
+      }),
     });
 
     const actualStatusCode = response.headers.get('x-actual-status-code');
@@ -479,11 +515,34 @@ export class QwenProvider implements Provider {
   }
 
   async handleMessage(options: SendMessageOptions): Promise<void> {
-    const { messages, onContent, onMetadata, onDone, onError } = options;
+    const { messages, onContent, onThinking, onMetadata, onDone, onError } = options;
     const onSessionCreated = options.onSessionCreated;
     let { conversationId } = options;
 
+    // Normalize model name (strip provider/ prefix if present, e.g. 'qwen/qwen-3.8-max' -> 'qwen3.8-max')
+    let modelToUse = options.model || this.defaultModel;
+    if (modelToUse.includes('/')) {
+      modelToUse = modelToUse.split('/').pop() || modelToUse;
+    }
+    modelToUse = modelToUse.trim();
+
+    // Map qwen-3.x -> qwen3.x for upstream Qwen API
+    if (modelToUse.startsWith('qwen-3.')) {
+      modelToUse = modelToUse.replace('qwen-', 'qwen');
+    }
+
+    // Determine lock key:
+    //  - If we already have a conversationId, lock on it so concurrent turns
+    //    for the same chat are serialized (prevents duplicate parentId / stream interleave).
+    //  - If this is a NEW chat, lock on accountId so two concurrent new-chat
+    //    requests on the same account don't both call createChat() simultaneously.
+    const lockKey = conversationId || options.accountId || 'qwen_default';
+    const { promise: previousLock, release } = acquireLock(lockKey);
+
     try {
+      // Wait for any in-flight request on the same session to finish first
+      await previousLock;
+
       const credential = await this.getFreshCredential(options.credential);
       const { token, cookieValue, bxUa, bxUmidToken, userAgent } =
         this.parseCredential(credential);
@@ -493,7 +552,7 @@ export class QwenProvider implements Provider {
       // Qwen API REQUIRES chat_id for EVERY request, even the first one.
       // So we MUST create a chat first before sending any message.
       if (isNewChat) {
-        logger.info(`[Qwen] No conversationId provided, creating new chat first...`);
+        logger.info(`[Qwen] No conversationId provided, creating new chat first with model ${modelToUse}...`);
         conversationId = await this.createChat(
           credential,
           token,
@@ -501,6 +560,7 @@ export class QwenProvider implements Provider {
           bxUa,
           bxUmidToken,
           userAgent,
+          modelToUse,
         );
         if (onSessionCreated) onSessionCreated(conversationId);
         if (onMetadata) onMetadata({ conversation_id: conversationId });
@@ -514,22 +574,32 @@ export class QwenProvider implements Provider {
       const msgFid = crypto.randomUUID();
 
       let parentId: string | null = options.parent_message_id ?? null;
+
       if (!parentId && conversationId && !isNewChat) {
-        try {
-          parentId = await this.getLastMessageId(
-            conversationId,
-            cookieValue,
-            token,
-            bxUa,
-            bxUmidToken,
-            userAgent,
-          );
-        } catch (e) {
-          logger.warn('[Qwen] Failed to fetch last message ID');
+        // 1st priority: use our server-side cache (set from the previous turn's response_id).
+        //   This avoids Qwen API eventual-consistency issues where getLastMessageId()
+        //   might return a stale value if called immediately after the previous response.
+        const cached = lastParentIdCache.get(conversationId);
+        if (cached) {
+          parentId = cached;
+          logger.debug(`[Qwen] Using cached parentId for ${conversationId}: ${parentId}`);
+        } else {
+          // 2nd priority: fall back to fetching from Qwen API (first continuation, no cache yet)
+          try {
+            parentId = await this.getLastMessageId(
+              conversationId,
+              cookieValue,
+              token,
+              bxUa,
+              bxUmidToken,
+              userAgent,
+            );
+            logger.debug(`[Qwen] Fetched parentId from API for ${conversationId}: ${parentId}`);
+          } catch (e) {
+            logger.warn('[Qwen] Failed to fetch last message ID');
+          }
         }
       }
-
-      const modelToUse = options.model || this.defaultModel;
 
       const payload = {
         stream: true,
@@ -608,6 +678,7 @@ export class QwenProvider implements Provider {
       let conversationIdCaptured = false;
       let parentIdCaptured = false;
       let capturedParentId: string | null = null;
+      const thinkingParser = new StreamingThinkingParser(onContent, onThinking);
       
       for await (const chunk of response.body as any) {
         buffer += chunk.toString();
@@ -628,6 +699,7 @@ export class QwenProvider implements Provider {
           }
           
           if (jsonStr === '[DONE]') {
+            thinkingParser.flush();
             onDone();
             return;
           }
@@ -659,20 +731,33 @@ export class QwenProvider implements Provider {
                 parentIdCaptured = true;
                 capturedParentId = responseCreated.response_id;
                 logger.info(`[Qwen] Captured response_id (to use as parent_message_id): ${capturedParentId}`);
+                // Cache it server-side so the next turn uses it directly (avoids stale getLastMessageId)
+                const chatIdForCache = responseCreated.chat_id || conversationId;
+                if (chatIdForCache && capturedParentId) {
+                  lastParentIdCache.set(chatIdForCache, capturedParentId);
+                }
                 // Emit as parent_message_id so client knows what to send next time
                 if (onMetadata) onMetadata({ parent_message_id: capturedParentId });
               }
             }
             
-            // Extract content
-            if (json.choices?.[0]?.delta?.content) {
-              onContent(json.choices[0].delta.content);
+            // Extract reasoning_content if delivered in delta fields
+            const delta = json.choices?.[0]?.delta;
+            if (delta?.reasoning_content && onThinking) {
+              onThinking(delta.reasoning_content);
+            }
+
+            // Extract content and filter <thinking>...</thinking> blocks
+            if (delta?.content) {
+              thinkingParser.feed(delta.content);
             }
           } catch (e) {
             // Skip non-JSON lines
           }
         }
       }
+
+      thinkingParser.flush();
       
       // If we captured a parent_id and this is a new chat with session created,
       // we should update the conversation's parent_id for future messages
@@ -682,38 +767,159 @@ export class QwenProvider implements Provider {
       onDone();
     } catch (err: any) {
       onError(err);
+    } finally {
+      // Always release the lock so the next queued request can proceed
+      release();
+      // Clean up the lock entry if nothing else is waiting
+      // (the entry will be garbage-collected naturally via Promise chain)
     }
   }
 
   async getModels(credential: string): Promise<any[]> {
-    const { token, cookieValue } = this.parseCredential(credential);
+    const { token, cookieValue, bxUa, bxUmidToken, userAgent } =
+      this.parseCredential(credential);
     const headers: Record<string, string> = {
-      'accept': 'application/json, text/plain, */*',
+      accept: 'application/json, text/plain, */*',
       'content-type': 'application/json',
-      'cookie': cookieValue,
-      'origin': BASE_URL,
-      'referer': `${BASE_URL}/`,
-      'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
+      cookie: cookieValue,
+      origin: BASE_URL,
+      referer: `${BASE_URL}/`,
+      'user-agent':
+        userAgent ||
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
       'x-request-id': crypto.randomUUID(),
     };
     if (token) headers['authorization'] = `Bearer ${token}`;
+    if (bxUa) headers['bx-ua'] = bxUa;
+    if (bxUmidToken) headers['bx-umidtoken'] = bxUmidToken;
 
-    try {
-      const response = await fetch(`${BASE_URL}/api/models`, { headers });
-      if (!response.ok) return [];
-      const json: any = await response.json();
-      if (json && Array.isArray(json.data)) {
-        return json.data.map((model: any) => ({
-          id: model.id,
-          name: model.name,
-          is_thinking: model.info?.meta?.capabilities?.thinking || false,
-          context_length: model.info?.meta?.max_context_length,
-        }));
+    // Try fetching from live Qwen endpoints dynamically
+    const endpoints = [
+      `${BASE_URL}/api/models`,
+      `${BASE_URL}/api/v2/models`,
+      `${BASE_URL}/api/v1/models`,
+    ];
+
+    for (const ep of endpoints) {
+      try {
+        const response = await fetch(ep, { headers, timeout: 5000 } as any);
+        if (response.ok) {
+          const json: any = await response.json();
+          const items =
+            json?.data || json?.models || (Array.isArray(json) ? json : null);
+          if (items && Array.isArray(items) && items.length > 0) {
+            logger.info(`[Qwen] Fetched ${items.length} live models from ${ep}`);
+            return items.map((model: any) => ({
+              id: model.id || model.model_id,
+              name: model.name || model.label || model.id,
+              is_thinking:
+                model.info?.meta?.capabilities?.thinking ??
+                model.capabilities?.thinking ??
+                true,
+              max_context_length:
+                model.info?.meta?.max_context_length ||
+                model.max_context_length ||
+                1000000,
+              is_search: true,
+              is_image_upload:
+                model.info?.meta?.capabilities?.multimodal ||
+                model.capabilities?.multimodal ||
+                false,
+            }));
+          }
+        }
+      } catch (e) {
+        // try next endpoint
       }
-      return [];
-    } catch (error) {
-      return [];
     }
+
+    // Fallback to official up-to-date models matching live browser
+    return [
+      {
+        id: 'qwen-3.8-max',
+        name: 'Qwen3.8-Max',
+        is_thinking: true,
+        max_context_length: 1000000,
+        is_search: true,
+        is_image_upload: false,
+        description:
+          'Flagship Qwen3.8 Max with advanced reasoning, coding, and expert-level problem solving',
+      },
+      {
+        id: 'qwen-3.8-plus',
+        name: 'Qwen3.8-Plus',
+        is_thinking: true,
+        max_context_length: 1000000,
+        is_search: true,
+        is_image_upload: true,
+        description:
+          'High-performance Qwen3.8 with multimodal visual reasoning and tool use',
+      },
+      {
+        id: 'qwen-3.7-max',
+        name: 'Qwen3.7-Max',
+        is_thinking: true,
+        max_context_length: 1000000,
+        is_search: true,
+        is_image_upload: false,
+        description: 'Flagship Qwen3.7 series reasoning model',
+      },
+      {
+        id: 'qwen-3.7-plus',
+        name: 'Qwen3.7-Plus',
+        is_thinking: true,
+        max_context_length: 1000000,
+        is_search: true,
+        is_image_upload: true,
+        description:
+          'Qwen3.7 with state-of-the-art text and multimodal processing',
+      },
+      {
+        id: 'qwen-3.6-plus',
+        name: 'Qwen3.6-Plus',
+        is_thinking: true,
+        max_context_length: 1000000,
+        is_search: true,
+        is_image_upload: true,
+        description: 'Qwen3.6 series multimodal model',
+      },
+      {
+        id: 'qwen-3.5-plus',
+        name: 'Qwen3.5-Plus',
+        is_thinking: true,
+        max_context_length: 1000000,
+        is_search: true,
+        is_image_upload: true,
+        description: 'Qwen3.5 high-efficiency model',
+      },
+      {
+        id: 'qwen-3.5-flash',
+        name: 'Qwen3.5-Flash',
+        is_thinking: true,
+        max_context_length: 1000000,
+        is_search: true,
+        is_image_upload: true,
+        description: 'Qwen3.5 flash high-efficiency model',
+      },
+      {
+        id: 'qwen-max',
+        name: 'Qwen-Max',
+        is_thinking: true,
+        max_context_length: 1000000,
+        is_search: true,
+        is_image_upload: false,
+        description: 'Qwen Max flagship reasoning model',
+      },
+      {
+        id: 'qwen-plus',
+        name: 'Qwen-Plus',
+        is_thinking: true,
+        max_context_length: 1000000,
+        is_search: true,
+        is_image_upload: true,
+        description: 'Qwen Plus versatile model',
+      },
+    ];
   }
 
   isModelSupported(model: string): boolean {

@@ -45,18 +45,10 @@ export const sendMessageController = async (
     if (messages && messages.length > 1) {
       if (!conversationId || conversationId.trim() === '') {
         if (!parent_message_id) {
-          const msg =
-            'Missing Conversation ID: For multi-turn conversations, a valid conversationId must be provided.';
-          logger.error(`[Chat] Validation Error: ${msg}`);
-          res.status(400).json({
-            success: false,
-            message: msg,
-            error: {
-              code: 'BAD_REQUEST',
-              details: 'conversationId is required for messages > 1',
-            },
-          });
-          return;
+          // Auto-generate UUID v4 fallback conversationId for multi-turn tool executions to prevent session disconnect
+          const fallbackConvId = crypto.randomUUID();
+          logger.info(`[Chat] Auto-assigned fallback conversationId: ${fallbackConvId}`);
+          req.body.conversationId = fallbackConvId;
         }
       }
     }

@@ -179,11 +179,91 @@ export const providers = [
   {
     provider_id: 'kimi',
     provider_name: 'Kimi',
-    is_enabled: false,
-    website_url: 'https://www.kimi.com/',
-    auth_method: ['basic'],
+    is_enabled: true,
+    website_url: 'https://www.kimi.ai/',
+    auth_method: ['basic', 'google'],
+    connection_type: 'https',
     is_pausable: false,
     is_memory: false,
+    models: [
+      {
+        id: 'k3',
+        name: 'Kimi K3 (Flagship)',
+        is_thinking: true,
+        max_context_length: 262144,
+        is_search: true,
+        is_image_upload: true,
+        is_video_upload: false,
+        description:
+          'Kimi K3 Flagship All-Rounder - Chat & Agent with state-of-the-art reasoning and problem solving.',
+      },
+      {
+        id: 'k3-swarm',
+        name: 'Kimi K3 Swarm',
+        is_thinking: true,
+        max_context_length: 262144,
+        is_search: true,
+        is_image_upload: true,
+        is_video_upload: false,
+        description:
+          'Kimi K3 Swarm - Massive search, batch processing, and multi-agent workflow in one go.',
+      },
+      {
+        id: 'instant',
+        name: 'Kimi Instant',
+        is_thinking: false,
+        max_context_length: 262144,
+        is_search: true,
+        is_image_upload: true,
+        is_video_upload: false,
+        description:
+          'Kimi Instant - Ultra-fast responses for everyday chat queries.',
+      },
+      {
+        id: 'k2d6-thinking',
+        name: 'Kimi K2.6 Thinking',
+        is_thinking: true,
+        max_context_length: 262144,
+        is_search: true,
+        is_image_upload: true,
+        is_video_upload: false,
+        description:
+          'Kimi K2.6 Thinking delivers deep reasoning, step-by-step logic deduction, and advanced mathematical problem solving.',
+      },
+      {
+        id: 'k2d6',
+        name: 'Kimi K2.6 Instant',
+        is_thinking: false,
+        max_context_length: 262144,
+        is_search: true,
+        is_image_upload: true,
+        is_video_upload: false,
+        description:
+          'Kimi K2.6 Instant provides fast text generation for conversational tasks.',
+      },
+      {
+        id: 'k2d6-agent',
+        name: 'Kimi K2.6 Agent',
+        is_thinking: true,
+        max_context_length: 262144,
+        is_search: true,
+        is_image_upload: true,
+        is_video_upload: false,
+        description:
+          'Kimi K2.6 Agent autonomously performs comprehensive research, slides generation, and document processing.',
+      },
+      {
+        id: 'k2d6-agent-ultra',
+        name: 'Kimi K2.6 Agent Swarm',
+        is_thinking: true,
+        max_context_length: 262144,
+        is_search: true,
+        is_image_upload: true,
+        is_video_upload: false,
+        description:
+          'Kimi K2.6 Agent Swarm coordinates multi-agent workers for large-scale information retrieval.',
+      },
+    ],
   },
   {
     provider_id: 'lmarena',
@@ -218,14 +298,36 @@ export const providers = [
     provider_id: 'qwen',
     provider_name: 'Qwen',
     is_enabled: true,
-    website_url: 'https://qwenlm.ai/',
+    website_url: 'https://modelscope.cn/',
     auth_method: ['basic', 'google'],
     connection_type: 'https',
     is_pausable: false,
     is_memory: true,
     models: [
       {
-        id: 'qwen3.7-plus',
+        id: 'qwen-3.8-max',
+        name: 'Qwen3.8-Max',
+        is_thinking: true,
+        max_context_length: 1000000,
+        is_search: true,
+        is_image_upload: false,
+        is_video_upload: false,
+        description:
+          'Qwen3.8-Max is the flagship model of the Qwen3.8 series, delivering state-of-the-art performance with advanced capabilities in expert-level knowledge, complex logical reasoning, advanced mathematics, and sophisticated coding tasks.',
+      },
+      {
+        id: 'qwen-3.8-plus',
+        name: 'Qwen3.8-Plus',
+        is_thinking: true,
+        max_context_length: 1000000,
+        is_search: true,
+        is_image_upload: true,
+        is_video_upload: true,
+        description:
+          'Qwen3.8-Plus is a high-performance large language model within the Qwen3.8 family, integrating state-of-the-art text and multimodal processing capabilities. It excels in web development, complex reasoning, role-playing, creative writing, visual reasoning, OCR, and spatial understanding.',
+      },
+      {
+        id: 'qwen-3.7-plus',
         name: 'Qwen3.7-Plus',
         is_thinking: true,
         max_context_length: 1000000,
@@ -236,7 +338,7 @@ export const providers = [
           'Qwen3.7-Plus is a high-performance large language model within the Qwen3.7 family, integrating state-of-the-art text and multimodal processing capabilities. It can autonomously invoke tools during everyday conversations and excels in web development, artifacts, complex reasoning, role-playing, creative writing, visual reasoning, OCR, and spatial understanding.',
       },
       {
-        id: 'qwen3.7-max',
+        id: 'qwen-3.7-max',
         name: 'Qwen3.7-Max',
         is_thinking: true,
         max_context_length: 1000000,
@@ -247,7 +349,7 @@ export const providers = [
           'Qwen3.7-Max is the flagship model of the Qwen3.7 series, engineered to deliver state-of-the-art performance and our most advanced capabilities. It excels in expert-level knowledge, complex logical reasoning, advanced mathematics, and sophisticated coding tasks. Please note that it does not currently support vision capabilities.',
       },
       {
-        id: 'qwen3.6-plus',
+        id: 'qwen-3.6-plus',
         name: 'Qwen3.6-Plus',
         is_thinking: true,
         max_context_length: 1000000,
@@ -258,7 +360,7 @@ export const providers = [
           'Qwen3.6-Plus is the latest large model in the Qwen3.6 series, integrating state-of-the-art text and multimodal processing capabilities. It can autonomously invoke tools during everyday conversations and excels in web development, artifacts, complex reasoning, role-playing, creative writing, visual reasoning, OCR, and spatial understanding.',
       },
       {
-        id: 'qwen3.6-max-preview',
+        id: 'qwen-3.6-max-preview',
         name: 'Qwen3.6-Max-Preview',
         is_thinking: true,
         max_context_length: 262144,
@@ -269,7 +371,7 @@ export const providers = [
           'Qwen3.6-Max-Preview is a preview version of the flagship model in the Qwen3.6 family, featuring our most advanced text capabilities. It excels in expert-level knowledge, complex reasoning, mathematics, and coding. Please note that this preview build does not currently support Search or Code Interpreter tools.',
       },
       {
-        id: 'qwen3.5-plus',
+        id: 'qwen-3.5-plus',
         name: 'Qwen3.5-Plus',
         is_thinking: true,
         max_context_length: 1000000,
@@ -280,7 +382,7 @@ export const providers = [
           'Qwen3.5-Plus is the latest large model in the Qwen3.5 series, integrating state-of-the-art text and multimodal processing capabilities. It can autonomously invoke tools during everyday conversations and excels in complex reasoning, instruction following, programming, role-playing, creative writing, visual reasoning, OCR, and spatial understanding.',
       },
       {
-        id: 'qwen3.5-flash',
+        id: 'qwen-3.5-flash',
         name: 'Qwen3.5-Flash',
         is_thinking: true,
         max_context_length: 1000000,
@@ -289,6 +391,28 @@ export const providers = [
         is_video_upload: true,
         description:
           'The latest high-efficiency model in the Qwen3.5 series, supporting text and multimodal tasks. It excels in complex reasoning, instruction following, programming, role-playing, creative writing, visual reasoning, OCR, and spatial understanding.',
+      },
+      {
+        id: 'qwen-max',
+        name: 'Qwen-Max',
+        is_thinking: true,
+        max_context_length: 1000000,
+        is_search: true,
+        is_image_upload: false,
+        is_video_upload: false,
+        description:
+          'Qwen-Max is the flagship model delivering state-of-the-art performance in complex reasoning and advanced tasks.',
+      },
+      {
+        id: 'qwen-plus',
+        name: 'Qwen-Plus',
+        is_thinking: true,
+        max_context_length: 1000000,
+        is_search: true,
+        is_image_upload: true,
+        is_video_upload: true,
+        description:
+          'Qwen-Plus is a versatile large model balancing speed and multimodal intelligence.',
       },
       {
         id: 'qwen3-coder-plus',
@@ -400,7 +524,7 @@ export const providers = [
     provider_id: 'qwen-cli',
     provider_name: 'Qwen Coder CLI',
     is_enabled: true,
-    website_url: 'https://qwenlm.ai/',
+    website_url: 'https://modelscope.cn/',
     auth_method: ['basic'],
     connection_type: 'https',
     models: [
@@ -503,16 +627,5 @@ export const providers = [
       },
     ],
     is_pausable: false,
-    is_memory: false,
-  },
-  {
-    provider_id: 'zenmux',
-    provider_name: 'ZenMux AI',
-    is_enabled: true,
-    website_url: 'https://zenmux.ai/',
-    auth_method: ['basic'],
-    connection_type: 'https',
-    is_pausable: false,
-    is_memory: false,
   },
 ];
