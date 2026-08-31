@@ -1,12 +1,28 @@
+/**
+ * ------------------------------------------------------------------
+ * Cerebras Cloud Proxy Handler
+ * ------------------------------------------------------------------
+ * Proxy handler để capture cookies và user info từ Cerebras Cloud.
+ * Lắng nghe session-token cookie và user email từ /api/auth/session.
+ *
+ * Main features:
+ * - onRequest()       : Capture authjs.session-token cookie
+ * - onResponseBody()  : Capture user email từ session API
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Services ──
 import { ProxyHandler } from '../../services/proxy.service';
 import { proxyEvents } from '../../services/proxy.service';
+
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('CerebrasProxy');
 
-// =============================================================================
-// PROXY HANDLER
-// =============================================================================
+// ─── Proxy Handler ────────────────────────────────────────────────────
 
 export const proxyHandler: ProxyHandler = {
   onRequest: (ctx: any, callback: () => void) => {

@@ -1,4 +1,21 @@
+/**
+ * ------------------------------------------------------------------
+ * Z.AI Browser Types
+ * ------------------------------------------------------------------
+ * Type definitions cho Z.AI Browser provider.
+ *
+ * Main exports:
+ * - ParsedZaiCredential    : Parsed credential structure
+ * - ZaiBrowserConfig       : Configuration structure
+ * - ZaiBrowserSession      : Session state structure
+ * - DEFAULT_ZAI_BROWSER_CONFIG : Default configuration
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
 import type WebSocket from 'ws';
+
+// ─── Types ──────────────────────────────────────────────────────────────
 
 export interface ParsedZaiCredential {
   cookie: string;

@@ -1,4 +1,20 @@
-// Groq-specific types
+/**
+ * ------------------------------------------------------------------
+ * Groq Types
+ * ------------------------------------------------------------------
+ * Type definitions cho Groq API.
+ *
+ * Main exports:
+ * - GroqMessage        : Message structure
+ * - GroqChatPayload    : Chat completion request payload
+ * - GroqStreamDelta    : Stream delta structure
+ * - GroqStreamChoice   : Stream choice structure
+ * - GroqStreamChunk    : Stream chunk structure
+ * - GroqModel          : Model info structure
+ * ------------------------------------------------------------------
+ */
+
+// ─── Types ──────────────────────────────────────────────────────────────
 
 export interface GroqMessage {
   role: 'user' | 'assistant' | 'system';

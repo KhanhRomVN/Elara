@@ -1,8 +1,27 @@
+/**
+ * ------------------------------------------------------------------
+ * HuggingChat Proxy Handler
+ * ------------------------------------------------------------------
+ * Proxy handler để capture cookies và email từ HuggingChat.
+ *
+ * Main features:
+ * - onRequest()       : Capture token cookie
+ * - onResponseBody()  : Capture email từ login response
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Services ──
 import { ProxyHandler } from '../../services/proxy.service';
 import { proxyEvents } from '../../services/proxy.service';
+
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('HuggingChatProvider');
+
+// ─── Proxy Handler ────────────────────────────────────────────────────
 
 export const proxyHandler: ProxyHandler = {
   onRequest: (ctx: any, callback: () => void) => {

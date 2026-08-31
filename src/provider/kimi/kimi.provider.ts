@@ -1,20 +1,55 @@
-import fetch from 'node-fetch';
+/**
+ * ------------------------------------------------------------------
+ * Kimi Provider
+ * ------------------------------------------------------------------
+ * Provider implementation cho Kimi AI (Moonshot).
+ * Hỗ trợ login qua browser, chat completion với gRPC-Web Connect,
+ * thinking mode, search, và auto-refresh token.
+ *
+ * Main features:
+ * - login()                : Đăng nhập qua browser
+ * - handleMessage()        : Gửi tin nhắn với streaming response
+ * - refreshAccessToken()   : Tự động refresh token khi hết hạn
+ * - getModels()            : Lấy danh sách models
+ * - getProfile()           : Lấy thông tin user profile
+ * - Fallback handling      : Tự động fallback khi K3 overload
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import * as crypto from 'crypto';
+import fetch from 'node-fetch';
+
+// ── Types ──
 import { Provider, SendMessageOptions } from '../../types';
-import { createLogger } from '../../utils/logger';
+
+// ── Services ──
 import { loginService } from '../../services/login/login.service';
 import { proxyEvents } from '../../services/proxy.service';
+
+// ── Repositories ──
 import { updateAccountCredential } from '../../repositories/account.repository';
+
+// ── Utils ──
+import { createLogger } from '../../utils/logger';
+
+// ── Kimi Imports ──
 import { KIMI_BASE_URL, KIMI_MODELS, KimiCredential, KimiChatRequest } from './kimi.types';
 import { parseKimiSSE } from './kimi.sse-parser';
 import { kimiProxyHandler } from './kimi.proxy-handler';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('KimiProvider');
+
+// ─── Provider Class ────────────────────────────────────────────────────
 
 export class KimiProvider implements Provider {
   name = 'Kimi';
   defaultModel = KIMI_MODELS.K3;
   proxyHandler = kimiProxyHandler;
+
+  // ─── Credential Parser ─────────────────────────────────────────────
 
   private parseCredential(credential: string): KimiCredential {
     if (!credential) return { token: '' };
@@ -39,7 +74,6 @@ export class KimiProvider implements Provider {
       }
     }
 
-    // Check if raw JWT
     if (credential.startsWith('eyJ')) {
       return {
         token: credential,
@@ -49,7 +83,6 @@ export class KimiProvider implements Provider {
       };
     }
 
-    // Cookie string
     const match =
       credential.match(/kimi-auth=([^;]+)/) ||
       credential.match(/access_token=([^;]+)/) ||
@@ -70,6 +103,8 @@ export class KimiProvider implements Provider {
     };
   }
 
+  // ─── Token Helpers ──────────────────────────────────────────────────
+
   private getTokenExpiry(jwt: string): number | null {
     try {
       const parts = jwt.split('.');
@@ -82,6 +117,8 @@ export class KimiProvider implements Provider {
       return null;
     }
   }
+
+  // ─── Refresh Token ──────────────────────────────────────────────────
 
   async refreshAccessToken(cred: KimiCredential, accountId?: string): Promise<string | null> {
     const tokenToUse = cred.refreshToken || cred.token;
@@ -123,7 +160,7 @@ export class KimiProvider implements Provider {
           cred.refreshToken;
 
         if (newAccessToken && typeof newAccessToken === 'string') {
-          logger.info('[Kimi] Successfully refreshed access token via AuthService!');
+          logger.info('[Kimi] Successfully refreshed access token!');
           cred.token = newAccessToken;
           if (newRefreshToken) cred.refreshToken = newRefreshToken;
           cred.cookies = `kimi-auth=${newAccessToken}${cred.refreshToken ? `; refresh_token=${cred.refreshToken}` : ''}`;
@@ -147,98 +184,7 @@ export class KimiProvider implements Provider {
     return null;
   }
 
-  private extractEmailFromToken(token: string): string | null {
-    try {
-      const parts = token.split('.');
-      if (parts.length >= 2) {
-        const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
-        return payload.email || payload.name || payload.sub || payload.id || null;
-      }
-    } catch {
-      // ignore
-    }
-    return null;
-  }
-
-  isModelSupported(model: string): boolean {
-    const m = model.toLowerCase();
-    return (
-      m.includes('kimi') ||
-      m.includes('k3') ||
-      m.includes('k2d6') ||
-      m.includes('instant') ||
-      m.includes('k1.5') ||
-      m.includes('moonshot')
-    );
-  }
-
-  async getModels(credential: string, accountId?: string): Promise<any[]> {
-    return [
-      {
-        id: KIMI_MODELS.K3,
-        name: 'Kimi K3 (Flagship)',
-        is_thinking: true,
-        max_context_length: 262144,
-        is_search: true,
-        is_image_upload: true,
-        description: 'Chat & Agent, flagship all-rounder with deep reasoning',
-      },
-      {
-        id: KIMI_MODELS.K3_SWARM,
-        name: 'Kimi K3 Swarm',
-        is_thinking: true,
-        max_context_length: 262144,
-        is_search: true,
-        is_image_upload: true,
-        description: 'Massive search, batch processing, and multi-agent workflow in one go',
-      },
-      {
-        id: KIMI_MODELS.INSTANT,
-        name: 'Kimi Instant',
-        is_thinking: false,
-        max_context_length: 262144,
-        is_search: true,
-        is_image_upload: true,
-        description: 'Fast chat, quick replies for everyday conversational tasks',
-      },
-      {
-        id: KIMI_MODELS.K2D6_THINKING,
-        name: 'Kimi K2.6 Thinking',
-        is_thinking: true,
-        max_context_length: 262144,
-        is_search: true,
-        is_image_upload: true,
-        description: 'Deep reasoning model for complex logical questions, math, and code',
-      },
-      {
-        id: KIMI_MODELS.K2D6,
-        name: 'Kimi K2.6 Instant',
-        is_thinking: false,
-        max_context_length: 262144,
-        is_search: true,
-        is_image_upload: true,
-        description: 'Ultra-fast responses for everyday chat queries',
-      },
-      {
-        id: KIMI_MODELS.K2D6_AGENT,
-        name: 'Kimi K2.6 Agent',
-        is_thinking: true,
-        max_context_length: 262144,
-        is_search: true,
-        is_image_upload: true,
-        description: 'Autonomous agent for deep research, slides, website, and documents',
-      },
-      {
-        id: KIMI_MODELS.K2D6_AGENT_ULTRA,
-        name: 'Kimi K2.6 Agent Swarm',
-        is_thinking: true,
-        max_context_length: 262144,
-        is_search: true,
-        is_image_upload: true,
-        description: 'Multi-agent swarm for massive batch research and long writing',
-      },
-    ];
-  }
+  // ─── Profile ────────────────────────────────────────────────────────
 
   async getProfile(
     token: string,
@@ -278,7 +224,6 @@ export class KimiProvider implements Provider {
       if (extraHeaders?.['x-traffic-id']) headers['x-traffic-id'] = extraHeaders['x-traffic-id'];
       if (extraHeaders?.['Cookie']) headers['Cookie'] = extraHeaders['Cookie'];
 
-      // Call GetCurrentUser
       const res = await fetch(`${KIMI_BASE_URL}/apiv2/kimi.gateway.account.v1.UserService/GetCurrentUser`, {
         method: 'POST',
         headers,
@@ -294,7 +239,6 @@ export class KimiProvider implements Provider {
 
           let email = name || id;
 
-          // Also try to check ListThirdAccounts for email
           try {
             const thirdRes = await fetch(`${KIMI_BASE_URL}/apiv2/kimi.gateway.account.v1.SecurityService/ListThirdAccounts`, {
               method: 'POST',
@@ -320,6 +264,8 @@ export class KimiProvider implements Provider {
     }
     return { email: null };
   }
+
+  // ─── Login ──────────────────────────────────────────────────────────
 
   async login(options?: { method?: string }): Promise<{ email: string; cookies: string; headers?: any }> {
     logger.info(`[Kimi] Starting login to https://www.kimi.ai/ (method: ${options?.method || 'basic'})`);
@@ -363,21 +309,19 @@ export class KimiProvider implements Provider {
 
           const refreshToken = (data as any).refreshToken || (data as any).refresh_token || '';
 
-          // Verify token against GetCurrentUser API to ensure user is logged in
           const profile = await this.getProfile(token, capturedHeaders);
           if (!profile.email && !profile.id) {
             logger.debug('[Kimi] Token not yet authenticated with user profile, waiting for login...');
             return { isValid: false };
           }
 
-          // Wait until refreshToken is captured from browser localStorage / AuthService response
           if (!refreshToken) {
-            logger.debug('[Kimi] User profile authenticated, waiting for refreshToken to be captured...');
+            logger.debug('[Kimi] User profile authenticated, waiting for refreshToken...');
             return { isValid: false };
           }
 
           const userIdentifier = profile.email || profile.name || profile.id || data.email || 'Kimi User';
-          logger.info(`[Kimi] ✅ Login validated successfully with refreshToken for: ${userIdentifier}`);
+          logger.info(`[Kimi] ✅ Login validated successfully for: ${userIdentifier}`);
 
           const cookieString = `kimi-auth=${token}${refreshToken ? `; refresh_token=${refreshToken}` : ''}`;
           const credObj: KimiCredential = {
@@ -411,6 +355,8 @@ export class KimiProvider implements Provider {
     }
   }
 
+  // ─── Handle Message ─────────────────────────────────────────────────
+
   async handleMessage(options: SendMessageOptions): Promise<void> {
     const {
       credential,
@@ -434,7 +380,6 @@ export class KimiProvider implements Provider {
       return;
     }
 
-    // Normalize model name
     let cleanModel = model.toLowerCase();
     if (cleanModel.includes('/')) {
       cleanModel = cleanModel.split('/').pop() || cleanModel;
@@ -537,9 +482,8 @@ export class KimiProvider implements Provider {
         timeout: 120000,
       } as any);
 
-      // If 401 unauthenticated, attempt auto-refresh and retry once
       if (response.status === 401) {
-        logger.info('[Kimi] 401 unauthenticated received, attempting auto-refresh token and retry...');
+        logger.info('[Kimi] 401 unauthenticated, attempting auto-refresh token...');
         const refreshed = await this.refreshAccessToken(cred, options.accountId);
         if (refreshed) {
           activeToken = refreshed;
@@ -572,7 +516,7 @@ export class KimiProvider implements Provider {
         conversationId,
       });
 
-      // If OK_COMPUTER is queued / overloaded (common for free tier K3/Agent), fallback to SCENARIO_K2D5
+      // Fallback khi OK_COMPUTER overloaded
       if (!result.accumulatedContent && result.error && scenario === 'SCENARIO_OK_COMPUTER') {
         logger.warn(`[Kimi] OK_COMPUTER overloaded (${result.error}). Falling back to SCENARIO_K2D5.`);
         payload.scenario = 'SCENARIO_K2D5';
@@ -616,6 +560,96 @@ export class KimiProvider implements Provider {
       logger.error('[Kimi] handleMessage error:', err);
       onError(err);
     }
+  }
+
+  // ─── Continue Message ───────────────────────────────────────────────
+
+  async continueMessage(options: SendMessageOptions): Promise<void> {
+    return this.handleMessage(options);
+  }
+
+  // ─── Get Models ─────────────────────────────────────────────────────
+
+  async getModels(credential: string, accountId?: string): Promise<any[]> {
+    return [
+      {
+        id: KIMI_MODELS.K3,
+        name: 'Kimi K3 (Flagship)',
+        is_thinking: true,
+        max_context_length: 262144,
+        is_search: true,
+        is_image_upload: true,
+        description: 'Chat & Agent, flagship all-rounder with deep reasoning',
+      },
+      {
+        id: KIMI_MODELS.K3_SWARM,
+        name: 'Kimi K3 Swarm',
+        is_thinking: true,
+        max_context_length: 262144,
+        is_search: true,
+        is_image_upload: true,
+        description: 'Massive search, batch processing, and multi-agent workflow',
+      },
+      {
+        id: KIMI_MODELS.INSTANT,
+        name: 'Kimi Instant',
+        is_thinking: false,
+        max_context_length: 262144,
+        is_search: true,
+        is_image_upload: true,
+        description: 'Fast chat, quick replies for everyday tasks',
+      },
+      {
+        id: KIMI_MODELS.K2D6_THINKING,
+        name: 'Kimi K2.6 Thinking',
+        is_thinking: true,
+        max_context_length: 262144,
+        is_search: true,
+        is_image_upload: true,
+        description: 'Deep reasoning for complex logic, math, and code',
+      },
+      {
+        id: KIMI_MODELS.K2D6,
+        name: 'Kimi K2.6 Instant',
+        is_thinking: false,
+        max_context_length: 262144,
+        is_search: true,
+        is_image_upload: true,
+        description: 'Ultra-fast responses for everyday chat',
+      },
+      {
+        id: KIMI_MODELS.K2D6_AGENT,
+        name: 'Kimi K2.6 Agent',
+        is_thinking: true,
+        max_context_length: 262144,
+        is_search: true,
+        is_image_upload: true,
+        description: 'Autonomous agent for deep research and documents',
+      },
+      {
+        id: KIMI_MODELS.K2D6_AGENT_ULTRA,
+        name: 'Kimi K2.6 Agent Swarm',
+        is_thinking: true,
+        max_context_length: 262144,
+        is_search: true,
+        is_image_upload: true,
+        description: 'Multi-agent swarm for massive batch research',
+      },
+    ];
+  }
+
+  // ─── Model Support ──────────────────────────────────────────────────
+
+  isModelSupported(model: string): boolean {
+    const m = model.toLowerCase();
+    return (
+      m.includes('kimi') ||
+      m.includes('k3') ||
+      m.includes('k2d6') ||
+      m.includes('instant') ||
+      m.includes('k1.5') ||
+      m.includes('moonshot')
+    );
   }
 }
 

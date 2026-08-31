@@ -1,7 +1,25 @@
+/**
+ * ------------------------------------------------------------------
+ * Kimi SSE Parser
+ * ------------------------------------------------------------------
+ * Parse Kimi's gRPC-Web Connect stream frames.
+ * Hỗ trợ 5-byte header prefix (1 byte flags + 4 bytes length),
+ * thinking mode với StreamingThinkingParser, và multi-stage events.
+ *
+ * Main functions:
+ * - parseKimiSSE() : Parse stream và emit content/thinking/metadata
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
 import { StreamingThinkingParser } from '../../utils/thinking-parser';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('KimiSSEParser');
+
+// ─── Types ──────────────────────────────────────────────────────────────
 
 export interface ParseOptions {
   onContent: (chunk: string) => void;
@@ -19,9 +37,8 @@ export interface ParseResult {
   error?: string;
 }
 
-/**
- * Parse Kimi's gRPC-Web Connect stream frames (5-byte header prefix: 1 byte flags + 4 bytes length)
- */
+// ─── Main Parser ────────────────────────────────────────────────────────
+
 export async function parseKimiSSE(
   stream: NodeJS.ReadableStream,
   options: ParseOptions,
@@ -51,13 +68,11 @@ export async function parseKimiSSE(
     stream.on('data', (chunk: Buffer) => {
       buffer = Buffer.concat([buffer, chunk]);
 
-      // Process all complete Connect frames in buffer
       while (buffer.length >= 5) {
         const frameLen = buffer.readUInt32BE(1);
 
-        // Check if full frame is available
         if (buffer.length < 5 + frameLen) {
-          break; // wait for more data
+          break;
         }
 
         const frameData = buffer.subarray(5, 5 + frameLen);
@@ -115,7 +130,6 @@ export async function parseKimiSSE(
         return;
       }
 
-      // Extract conversation ID
       if (event.chat?.lastRequest?.id) {
         conversationId = event.chat.lastRequest.id;
         if (onMetadata) {
@@ -131,7 +145,6 @@ export async function parseKimiSSE(
         }
       }
 
-      // Extract text chunk (filtered through thinkingParser to avoid leaking raw <thinking> tags)
       const textChunk =
         event.block?.text?.content ??
         (event.mask === 'block.text.content' ? event.block?.text?.content : undefined);
@@ -140,7 +153,6 @@ export async function parseKimiSSE(
         thinkingParser.feed(textChunk);
       }
 
-      // Extract thinking chunk from Kimi's native block.think
       const thinkChunk =
         event.block?.think?.content ??
         (event.mask === 'block.think.content' ? event.block?.think?.content : undefined);
@@ -150,7 +162,6 @@ export async function parseKimiSSE(
         if (onThinking) onThinking(thinkChunk);
       }
 
-      // Handle multiStage
       if (event.block?.multiStage) {
         const stage = event.block.multiStage;
         if (stage.stage === 'STAGE_NAME_THINKING' && onMetadata) {

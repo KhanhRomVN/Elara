@@ -1,47 +1,54 @@
+/**
+ * ------------------------------------------------------------------
+ * Browser Session Routes
+ * ------------------------------------------------------------------
+ * Routes cho API quản lý phiên đăng nhập qua browser (CDP).
+ *
+ * Main routes:
+ * - GET    /v1/browser-sessions                : List sessions (deprecated)
+ * - GET    /v1/browser-sessions/active/:providerId : Get active session
+ * - POST   /v1/browser-sessions                : Create session (deprecated)
+ * - POST   /v1/browser-sessions/login          : Login via browser CDP
+ * - POST   /v1/browser-sessions/profile        : Create profile
+ * - POST   /v1/browser-sessions/complete/:tempSessionId : Complete session
+ * - PUT    /v1/browser-sessions/:sessionId/activate : Activate session
+ * - PATCH  /v1/browser-sessions/:sessionId     : Update session
+ * - POST   /v1/browser-sessions/:sessionId/touch : Touch session
+ * - DELETE /v1/browser-sessions/:sessionId     : Delete session
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { Router } from 'express';
+
+// ── Controllers ──
 import {
-    listSessions,
-    getActiveSession,
-    createSession,
-    loginSession,
-    createProfile,
-    activateSessionHandler,
-    updateSession,
-    deleteSession,
-    touchSessionHandler,
-    completeSession,
+  listSessions,
+  getActiveSession,
+  createSession,
+  loginSession,
+  createProfile,
+  activateSessionHandler,
+  updateSession,
+  deleteSession,
+  touchSessionHandler,
+  completeSession,
 } from '../../controllers/browser-session.controller';
+
+// ─── Router ─────────────────────────────────────────────────────────────
 
 const router = Router();
 
-// GET /v1/browser-sessions
 router.get('/', listSessions);
-
-// GET /v1/browser-sessions/active/:providerId (deprecated, returns most recent)
 router.get('/active/:providerId', getActiveSession);
-
-// POST /v1/browser-sessions
 router.post('/', createSession);
-
-// POST /v1/browser-sessions/login
 router.post('/login', loginSession);
-
-// POST /v1/browser-sessions/profile
 router.post('/profile', createProfile);
-
-// POST /v1/browser-sessions/complete/:tempSessionId
 router.post('/complete/:tempSessionId', completeSession);
-
-// PUT /v1/browser-sessions/:sessionId/activate (deprecated)
 router.put('/:sessionId/activate', activateSessionHandler);
-
-// PATCH /v1/browser-sessions/:sessionId (deprecated)
 router.patch('/:sessionId', updateSession);
-
-// POST /v1/browser-sessions/:sessionId/touch
 router.post('/:sessionId/touch', touchSessionHandler);
-
-// DELETE /v1/browser-sessions/:sessionId
 router.delete('/:sessionId', deleteSession);
 
 export default router;

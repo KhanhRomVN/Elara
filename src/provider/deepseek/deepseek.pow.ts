@@ -1,18 +1,32 @@
+/**
+ * ------------------------------------------------------------------
+ * DeepSeek PoW (Proof of Work)
+ * ------------------------------------------------------------------
+ * Giải PoW challenge cho DeepSeek API sử dụng WASM.
+ * PoW được yêu cầu để chứng minh client không phải bot.
+ *
+ * Main functions:
+ * - DeepSeekHash.calculateHash() : Tính hash với WASM
+ * - solvePoW()                   : Giải PoW challenge
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import * as fs from 'fs';
+
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
+
+// ── Types ──
 import { PoWChallenge, PoWResponse } from './deepseek.types';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('DeepSeekPoW');
-
-// =============================================================================
-// CONSTANTS
-// =============================================================================
 
 export const BASE_URL = 'https://chat.deepseek.com';
 
-// =============================================================================
-// POW HASH (WASM)
-// =============================================================================
+// ─── Class ──────────────────────────────────────────────────────────────
 
 export class DeepSeekHash {
   private instance: WebAssembly.Instance | null = null;
@@ -89,9 +103,7 @@ export class DeepSeekHash {
   }
 }
 
-// =============================================================================
-// PoW SOLVER
-// =============================================================================
+// ─── Functions ──────────────────────────────────────────────────────────
 
 export async function solvePoW(
   dsHash: DeepSeekHash,

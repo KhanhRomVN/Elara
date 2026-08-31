@@ -1,22 +1,37 @@
 /**
- * Chat Service (core)
- * Orchestrates sending a message through a provider,
- * recording metrics only (no persistence).
+ * ------------------------------------------------------------------
+ * Chat Service (Core)
+ * ------------------------------------------------------------------
+ * Service core orchestration: gửi tin nhắn qua provider,
+ * ghi nhận metrics, và quản lý conversation lock.
+ *
+ * Main functions:
+ * - sendMessage() : Gửi tin nhắn qua provider và xử lý response
+ * ------------------------------------------------------------------
  */
-import { isProviderEnabled } from '../provider.service';
-import { createLogger } from '../../utils/logger';
-import { providerRegistry } from '../../provider/registry';
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Types ──
 import type { SendMessageOptions } from '../../types';
+
+// ── Providers ──
+import { providerRegistry } from '../../provider/registry';
+import { isProviderEnabled } from '../provider.service';
+
+// ── Metrics ──
 import { recordChatMetrics, recordError } from '../metrics.service';
 
-export type { SendMessageOptions };
+// ── Utils ──
+import { createLogger } from '../../utils/logger';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('ChatService');
 
-// ---------------------------------------------------------------------------
-// Lock mechanism: prevents concurrent conversation creation for the same account
-// ---------------------------------------------------------------------------
+// ─── State ──────────────────────────────────────────────────────────────
+
 const pendingConversations = new Map<string, Promise<string>>();
+
+// ─── Main Function ─────────────────────────────────────────────────────
 
 export const sendMessage = async (
   options: SendMessageOptions,
@@ -32,7 +47,6 @@ export const sendMessage = async (
 
   if (!(await isProviderEnabled(provider_id))) {
     const error = new Error(`Provider ${provider_id} is disabled`);
-    // Record error metric before throwing
     recordError(
       accountId,
       provider_id,
@@ -89,7 +103,6 @@ export const sendMessage = async (
   try {
     return await provider.handleMessage(wrappedOptions);
   } catch (error) {
-    // Record error metric for any unhandled errors from provider
     const errorMessage = error instanceof Error ? error.message : String(error);
     recordError(
       accountId,

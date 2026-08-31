@@ -1,22 +1,48 @@
-import { Provider, SendMessageOptions } from '../../types';
+/**
+ * ------------------------------------------------------------------
+ * Mistral Provider
+ * ------------------------------------------------------------------
+ * Provider implementation cho Mistral AI API.
+ * Hỗ trợ login qua browser và chat completion với streaming.
+ *
+ * Main features:
+ * - login()          : Đăng nhập qua browser
+ * - handleMessage()  : Gửi tin nhắn với streaming response
+ * - getProfile()     : Lấy thông tin user profile
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { Router } from 'express';
-import fetch from 'node-fetch';
-import * as https from 'https';
 import * as crypto from 'crypto';
-import { createLogger } from '../../utils/logger';
+import fetch from 'node-fetch';
+
+// ── Types ──
+import { Provider, SendMessageOptions } from '../../types';
+
+// ── Services ──
 import { loginService } from '../../services/login/login.service';
+
+// ── Utils ──
+import { createLogger } from '../../utils/logger';
+
+// ── Mistral Imports ──
 import { proxyHandler } from './mistral.proxy-handler';
 
-export { proxyHandler };
-
+// ─── Constants ──────────────────────────────────────────────────────────
 export const BASE_URL = 'https://console.mistral.ai';
 
 const logger = createLogger('MistralProvider');
+
+// ─── Provider Class ────────────────────────────────────────────────────
 
 export class MistralProvider implements Provider {
   name = 'Mistral';
   proxyHandler = proxyHandler;
   defaultModel = 'mistral-large-latest';
+
+  // ─── Login ──────────────────────────────────────────────────────────
 
   async login() {
     logger.info('Starting Mistral login...');
@@ -49,6 +75,8 @@ export class MistralProvider implements Provider {
     });
   }
 
+  // ─── Profile ────────────────────────────────────────────────────────
+
   async getProfile(
     credential: string,
   ): Promise<{ email: string | null; name?: string; id?: string }> {
@@ -77,6 +105,8 @@ export class MistralProvider implements Provider {
       return { email: null };
     }
   }
+
+  // ─── Handle Message ─────────────────────────────────────────────────
 
   async handleMessage(options: SendMessageOptions): Promise<void> {
     const {
@@ -119,6 +149,14 @@ export class MistralProvider implements Provider {
       onError(error);
     }
   }
+
+  // ─── Continue Message ───────────────────────────────────────────────
+
+  async continueMessage(options: SendMessageOptions): Promise<void> {
+    return this.handleMessage(options);
+  }
+
+  // ─── Stream Helper ──────────────────────────────────────────────────
 
   private async streamMistral(
     credential: string,
@@ -211,7 +249,11 @@ export class MistralProvider implements Provider {
     }
   }
 
+  // ─── Routes ─────────────────────────────────────────────────────────
+
   registerRoutes() {}
+
+  // ─── Model Support ──────────────────────────────────────────────────
 
   isModelSupported(model: string): boolean {
     return model.toLowerCase().includes('mistral');

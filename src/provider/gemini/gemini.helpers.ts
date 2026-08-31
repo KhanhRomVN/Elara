@@ -1,9 +1,28 @@
+/**
+ * ------------------------------------------------------------------
+ * Gemini Helpers
+ * ------------------------------------------------------------------
+ * Helper functions cho Gemini Web API.
+ *
+ * Main functions:
+ * - makeSapisidHash()      : Tạo SAPISIDHASH header
+ * - getAccountPrefix()     : Lấy prefix cho /u/ path
+ * - buildPayload()         : Build request payload
+ * - buildRequestBody()     : Build URL-encoded form body
+ * - getStreamGenerateUrl() : Build StreamGenerate URL
+ * - extractTextsFromLine() : Extract text từ SSE line
+ * - cleanText()            : Clean Gemini response text
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import * as crypto from 'crypto';
+
+// ── Constants ──
 import { GEMINI_BL } from './gemini.constants';
 
-// =============================================================================
-// HELPER FUNCTIONS — Gemini
-// =============================================================================
+// ─── Functions ──────────────────────────────────────────────────────────
 
 export function makeSapisidHash(sapisid: string): string {
   const ts = Math.floor(Date.now() / 1000);
@@ -19,10 +38,6 @@ export function getAccountPrefix(authUser?: string): string {
   return `/u/${authUser}`;
 }
 
-/**
- * Build the StreamGenerate request payload in Gemini's internal format.
- * This mirrors the protobuf-like array structure used by the Gemini web app.
- */
 export function buildPayload(
   prompt: string,
   modelId: number,
@@ -50,9 +65,6 @@ export function buildPayload(
   return JSON.stringify([null, JSON.stringify(inner)]);
 }
 
-/**
- * Build the URL-encoded form body for StreamGenerate POST.
- */
 export function buildRequestBody(
   prompt: string,
   modelId: number,
@@ -68,9 +80,6 @@ export function buildRequestBody(
   return params.toString();
 }
 
-/**
- * Get the StreamGenerate URL with proper request ID and build label.
- */
 export function getStreamGenerateUrl(authUser?: string): string {
   const reqid = Math.floor(Date.now() / 1000) % 1000000;
   const prefix = getAccountPrefix(authUser);
@@ -81,11 +90,6 @@ export function getStreamGenerateUrl(authUser?: string): string {
   );
 }
 
-/**
- * Extract text chunks from a single JSON line of StreamGenerate response.
- * Gemini sends response in format: [null, "<escaped JSON string>"]
- * The inner JSON contains text in index [4] as an array of message parts.
- */
 export function extractTextsFromLine(line: string): string[] {
   if (!line.includes('"wrb.fr"') || line.length < 200) return [];
   try {
@@ -116,9 +120,6 @@ export function extractTextsFromLine(line: string): string[] {
   }
 }
 
-/**
- * Clean Gemini response text: remove code reference artifacts and card content URLs.
- */
 export function cleanText(text: string): string {
   return text
     .replace(

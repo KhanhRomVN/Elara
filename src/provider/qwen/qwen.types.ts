@@ -1,4 +1,20 @@
-// Qwen-specific types
+/**
+ * ------------------------------------------------------------------
+ * Qwen Types
+ * ------------------------------------------------------------------
+ * Type definitions cho Qwen AI API.
+ *
+ * Main exports:
+ * - QwenCredential      : Credential structure
+ * - QwenMessagePayload  : Message payload structure
+ * - QwenFeatureConfig   : Feature config structure
+ * - QwenChatPayload     : Chat request payload
+ * - QwenStreamChunk     : Stream chunk structure
+ * - QwenProfile         : Profile structure
+ * ------------------------------------------------------------------
+ */
+
+// ─── Types ──────────────────────────────────────────────────────────────
 
 export interface QwenCredential {
   token: string | null;

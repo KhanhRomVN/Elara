@@ -1,52 +1,78 @@
-import { Provider, SendMessageOptions } from '../../types';
+/**
+ * ------------------------------------------------------------------
+ * Z.AI Browser Provider
+ * ------------------------------------------------------------------
+ * Provider implementation cho Z.AI Browser (browser-based).
+ * Hỗ trợ login qua CDP, chat completion qua WebSocket bridge,
+ * và session management với extension.
+ *
+ * Main features:
+ * - login()          : Đăng nhập qua CDP browser
+ * - handleMessage()  : Gửi tin nhắn qua WebSocket bridge
+ * - getModels()      : Lấy danh sách models
+ * - WebSocket        : Kết nối với extension bridge
+ * - Session remapping: Tự động remap session ID
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { Router } from 'express';
-import { createLogger } from '../../utils/logger';
-import { proxyHandler } from './zai-browser.proxy-handler';
-import { parseZaiBrowserCredential } from './zai-browser.helpers';
+
+// ── Types ──
+import { Provider, SendMessageOptions } from '../../types';
+
+// ── Repositories ──
 import {
   findBrowserAccountsByProvider,
   updateAccountLastUsed,
 } from '../../repositories/account.repository';
+
+// ── Services ──
 import { loginViaCDP } from '../../services/browser-session.service';
 import { getWebSocketServer } from '../../websocket-server';
 
+// ── Utils ──
+import { createLogger } from '../../utils/logger';
+
+// ── ZaiBrowser Imports ──
+import { proxyHandler } from './zai-browser.proxy-handler';
+import { parseZaiBrowserCredential } from './zai-browser.helpers';
+
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('ZaiBrowserProvider');
 
-export { proxyHandler };
+// ─── Provider Class ────────────────────────────────────────────────────
 
 export class ZaiBrowserProvider implements Provider {
   name = 'Z.AI Browser';
   defaultModel = 'GLM-5.1';
   proxyHandler = proxyHandler;
 
+  // ─── WebSocket Connection ──────────────────────────────────────────
+
   private async ensureWebSocket(sessionId: string) {
     const wsServer = getWebSocketServer();
 
-    // Check if already connected with this sessionId
     if (wsServer.isConnected(sessionId)) {
       return wsServer;
     }
 
-    // Try to find any active content connection (extension connected with random ID)
     const anyConnectedSession = wsServer.getAnyConnectedContentSession();
     if (anyConnectedSession && anyConnectedSession !== sessionId) {
       logger.info(`[ZaiBrowser] Found active connection with session ${anyConnectedSession}, remapping to ${sessionId}`);
-      // Rename the session to match our account ID
       wsServer.updateSessionId(anyConnectedSession, sessionId);
-      // Wait a moment for the rename to propagate
       await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Send set_session_id to extension so it reconnects with correct ID
+
       wsServer.setAccountId(sessionId, sessionId);
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
       if (wsServer.isConnected(sessionId)) {
         logger.info(`[ZaiBrowser] Successfully remapped session to ${sessionId}`);
         return wsServer;
       }
     }
 
-    // Wait for extension to connect (max 30 seconds)
     logger.info('[ZaiBrowser] Waiting for extension to connect...');
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -64,7 +90,6 @@ export class ZaiBrowserProvider implements Provider {
 
       wsServer.on('connected', onConnected);
 
-      // Check again in case it connected already
       if (wsServer.isConnected(sessionId)) {
         clearTimeout(timeout);
         wsServer.off('connected', onConnected);
@@ -74,6 +99,8 @@ export class ZaiBrowserProvider implements Provider {
 
     return wsServer;
   }
+
+  // ─── Models ─────────────────────────────────────────────────────────
 
   async getModels(_credential: string, _accountId?: string): Promise<any[]> {
     return [
@@ -100,6 +127,8 @@ export class ZaiBrowserProvider implements Provider {
     ];
   }
 
+  // ─── Profile ────────────────────────────────────────────────────────
+
   async getProfile(
     credential: string,
   ): Promise<{ email: string | null; name?: string; id?: string }> {
@@ -116,6 +145,8 @@ export class ZaiBrowserProvider implements Provider {
     return { email: null };
   }
 
+  // ─── Handle Message ─────────────────────────────────────────────────
+
   async handleMessage(options: SendMessageOptions): Promise<void> {
     const {
       messages,
@@ -129,19 +160,17 @@ export class ZaiBrowserProvider implements Provider {
 
     const isSearch = search === true;
 
-    // Get active browser session from accounts table
     const sessions = findBrowserAccountsByProvider('zai-browser');
     const session = sessions.length > 0 ? sessions[0] : null;
     if (!session) {
       onError(
         new Error(
-          'No active browser session. Please create a session via POST /v1/browser-sessions/login or create a session manually.',
+          'No active browser session. Please create a session via POST /v1/browser-sessions/login',
         ),
       );
       return;
     }
 
-    // Update last_used_at
     updateAccountLastUsed(session.id);
 
     const wsSessionId = session.id;
@@ -149,10 +178,8 @@ export class ZaiBrowserProvider implements Provider {
     const lastMessage = messages[messages.length - 1];
     let prompt = lastMessage.content;
 
-    // Determine if this is a new chat
     const isNewChat = !conversationId || conversationId.trim() === '';
 
-    // Strip system prompt wrapper for continuation messages
     if (!isNewChat) {
       const userContentMatch = prompt.match(
         /<zen-user-content>([\s\S]*?)<\/zen-user-content>/,
@@ -168,10 +195,8 @@ export class ZaiBrowserProvider implements Provider {
     try {
       const wsServer = await this.ensureWebSocket(wsSessionId);
 
-      // Sync session ID with extension
       wsServer.setAccountId(wsSessionId, session.id);
 
-      // Reset page if this is a new chat
       if (isNewChat) {
         await wsServer.resetPage(wsSessionId);
         await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -209,6 +234,14 @@ export class ZaiBrowserProvider implements Provider {
     }
   }
 
+  // ─── Continue Message ───────────────────────────────────────────────
+
+  async continueMessage(options: SendMessageOptions): Promise<void> {
+    return this.handleMessage(options);
+  }
+
+  // ─── Login ──────────────────────────────────────────────────────────
+
   async login(): Promise<{
     cookies: string;
     email?: string;
@@ -233,10 +266,14 @@ export class ZaiBrowserProvider implements Provider {
     }
   }
 
+  // ─── Model Support ──────────────────────────────────────────────────
+
   isModelSupported(model: string): boolean {
     const m = model.toLowerCase();
     return m.includes('glm') || m.includes('z.ai') || m.includes('glm-5');
   }
+
+  // ─── Routes ─────────────────────────────────────────────────────────
 
   registerRoutes(router: Router): void {
     router.get('/auth/status', async (_req, res) => {
@@ -244,6 +281,8 @@ export class ZaiBrowserProvider implements Provider {
       res.json({ authenticated: sessions.length > 0 });
     });
   }
+
+  // ─── Disconnect ─────────────────────────────────────────────────────
 
   async disconnect(): Promise<void> {
     logger.info('[ZaiBrowser] Disconnect called (no-op for shared WebSocket)');

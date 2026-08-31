@@ -1,13 +1,38 @@
+/**
+ * ------------------------------------------------------------------
+ * CDP Service
+ * ------------------------------------------------------------------
+ * Service quản lý Chrome DevTools Protocol (CDP) connection.
+ * Hỗ trợ launch browser, connect WebSocket, và intercept network events.
+ *
+ * Main functions:
+ * - launchBrowser()   : Khởi động browser với debug port
+ * - connect()         : Kết nối CDP tới browser
+ * - send()            : Gửi command qua CDP
+ * - evaluate()        : Evaluate JavaScript trong page
+ * - navigate()        : Điều hướng tới URL
+ * - close()           : Đóng browser và WebSocket
+ * - getResponseBody() : Lấy response body của request
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { spawn, execSync, ChildProcess } from 'child_process';
 import WebSocket from 'ws';
 import { EventEmitter } from 'events';
-import { ChildProcess, spawn, execSync } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
 import { findAvailablePort } from '../../utils/net';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('CDPService');
+
+// ─── Helpers ────────────────────────────────────────────────────────────
 
 function findBrowserExecutable(): string {
   if (process.platform === 'win32') {
@@ -57,7 +82,6 @@ function findBrowserExecutable(): string {
     }
   }
 
-  // Fallback (Linux or if not found via paths)
   const browsers = [
     'google-chrome',
     'google-chrome-stable',
@@ -79,6 +103,8 @@ function findBrowserExecutable(): string {
   return '';
 }
 
+// ─── Types ──────────────────────────────────────────────────────────────
+
 interface CdpRequest {
   id: number;
   method: string;
@@ -86,20 +112,7 @@ interface CdpRequest {
   sessionId?: string;
 }
 
-interface NetworkRequest {
-  id: string;
-  url: string;
-  method: string;
-  headers: Record<string, string>;
-  postData?: string;
-}
-
-interface NetworkResponse {
-  id: string;
-  statusCode: number;
-  headers: Record<string, string>;
-  mimeType: string;
-}
+// ─── Class ──────────────────────────────────────────────────────────────
 
 export class CDPService extends EventEmitter {
   private ws: WebSocket | null = null;
@@ -119,6 +132,8 @@ export class CDPService extends EventEmitter {
     this.profileName = profileName;
   }
 
+  // ─── Launch ───────────────────────────────────────────────────────────
+
   async launchBrowser(url: string, customUserDataDir?: string, extensionPath?: string): Promise<boolean> {
     const debugPort = await findAvailablePort(9222);
     this.debugPort = debugPort;
@@ -130,7 +145,6 @@ export class CDPService extends EventEmitter {
       return false;
     }
 
-    // Use custom user data dir if provided, otherwise create temp one
     let userDataDir = customUserDataDir;
     if (!userDataDir) {
       userDataDir = path.join(os.tmpdir(), `elara-cdp-${this.profileName}-${Date.now()}`);
@@ -138,7 +152,6 @@ export class CDPService extends EventEmitter {
 
     fs.mkdirSync(userDataDir, { recursive: true });
 
-    // Build browser arguments
     const args = [
       `--remote-debugging-port=${debugPort}`,
       '--no-first-run',
@@ -150,14 +163,12 @@ export class CDPService extends EventEmitter {
       '--ignore-certificate-errors',
     ];
 
-    // Add extension arguments if extensionPath is provided
     if (extensionPath) {
       args.push(`--disable-extensions-except=${extensionPath}`);
       args.push(`--load-extension=${extensionPath}`);
       logger.info(`[CDP] Loading extension from: ${extensionPath}`);
     }
 
-    // Add URL at the end
     args.push(url);
 
     this.browserProcess = spawn(executable, args, {
@@ -174,10 +185,11 @@ export class CDPService extends EventEmitter {
       this.emit('browser-exit');
     });
 
-    // Wait for browser to start and connect CDP
     await new Promise((resolve) => setTimeout(resolve, 2000));
     return await this.connect(debugPort);
   }
+
+  // ─── Connect ─────────────────────────────────────────────────────────
 
   async connect(port: number, retries = 5, delay = 1000): Promise<boolean> {
     logger.info(`[CDP] Connecting to localhost:${port}...`);
@@ -325,6 +337,8 @@ export class CDPService extends EventEmitter {
     });
   }
 
+  // ─── Send Command ────────────────────────────────────────────────────
+
   private send(method: string, params: any = {}): Promise<any> {
     return new Promise((resolve, reject) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
@@ -341,6 +355,8 @@ export class CDPService extends EventEmitter {
       this.ws.send(JSON.stringify(request));
     });
   }
+
+  // ─── Message Handler ─────────────────────────────────────────────────
 
   private handleMessage(message: string) {
     try {
@@ -372,7 +388,7 @@ export class CDPService extends EventEmitter {
           method: params.request.method,
           headers: params.request.headers,
           postData: params.request.postData,
-        } as NetworkRequest);
+        });
         break;
       case 'Network.responseReceived':
         this.emit('response', {
@@ -380,7 +396,7 @@ export class CDPService extends EventEmitter {
           statusCode: params.response.status,
           headers: params.response.headers,
           mimeType: params.response.mimeType,
-        } as NetworkResponse);
+        });
         break;
       case 'Network.loadingFinished':
         this.getResponseBody(params.requestId);
@@ -397,12 +413,13 @@ export class CDPService extends EventEmitter {
         isBinary: result.base64Encoded,
       });
     } catch (e: any) {
-      // Ignore - body may not be available
       if (!e.message?.includes('No resource')) {
         logger.debug(`[CDP] Failed to get body for ${requestId}:`, e.message);
       }
     }
   }
+
+  // ─── Public Methods ──────────────────────────────────────────────────
 
   async evaluate(expression: string): Promise<any> {
     const result = await this.send('Runtime.evaluate', { expression });
@@ -423,12 +440,6 @@ export class CDPService extends EventEmitter {
       this.ws = null;
     }
     this.isConnected = false;
-  }
-
-  getUserDataDir(): string | null {
-    // This would need to be stored during launchBrowser
-    // For now, return null
-    return null;
   }
 
   isConnectedToBrowser(): boolean {

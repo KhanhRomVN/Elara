@@ -1,17 +1,44 @@
-import { Provider, SendMessageOptions } from '../../types';
+/**
+ * ------------------------------------------------------------------
+ * Codex CLI Provider
+ * ------------------------------------------------------------------
+ * Provider implementation cho Codex CLI (OpenAI GPT-5 coding agent).
+ * Hỗ trợ login qua terminal CLI, refresh token, và chat completion
+ * với streaming response.
+ *
+ * Main features:
+ * - login()          : Đăng nhập qua Codex CLI với terminal
+ * - refreshToken()   : Refresh access token
+ * - handleMessage()  : Gửi tin nhắn với streaming response
+ * - isModelSupported(): Kiểm tra model có hỗ trợ không
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { spawn, execSync } from 'child_process';
 import fetch from 'node-fetch';
-import { createLogger } from '../../utils/logger';
-import { getDb } from '../../database';
+
+// ── Types ──
+import { Provider, SendMessageOptions } from '../../types';
+
+// ── Services ──
 import { loginService } from '../../services/login/login.service';
 import { proxyService } from '../../services/proxy.service';
-import * as path from 'path';
-import * as os from 'os';
-import * as fs from 'fs';
-import { spawn, execSync } from 'child_process';
+
+// ── Database ──
+import { getDb } from '../../database';
+
+// ── Utils ──
+import { createLogger } from '../../utils/logger';
+
+// ── Codex Imports ──
 import { proxyHandler } from './codex-cli.proxy-handler';
 
-export { proxyHandler };
-
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('CodexCLIProvider');
 
 // Lazy load zstd
@@ -20,10 +47,14 @@ try {
   compress = require('@mongodb-js/zstd').compress;
 } catch (e) {}
 
+// ─── Provider Class ────────────────────────────────────────────────────
+
 export class CodexCLIProvider implements Provider {
   name = 'codex-cli';
   proxyHandler = proxyHandler;
   defaultModel = 'gpt-5.3-codex';
+
+  // ─── Get Profile ────────────────────────────────────────────────────
 
   async getProfile(accessToken: string) {
     try {
@@ -49,6 +80,8 @@ export class CodexCLIProvider implements Provider {
     } catch (e) {}
     return { email: null };
   }
+
+  // ─── Login ──────────────────────────────────────────────────────────
 
   async login() {
     logger.info('Starting Codex CLI login with real CLI and terminal...');
@@ -177,6 +210,8 @@ export class CodexCLIProvider implements Provider {
     });
   }
 
+  // ��── Refresh Token ──────────────────────────────────────────────────
+
   async refreshToken(refreshTokenStr: string) {
     const response = await fetch('https://auth.openai.com/oauth/token', {
       method: 'POST',
@@ -193,6 +228,8 @@ export class CodexCLIProvider implements Provider {
     if (!response.ok) throw new Error('Failed to refresh Codex token');
     return await response.json();
   }
+
+  // ─── Handle Message ─────────────────────────────────────────────────
 
   async handleMessage(options: SendMessageOptions): Promise<void> {
     const {
@@ -336,6 +373,14 @@ export class CodexCLIProvider implements Provider {
       onError(err);
     }
   }
+
+  // ─── Continue Message ───────────────────────────────────────────────
+
+  async continueMessage(options: SendMessageOptions): Promise<void> {
+    return this.handleMessage(options);
+  }
+
+  // ─── Misc ────────────────────────────────────────────────────────────
 
   isModelSupported(model: string): boolean {
     const m = model.toLowerCase();

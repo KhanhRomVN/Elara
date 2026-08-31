@@ -1,20 +1,49 @@
-import { Provider, SendMessageOptions } from '../../types';
+/**
+ * ------------------------------------------------------------------
+ * Groq Provider
+ * ------------------------------------------------------------------
+ * Provider implementation cho Groq API.
+ * Hỗ trợ login qua browser, chat completion với streaming,
+ * và lấy danh sách models từ API.
+ *
+ * Main features:
+ * - login()          : Đăng nhập qua browser và capture cookie
+ * - handleMessage()  : Gửi tin nhắn với streaming response
+ * - getModels()      : Lấy danh sách models từ API
+ * - getProfile()     : Lấy email từ JWT trong cookie
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { Router } from 'express';
 import fetch from 'node-fetch';
+
+// ── Types ──
+import { Provider, SendMessageOptions } from '../../types';
+
+// ── Services ──
 import { loginService } from '../../services/login/login.service';
+
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
+
+// ── Groq Imports ──
 import { proxyHandler } from './groq.proxy-handler';
 
-export { proxyHandler };
-
+// ─── Constants ──────────────────────────────────────────────────────────
 export const BASE_URL = 'https://console.groq.com';
 
 const logger = createLogger('GroqProvider');
+
+// ─── Provider Class ────────────────────────────────────────────────────
 
 export class GroqProvider implements Provider {
   name = 'Groq';
   proxyHandler = proxyHandler;
   defaultModel = 'llama-3.3-70b-versatile';
+
+  // ─── Login ──────────────────────────────────────────────────────────
 
   async login() {
     logger.info('Starting Groq login...');
@@ -73,6 +102,8 @@ export class GroqProvider implements Provider {
     });
   }
 
+  // ─── Profile ────────────────────────────────────────────────────────
+
   async getProfile(
     credential: string,
   ): Promise<{ email: string | null; name?: string; id?: string }> {
@@ -110,6 +141,8 @@ export class GroqProvider implements Provider {
       return { email: null };
     }
   }
+
+  // ─── Handle Message ─────────────────────────────────────────────────
 
   async handleMessage(options: SendMessageOptions): Promise<void> {
     const {
@@ -190,6 +223,14 @@ export class GroqProvider implements Provider {
       onError(err);
     }
   }
+
+  // ─── Continue Message ───────────────────────────────────────────────
+
+  async continueMessage(options: SendMessageOptions): Promise<void> {
+    return this.handleMessage(options);
+  }
+
+  // ─── Get Models ─────────────────────────────────────────────────────
 
   async getModels(credential: string): Promise<any[]> {
     logger.info(`Fetching Groq models dynamically...`);
@@ -286,7 +327,11 @@ export class GroqProvider implements Provider {
     return models;
   }
 
+  // ─── Routes ─────────────────────────────────────────────────────────
+
   registerRoutes(_router: Router) {}
+
+  // ─── Model Support ──────────────────────────────────────────────────
 
   isModelSupported(model: string): boolean {
     const m = model.toLowerCase();

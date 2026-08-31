@@ -1,10 +1,40 @@
-import { Provider, SendMessageOptions } from '../../types';
-import { Router } from 'express';
-import { createLogger } from '../../utils/logger';
-import { loginService } from '../../services/login/login.service';
-import { getDb } from '../../database';
-import fetch from 'node-fetch';
+/**
+ * ------------------------------------------------------------------
+ * Z.AI Provider
+ * ------------------------------------------------------------------
+ * Provider implementation cho Z.AI (Z.ai - Free AI Chatbot).
+ * Hỗ trợ login, chat completion với streaming, rate limiting,
+ * signature-based authentication, và session management.
+ *
+ * Main features:
+ * - login()          : Đăng nhập qua browser
+ * - handleMessage()  : Gửi tin nhắn với streaming response
+ * - getModels()      : Lấy danh sách models
+ * - getProfile()     : Lấy thông tin user profile từ JWT
+ * - Rate limiting    : Tự động giới hạn request (8 req/min)
+ * - Signature auth   : Tạo signature cho mỗi request
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import * as crypto from 'crypto';
+import { Router } from 'express';
+import fetch from 'node-fetch';
+
+// ── Types ──
+import { Provider, SendMessageOptions } from '../../types';
+
+// ── Services ──
+import { loginService } from '../../services/login/login.service';
+
+// ── Database ──
+import { getDb } from '../../database';
+
+// ── Utils ──
+import { createLogger } from '../../utils/logger';
+
+// ── ZAI Imports ──
 import { proxyHandler } from './zai.proxy-handler';
 import {
   getAuthDataFromCredential,
@@ -14,18 +44,20 @@ import {
   sanitizeCookies,
 } from './zai.helpers';
 
-export { proxyHandler };
-
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('ZAIProvider');
 
 const BASE_URL = 'https://chat.z.ai';
+
+// ─── Provider Class ────────────────────────────────────────────────────
 
 export class ZAIProvider implements Provider {
   name = 'Z.AI';
   proxyHandler = proxyHandler;
   defaultModel = 'GLM-5.1';
 
-  // User-Agent rotation pool
+  // ─── User-Agent Rotation ───────────────────────────────────────────
+
   private userAgents: string[] = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
@@ -33,9 +65,12 @@ export class ZAIProvider implements Provider {
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
   ];
+
   private lastRequestTime: number = 0;
   private requestCount: number = 0;
   private requestWindowStart: number = Date.now();
+
+  // ─── Rate Limiting ──────────────────────────────────────────────────
 
   private async enforceRateLimit(): Promise<void> {
     const now = Date.now();
@@ -70,12 +105,16 @@ export class ZAIProvider implements Provider {
     return this.userAgents[Math.floor(Math.random() * this.userAgents.length)];
   }
 
+  // ─── Models ─────────────────────────────────────────────────────────
+
   async getModels(_credential: string): Promise<any[]> {
     return [
       { id: 'GLM-5.1', name: 'GLM-5.1', is_thinking: false, max_context_length: null },
       { id: 'GLM-5', name: 'GLM-5', is_thinking: false, max_context_length: null },
     ];
   }
+
+  // ─── Profile ────────────────────────────────────────────────────────
 
   async getProfile(
     credential: string,
@@ -100,6 +139,8 @@ export class ZAIProvider implements Provider {
       return { email: null };
     }
   }
+
+  // ─── Login ──────────────────────────────────────────────────────────
 
   async login() {
     logger.info('Starting Z.AI login...');
@@ -132,6 +173,8 @@ export class ZAIProvider implements Provider {
       },
     });
   }
+
+  // ─── Handle Message ─────────────────────────────────────────────────
 
   async handleMessage(options: SendMessageOptions): Promise<void> {
     const {
@@ -347,6 +390,14 @@ export class ZAIProvider implements Provider {
     }
   }
 
+  // ─── Continue Message ───────────────────────────────────────────────
+
+  async continueMessage(options: SendMessageOptions): Promise<void> {
+    return this.handleMessage(options);
+  }
+
+  // ─── Routes ─────────────────────────────────────────────────────────
+
   registerRoutes(router: Router) {
     router.get('/auth/status', (_req, res) => {
       const db = getDb();
@@ -356,6 +407,8 @@ export class ZAIProvider implements Provider {
       res.json({ authenticated: !!zaiAccount });
     });
   }
+
+  // ─── Model Support ──────────────────────────────────────────────────
 
   isModelSupported(model: string): boolean {
     const m = model.toLowerCase();

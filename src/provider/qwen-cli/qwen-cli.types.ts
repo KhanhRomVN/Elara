@@ -1,4 +1,17 @@
-// Qwen CLI-specific types
+/**
+ * ------------------------------------------------------------------
+ * Qwen CLI Types
+ * ------------------------------------------------------------------
+ * Type definitions cho Qwen CLI API.
+ *
+ * Main exports:
+ * - QwenCLITokens      : Access/refresh token structure
+ * - QwenCLIConfig      : OAuth config structure
+ * - QwenCLIStreamChunk : Stream chunk structure
+ * ------------------------------------------------------------------
+ */
+
+// ─── Types ──────────────────────────────────────────────────────────────
 
 export interface QwenCLITokens {
   accessToken: string;

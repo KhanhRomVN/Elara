@@ -1,8 +1,36 @@
+/**
+ * ------------------------------------------------------------------
+ * Account Controller
+ * ------------------------------------------------------------------
+ * Xử lý các request liên quan đến tài khoản: import, thêm mới, xóa,
+ * cập nhật trạng thái memory, đăng nhập qua browser,
+ * và quản lý browser instance cho tài khoản.
+ *
+ * Main functions:
+ * - importAccounts()           : Import danh sách tài khoản từ file/bulk
+ * - addAccount()               : Thêm một tài khoản mới hoặc cập nhật credential
+ * - getAccounts()              : Lấy danh sách tài khoản với phân trang và filter
+ * - deleteAccount()            : Xóa tài khoản theo id
+ * - getAccountMemory()         : Lấy trạng thái memory của tài khoản
+ * - updateAccountMemory()      : Cập nhật trạng thái memory
+ * - login()                    : Đăng nhập qua browser cho provider
+ * - getAccountBrowserStatus()  : Kiểm tra trạng thái browser của tài khoản
+ * - startAccountBrowser()      : Khởi động browser cho tài khoản
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { Request, Response } from 'express';
-import { createLogger } from '../utils/logger';
-import { providerRegistry } from '../provider/registry';
 import * as path from 'path';
 
+// ── Services ──
+import {
+  getBrowserStatus,
+  startBrowserForAccount,
+} from '../services/browser-instance-manager';
+
+// ── Repositories ──
 import {
   findAccountById,
   findAccountByEmailAndProvider,
@@ -11,14 +39,24 @@ import {
   insertAccount,
   insertAccountsBatch,
   updateAccountCredential,
-  updateAccountMemory,
+  updateAccountMemory as updateAccountMemoryRepo,
   deleteAccount as deleteAccountRow,
 } from '../repositories/account.repository';
-import { ensureProviderExists, findProviderById } from '../repositories/provider.repository';
-import { getBrowserStatus, startBrowserForAccount } from '../services/browser-instance-manager';
+import {
+  ensureProviderExists,
+  findProviderById,
+} from '../repositories/provider.repository';
 
+// ── Providers ──
+import { providerRegistry } from '../provider/registry';
+
+// ── Utils ──
+import { createLogger } from '../utils/logger';
+
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('AccountController');
 
+// ─── Interfaces ─────────────────────────────────────────────────────────
 interface AccountInput {
   id: string;
   provider_id: string;
@@ -26,7 +64,9 @@ interface AccountInput {
   credential: string;
 }
 
-// POST /v1/accounts/import
+// ─── Controller ─────────────────────────────────────────────────────────
+
+// ─── POST /v1/accounts/import ──────────────────────────────────────
 export const importAccounts = async (
   req: Request,
   res: Response,
@@ -168,7 +208,7 @@ export const getAccountMemory = async (
 };
 
 // PUT /v1/accounts/:id/memory
-export const updateAccountMemoryController = async (
+export const updateAccountMemory = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
@@ -197,7 +237,7 @@ export const updateAccountMemoryController = async (
       return;
     }
 
-    updateAccountMemory(id, is_memory_enabled);
+    updateAccountMemoryRepo(id, is_memory_enabled);
 
     logger.info(`Memory state updated for account ${id}: ${is_memory_enabled}`);
 
@@ -210,7 +250,7 @@ export const updateAccountMemoryController = async (
       meta: { timestamp: new Date().toISOString() },
     });
   } catch (error) {
-    logger.error('Error in updateAccountMemoryController', error);
+    logger.error('Error in updateAccountMemory', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error',
@@ -444,17 +484,17 @@ export const login = async (req: Request, res: Response): Promise<void> => {
   logger.info(`[Login] Full URL: ${req.method} ${req.originalUrl}`);
   logger.info(`[Login] Params: ${JSON.stringify(req.params)}`);
   logger.info(`[Login] Body: ${JSON.stringify(req.body)}`);
-  
+
   try {
     const { provider: providerId } = req.params;
     const { method } = req.body;
-    
+
     logger.info(`[Login] Provider ID from params: "${providerId}"`);
     logger.info(`[Login] Method: ${method || 'basic'}`);
 
     const provider = providerRegistry.getProvider(providerId);
     logger.info(`[Login] Provider found: ${provider ? provider.name : 'null'}`);
-    
+
     if (!provider) {
       logger.warn(`[Login] Provider not found: ${providerId}`);
       res.status(404).json({ success: false, message: 'Provider not found' });
@@ -467,12 +507,10 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     if (!provider.login) {
       logger.warn(`[Login] Provider ${providerId} has no login method`);
-      res
-        .status(400)
-        .json({
-          success: false,
-          message: `Browser login not supported for ${providerId}`,
-        });
+      res.status(400).json({
+        success: false,
+        message: `Browser login not supported for ${providerId}`,
+      });
       return;
     }
 
@@ -480,9 +518,13 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     const result = await provider.login({
       method: method === 'google' ? 'google' : 'basic',
     });
-    
-    logger.info(`[Login] Login successful, result keys: ${Object.keys(result).join(', ')}`);
-    logger.info(`[Login] Email: ${(result as any).email}, Cookies length: ${(result as any).cookies?.length || 0}`);
+
+    logger.info(
+      `[Login] Login successful, result keys: ${Object.keys(result).join(', ')}`,
+    );
+    logger.info(
+      `[Login] Email: ${(result as any).email}, Cookies length: ${(result as any).cookies?.length || 0}`,
+    );
 
     const accountResponse: any = {
       provider_id: providerId,
@@ -490,13 +532,13 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       credential: (result as any).cookies,
       headers: (result as any).headers,
     };
-    
+
     // Include pending info for browser providers
     if ((result as any).pending) {
       accountResponse.pending = (result as any).pending;
       accountResponse.tempSessionId = (result as any).tempSessionId;
     }
-    
+
     res.status(200).json({
       success: true,
       account: accountResponse,
@@ -511,64 +553,6 @@ export const login = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-// POST /v1/accounts/:id/switch
-export const switchAccount = async (
-  req: Request,
-  res: Response,
-): Promise<void> => {
-  try {
-    const { id } = req.params;
-    const account = findAccountById(id);
-
-    if (!account) {
-      res.status(404).json({ success: false, message: 'Account not found' });
-      return;
-    }
-
-    const provider = providerRegistry.getProvider(account.provider_id);
-    if (!provider) {
-      res
-        .status(400)
-        .json({
-          success: false,
-          message: `Provider ${account.provider_id} not found`,
-        });
-      return;
-    }
-
-    if (typeof provider.switchAccount !== 'function') {
-      res.status(400).json({
-        success: false,
-        message: `Switching accounts is not supported for provider ${account.provider_id}`,
-      });
-      return;
-    }
-
-    logger.info(
-      `Switching to account ${account.email} (${account.provider_id})`,
-    );
-    await provider.switchAccount(id);
-
-    res.status(200).json({
-      success: true,
-      message: `Successfully switched to account ${account.email}`,
-      data: {
-        id: account.id,
-        email: account.email,
-        provider_id: account.provider_id,
-      },
-    });
-  } catch (error: any) {
-    logger.error('Error in switchAccount:', error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || 'Failed to switch account',
-      });
-  }
-};
-
 // GET /v1/accounts/:id/browser/status
 export const getAccountBrowserStatus = async (
   req: Request,
@@ -577,12 +561,12 @@ export const getAccountBrowserStatus = async (
   try {
     const { id } = req.params;
     const account = findAccountById(id);
-    
+
     if (!account) {
       res.status(404).json({ success: false, message: 'Account not found' });
       return;
     }
-    
+
     // Check if this is a browser provider (has user_data_dir)
     if (!account.user_data_dir) {
       res.status(200).json({
@@ -595,7 +579,7 @@ export const getAccountBrowserStatus = async (
       });
       return;
     }
-    
+
     const status = await getBrowserStatus(account.user_data_dir);
     res.status(200).json({
       success: true,
@@ -603,7 +587,9 @@ export const getAccountBrowserStatus = async (
         has_profile: true,
         is_running: status.isRunning,
         user_data_dir: account.user_data_dir,
-        message: status.isRunning ? 'Browser is running' : 'Browser is not running',
+        message: status.isRunning
+          ? 'Browser is running'
+          : 'Browser is not running',
       },
     });
   } catch (error: any) {
@@ -623,38 +609,45 @@ export const startAccountBrowser = async (
   try {
     const { id } = req.params;
     const account = findAccountById(id);
-    
+
     if (!account) {
       res.status(404).json({ success: false, message: 'Account not found' });
       return;
     }
-    
+
     if (!account.user_data_dir) {
       res.status(400).json({
         success: false,
-        message: 'No browser profile associated with this account. Please complete login first.',
+        message:
+          'No browser profile associated with this account. Please complete login first.',
       });
       return;
     }
-    
+
     // Get provider config to find extension folder
     const provider = findProviderById(account.provider_id);
     let extensionPath: string | null = null;
-    
+
     if (provider?.browser_extension_folder) {
-      extensionPath = path.join(__dirname, '../../extensions', provider.browser_extension_folder);
+      extensionPath = path.join(
+        __dirname,
+        '../../extensions',
+        provider.browser_extension_folder,
+      );
       logger.info(`[AccountController] Using extension from: ${extensionPath}`);
     } else {
-      logger.info(`[AccountController] No browser_extension_folder configured for ${account.provider_id}`);
+      logger.info(
+        `[AccountController] No browser_extension_folder configured for ${account.provider_id}`,
+      );
     }
-    
+
     const result = await startBrowserForAccount(
-      account.user_data_dir, 
+      account.user_data_dir,
       account.provider_id,
       undefined, // loginUrl will use default
-      extensionPath || undefined
+      extensionPath || undefined,
     );
-    
+
     res.status(200).json({
       success: true,
       data: result,

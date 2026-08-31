@@ -1,5 +1,22 @@
+/**
+ * ------------------------------------------------------------------
+ * Qwen CLI Proxy Handler
+ * ------------------------------------------------------------------
+ * Proxy handler để capture tokens và user info từ Qwen CLI.
+ * Lắng nghe access token từ OAuth token endpoint và email từ user API.
+ *
+ * Main features:
+ * - onResponseBody() : Capture access/refresh token từ token endpoint
+ * - onResponseBody() : Capture email từ user info API
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Services ──
 import { ProxyHandler } from '../../services/proxy.service';
 import { proxyEvents } from '../../services/proxy.service';
+
+// ─── Proxy Handler ────────────────────────────────────────────────────
 
 export const proxyHandler: ProxyHandler = {
   onResponseBody: (ctx: any, body: string) => {

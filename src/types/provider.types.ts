@@ -35,7 +35,6 @@ export interface Provider {
   getProfile?(credential: string): Promise<{ email: string | null; name?: string; id?: string }>;
   refreshToken?(refreshToken: string): Promise<any>;
   getUsage?(credential: string): Promise<{ usage: string; resetPeriod: 'day' | 'month' | string }>;
-  switchAccount?(accountId: string): Promise<void>;
   proxyHandler?: any;
 }
 

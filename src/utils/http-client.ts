@@ -1,5 +1,26 @@
+/**
+ * ------------------------------------------------------------------
+ * HTTP Client
+ * ------------------------------------------------------------------
+ * HTTP client wrapper xung quanh node-fetch với cookie support.
+ * Hỗ trợ GET, POST, và SSE streaming.
+ *
+ * Main functions:
+ * - request()   : Thực hiện HTTP request
+ * - get()       : GET request
+ * - post()      : POST request với JSON body
+ * - streamSSE() : Stream Server-Sent Events
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import fetch, { RequestInit, Response } from 'node-fetch';
+
+// ── Utils ──
 import { CookieJar } from './cookie-jar';
+
+// ─── Types ──────────────────────────────────────────────────────────────
 
 export interface HttpClientOptions {
   baseURL?: string;
@@ -12,9 +33,8 @@ export interface RequestOptions extends RequestInit {
   params?: Record<string, string>;
 }
 
-/**
- * HTTP Client wrapper around node-fetch with cookie support
- */
+// ─── Class ──────────────────────────────────────────────────────────────
+
 export class HttpClient {
   private baseURL: string;
   private defaultHeaders: Record<string, string>;
@@ -26,28 +46,23 @@ export class HttpClient {
     this.cookieJar = options.cookieJar;
   }
 
-  /**
-   * Make HTTP request
-   */
+  // ─── Request ─────────────────────────────────────────────────────────
+
   async request(options: RequestOptions): Promise<Response> {
     const { url, params, headers, ...fetchOptions } = options;
 
-    // Build full URL
     let fullURL = url.startsWith('http') ? url : `${this.baseURL}${url}`;
 
-    // Add query params
     if (params) {
       const queryString = new URLSearchParams(params).toString();
       fullURL += `?${queryString}`;
     }
 
-    // Merge headers
     const mergedHeaders: Record<string, string> = {
       ...this.defaultHeaders,
       ...(headers as Record<string, string>),
     };
 
-    // Add cookies if cookieJar exists
     if (this.cookieJar) {
       const cookies = this.cookieJar.getCookieString(fullURL);
       if (cookies) {
@@ -55,13 +70,11 @@ export class HttpClient {
       }
     }
 
-    // Make request
     const response = await fetch(fullURL, {
       ...fetchOptions,
       headers: mergedHeaders,
     });
 
-    // Store cookies from response
     if (this.cookieJar) {
       const setCookie = response.headers.raw()['set-cookie'];
       if (setCookie) {
@@ -74,9 +87,8 @@ export class HttpClient {
     return response;
   }
 
-  /**
-   * GET request
-   */
+  // ─── GET ─────────────────────────────────────────────────────────────
+
   async get(
     url: string,
     options: Omit<RequestOptions, 'url' | 'method'> = {},
@@ -84,9 +96,8 @@ export class HttpClient {
     return this.request({ ...options, url, method: 'GET' });
   }
 
-  /**
-   * POST request
-   */
+  // ─── POST ────────────────────────────────────────────────────────────
+
   async post(
     url: string,
     body?: any,
@@ -104,9 +115,8 @@ export class HttpClient {
     });
   }
 
-  /**
-   * Stream SSE (Server-Sent Events)
-   */
+  // ─── SSE Stream ─────────────────────────────────────────────────────
+
   async *streamSSE(
     url: string,
     options: Omit<RequestOptions, 'url'> = {},
@@ -140,7 +150,6 @@ export class HttpClient {
       }
     }
 
-    // Yield remaining buffer
     if (buffer.trim()) {
       yield buffer;
     }

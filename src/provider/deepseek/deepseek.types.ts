@@ -1,6 +1,18 @@
-// =============================================================================
-// TYPES & INTERFACES — DeepSeek
-// =============================================================================
+/**
+ * ------------------------------------------------------------------
+ * DeepSeek Types
+ * ------------------------------------------------------------------
+ * Type definitions cho DeepSeek API.
+ *
+ * Main exports:
+ * - PoWChallenge        : PoW challenge structure
+ * - PoWResponse         : PoW response structure
+ * - ChatPayload         : Chat completion request payload
+ * - ContinuePayload     : Continue request payload
+ * ------------------------------------------------------------------
+ */
+
+// ─── Types ──────────────────────────────────────────────────────────────
 
 export interface PoWChallenge {
   algorithm: string;
@@ -39,6 +51,6 @@ export interface ChatPayload {
 }
 
 export interface ContinuePayload {
-  request: string; // JSON-stringified { chat_session_id, message_id, fallback_to_resume }
-  response: string; // The prior SSE stream text (can be empty string for auto-resume)
+  request: string;
+  response: string;
 }

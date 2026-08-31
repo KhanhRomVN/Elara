@@ -1,13 +1,24 @@
+/**
+ * ------------------------------------------------------------------
+ * Prompt Utilities
+ * ------------------------------------------------------------------
+ * Tiện ích hỏi người dùng qua terminal.
+ * Hỗ trợ interactive và non-interactive mode.
+ *
+ * Main functions:
+ * - askUser()   : Hỏi người dùng và nhận input
+ * - askYesNo()  : Hỏi yes/no và trả về boolean
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import readline from 'readline';
 
-/**
- * Ask user a question and wait for input
- * Returns the user's input as string
- * Returns null if stdin is not a TTY (non-interactive mode)
- */
+// ─── Functions ──────────────────────────────────────────────────────────
+
 export const askUser = (question: string): Promise<string | null> => {
   return new Promise((resolve) => {
-    // Check if running in interactive terminal
     if (!process.stdin.isTTY) {
       resolve(null);
       return;
@@ -25,11 +36,6 @@ export const askUser = (question: string): Promise<string | null> => {
   });
 };
 
-/**
- * Ask a yes/no question
- * Returns true for 'y', 'yes', false for 'n', 'no'
- * Returns null if non-interactive
- */
 export const askYesNo = async (question: string): Promise<boolean | null> => {
   const answer = await askUser(`${question} (y/n) `);
   if (answer === null) return null;

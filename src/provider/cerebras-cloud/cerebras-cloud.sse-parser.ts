@@ -1,12 +1,23 @@
+/**
+ * ------------------------------------------------------------------
+ * Cerebras Cloud SSE Parser
+ * ------------------------------------------------------------------
+ * Parse OpenAI-compatible SSE stream từ Cerebras API.
+ * Hỗ trợ cả delta.content (nội dung) và delta.reasoning (thinking).
+ *
+ * Main features:
+ * - parseSSEStream() : Parse stream và emit content, thinking, metadata
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('CerebrasSSE');
 
-// =============================================================================
-// SSE STREAM PARSER
-// Parse OpenAI-compatible SSE stream từ Cerebras API
-// Hỗ trợ cả delta.content (nội dung) và delta.reasoning (thinking)
-// =============================================================================
+// ─── Types ──────────────────────────────────────────────────────────────
 
 export interface ParseSSEOptions {
   onContent: (chunk: string) => void;
@@ -14,6 +25,8 @@ export interface ParseSSEOptions {
   onMetadata?: (meta: any) => void;
   onRaw?: (data: string) => void;
 }
+
+// ─── Functions ──────────────────────────────────────────────────────────
 
 export async function parseSSEStream(
   responseBody: NodeJS.ReadableStream,

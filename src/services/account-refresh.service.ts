@@ -1,13 +1,39 @@
-import { providerRegistry } from '../provider/registry';
-import { createLogger } from '../utils/logger';
+/**
+ * ------------------------------------------------------------------
+ * Account Refresh Service
+ * ------------------------------------------------------------------
+ * Service tự động refresh token và cập nhật usage cho các tài khoản.
+ * Chạy định kỳ mỗi giờ, kiểm tra và refresh token khi hết hạn.
+ *
+ * Main functions:
+ * - start()            : Khởi động service
+ * - stop()             : Dừng service
+ * - checkAndRefresh()  : Kiểm tra và refresh token cho tất cả accounts
+ * - refreshUsage()     : Cập nhật usage cho một account
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Database ──
 import { getDb } from '../database';
 
+// ── Providers ──
+import { providerRegistry } from '../provider/registry';
+
+// ── Utils ──
+import { createLogger } from '../utils/logger';
+
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('AccountRefreshService');
+
+// ─── Class ──────────────────────────────────────────────────────────────
 
 export class AccountRefreshService {
   private interval: NodeJS.Timeout | null = null;
   private readonly REFRESH_INTERVAL = 1 * 60 * 60 * 1000; // 1 hour
   private readonly AUTO_REFRESH_THRESHOLD = 24 * 60 * 60 * 1000; // 24 hours
+
+  // ─── Lifecycle ──────────────────────────────────────────────────────
 
   start() {
     if (this.interval) return;
@@ -25,6 +51,8 @@ export class AccountRefreshService {
     }
   }
 
+  // ─── Refresh ────────────────────────────────────────────────────────
+
   async checkAndRefresh() {
     const db = getDb();
     const accounts = db.prepare('SELECT * FROM accounts').all() as any[];
@@ -38,7 +66,6 @@ export class AccountRefreshService {
           credential = { accessToken: account.credential };
         }
 
-        // Skip if credential is null or undefined
         if (!credential) {
           continue;
         }

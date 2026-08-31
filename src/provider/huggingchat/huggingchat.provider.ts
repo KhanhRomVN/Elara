@@ -1,24 +1,54 @@
-import { Provider, SendMessageOptions } from '../../types';
+/**
+ * ------------------------------------------------------------------
+ * HuggingChat Provider
+ * ------------------------------------------------------------------
+ * Provider implementation cho HuggingChat (Hugging Face).
+ * Hỗ trợ login qua browser, chat completion với streaming,
+ * thinking mode, và lấy danh sách models từ API.
+ *
+ * Main features:
+ * - login()          : Đăng nhập qua browser và capture cookies
+ * - handleMessage()  : Gửi tin nhắn với streaming response
+ * - getModels()      : Lấy danh sách models từ API
+ * - getProfile()     : Lấy thông tin user profile
+ * - Thinking mode    : Hỗ trợ <think> tags trong response
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { Router } from 'express';
-import fetch from 'node-fetch';
-import { HttpClient } from '../../utils/http-client';
 import * as crypto from 'crypto';
-import { createLogger } from '../../utils/logger';
-import { countTokens, countMessagesTokens } from '../../utils/tokenizer';
+import fetch from 'node-fetch';
+
+// ── Types ──
+import { Provider, SendMessageOptions } from '../../types';
+
+// ── Services ──
 import { loginService } from '../../services/login/login.service';
 import { proxyEvents } from '../../services/proxy.service';
+
+// ── Utils ──
+import { HttpClient } from '../../utils/http-client';
+import { createLogger } from '../../utils/logger';
+import { countTokens, countMessagesTokens } from '../../utils/tokenizer';
+
+// ── HuggingChat Imports ──
 import { proxyHandler } from './huggingchat.proxy-handler';
 
-export { proxyHandler };
-
+// ─── Constants ──────────────────────────────────────────────────────────
 const BASE_URL = 'https://huggingface.co';
 
 const logger = createLogger('HuggingChatProvider');
+
+// ─── Provider Class ────────────────────────────────────────────────────
 
 export class HuggingChatProvider implements Provider {
   name = 'HuggingChat';
   proxyHandler = proxyHandler;
   defaultModel = 'omni';
+
+  // ─── Login ──────────────────────────────────────────────────────────
 
   async login() {
     logger.info('Starting HuggingChat login...');
@@ -81,6 +111,8 @@ export class HuggingChatProvider implements Provider {
     }
   }
 
+  // ─── Profile ────────────────────────────────────────────────────────
+
   async getProfile(
     credential: string,
   ): Promise<{ email: string | null; name?: string; id?: string }> {
@@ -109,6 +141,8 @@ export class HuggingChatProvider implements Provider {
       return { email: null };
     }
   }
+
+  // ─── Handle Message ─────────────────────────────────────────────────
 
   async handleMessage(options: SendMessageOptions): Promise<void> {
     const {
@@ -247,6 +281,14 @@ export class HuggingChatProvider implements Provider {
     }
   }
 
+  // ─── Continue Message ───────────────────────────────────────────────
+
+  async continueMessage(options: SendMessageOptions): Promise<void> {
+    return this.handleMessage(options);
+  }
+
+  // ─── Get Models ─────────────────────────────────────────────────────
+
   async getModels(credential: string): Promise<any[]> {
     try {
       const client = this.createClient(credential);
@@ -277,6 +319,8 @@ export class HuggingChatProvider implements Provider {
     }
   }
 
+  // ─── Helpers ────────────────────────────────────────────────────────
+
   private createClient(cookie: string) {
     return new HttpClient({
       baseURL: BASE_URL,
@@ -289,7 +333,11 @@ export class HuggingChatProvider implements Provider {
     });
   }
 
+  // ─── Routes ─────────────────────────────────────────────────────────
+
   registerRoutes(_router: Router) {}
+
+  // ─── Model Support ──────────────────────────────────────────────────
 
   isModelSupported(model: string): boolean {
     const m = model.toLowerCase();

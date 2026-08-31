@@ -75,7 +75,7 @@ Tài liệu mô tả toàn bộ chức năng của các file trong `server/src/`
 **Deprecated — re-export từ `controllers/chat/index` để backward compatibility.**
 
 ### `chat/index.ts`
-**Re-export các controller chat: `sendMessageController`, `claudeMessagesController`, `completionController`.**
+**Re-export các controller chat: `sendMessage`, `claudeMessagesController`, `completionController`.**
 
 ### `chat/send-message.controller.ts`
 **Controller chính gửi tin nhắn chat (POST /v1/accounts/:accountId/messages).**
@@ -150,16 +150,16 @@ Tài liệu mô tả toàn bộ chức năng của các file trong `server/src/`
 ### `provider.controller.ts`
 **API cho providers và models.**
 - `getProviders` (GET /v1/providers): List providers + account counts + model stats.
-- `getProviderModelsController` (GET /v1/providers/:providerId/models): Models của một provider.
+- `getProviderModels` (GET /v1/providers/:providerId/models): Models của một provider.
 
 ### `stats.controller.ts`
 **Thống kê sử dụng.**
-- `recordMetricsController` (POST /v1/chat/metrics): Ghi nhận tokens sau khi chat.
+- `recordMetrics` (POST /v1/chat/metrics): Ghi nhận tokens sau khi chat.
 - `getStats` (GET /v1/stats): Query usage history, account stats, model stats theo period (day/week/month/year).
 
 ### `upload.controller.ts`
 **Upload file lên provider.**
-- `uploadFileController` (POST /v1/chat/accounts/:accountId/uploads): Nhận file qua multer, gọi `provider.uploadFile()`.
+- `uploadFile` (POST /v1/chat/accounts/:accountId/uploads): Nhận file qua multer, gọi `provider.uploadFile()`.
 
 ---
 
@@ -390,9 +390,9 @@ Tài liệu mô tả toàn bộ chức năng của các file trong `server/src/`
 - `POST /:id/switch` — switchAccount
 
 ### `v1/chat.routes.ts`
-- `POST /accounts/messages` — sendMessageController
-- `POST /accounts/:accountId/messages` — sendMessageController
-- `POST /accounts/:accountId/uploads` — uploadFileController (multer memoryStorage)
+- `POST /accounts/messages` — sendMessage
+- `POST /accounts/:accountId/messages` — sendMessage
+- `POST /accounts/:accountId/uploads` — uploadFile (multer memoryStorage)
 - `POST /completions` — completionController
 
 ### `v1/messages.routes.ts`
@@ -401,7 +401,7 @@ Tài liệu mô tả toàn bộ chức năng của các file trong `server/src/`
 
 ### `v1/provider.routes.ts`
 - `GET /` — getProviders
-- `GET /:providerId/models` — getProviderModelsController
+- `GET /:providerId/models` — getProviderModels
 
 ### `v1/model.routes.ts`
 - `GET /` — getAllModels
@@ -422,7 +422,7 @@ Tài liệu mô tả toàn bộ chức năng của các file trong `server/src/`
 
 ### `v1/stats.routes.ts`
 - `GET /` — getStats
-- `POST /metrics` — recordMetricsController
+- `POST /metrics` — recordMetrics
 
 ### `v1/git.routes.ts`
 - `POST /status` — git status

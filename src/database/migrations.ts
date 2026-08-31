@@ -1,6 +1,27 @@
+/**
+ * ------------------------------------------------------------------
+ * Database Migrations
+ * ------------------------------------------------------------------
+ * Quản lý schema và migrations cho database SQLite. Tự động tạo bảng,
+ * thêm/sửa column, và thực hiện các migration khi cần.
+ *
+ * Main functions:
+ * - runMigrations() : Chạy toàn bộ migrations theo thứ tự
+ *
+ * Migration functions:
+ * - migrateAccounts()          : Tạo/migrate bảng accounts
+ * - migrateProviders()         : Tạo/migrate bảng providers
+ * - migrateModels()            : Tạo/migrate bảng models
+ * - migrateMetrics()           : Tạo/migrate bảng metrics
+ * - migrateBrowserSessions()   : Tích hợp browser sessions vào accounts
+ * - dropUnusedTables()         : Xóa các bảng không còn sử dụng
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import Database from 'better-sqlite3';
 import { createLogger } from '../utils/logger';
-import { seedDatabase } from './seed';
 
 const logger = createLogger('Database');
 
@@ -11,12 +32,8 @@ export const runMigrations = (db: Database.Database): void => {
   migrateMetrics(db);
   migrateBrowserSessions(db);
   dropUnusedTables(db);
-  seedDatabase(db);
 };
-
-// =============================================================================
-// ACCOUNTS
-// =============================================================================
+// ─── Accounts Table ──────────────────────────────────────────────────
 
 function migrateAccounts(db: Database.Database): void {
   try {
@@ -119,9 +136,7 @@ function migrateAccounts(db: Database.Database): void {
   }
 }
 
-// =============================================================================
-// PROVIDERS
-// =============================================================================
+// ─── Providers Table ──────────────────────────────────────────────────
 
 function migrateProviders(db: Database.Database): void {
   try {
@@ -237,9 +252,7 @@ function migrateProviders(db: Database.Database): void {
   }
 }
 
-// =============================================================================
-// MODELS
-// =============================================================================
+// ─── Models Table ─────────────────────────────────────────────────────
 
 function migrateModels(db: Database.Database): void {
   try {
@@ -362,9 +375,7 @@ function migrateModels(db: Database.Database): void {
   }
 }
 
-// =============================================================================
-// METRICS
-// =============================================================================
+// ─── Metrics Table ────────────────────────────────────────────────────
 
 function migrateMetrics(db: Database.Database): void {
   try {
@@ -409,9 +420,7 @@ function migrateMetrics(db: Database.Database): void {
   }
 }
 
-// =============================================================================
-// CLEANUP
-// =============================================================================
+// ─── Browser Sessions Migration ─────────────────────────────────────
 
 function migrateBrowserSessions(db: Database.Database): void {
   try {
@@ -496,6 +505,8 @@ function migrateBrowserSessions(db: Database.Database): void {
     logger.error('Error migrating browser sessions into accounts', err);
   }
 }
+
+// ─── Drop Unused Tables ─────────────────────────────────────────────
 
 function dropUnusedTables(db: Database.Database): void {
   try {

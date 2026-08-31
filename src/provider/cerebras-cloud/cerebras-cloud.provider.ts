@@ -1,28 +1,52 @@
+/**
+ * ------------------------------------------------------------------
+ * Cerebras Cloud Provider
+ * ------------------------------------------------------------------
+ * Provider implementation cho Cerebras Cloud API.
+ * Hỗ trợ login qua browser, chat completion, rate limiting,
+ * và tự động lấy danh sách models.
+ *
+ * Main features:
+ * - login()          : Đăng nhập qua browser và lấy credential
+ * - handleMessage()  : Gửi tin nhắn với streaming response
+ * - getModels()      : Lấy danh sách models từ API
+ * - getProfile()     : Lấy thông tin user profile
+ * - rate limiting    : Tự động giới hạn request/token theo account
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { Router } from 'express';
 import fetch from 'node-fetch';
+
+// ── Types ──
 import { Provider, SendMessageOptions } from '../../types';
+
+// ── Services ──
 import { loginService } from '../../services/login/login.service';
+
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
 import { countTokens } from '../../utils/tokenizer';
+
+// ── Cerebras Imports ──
 import { BASE_URL, API_BASE_URL, CerebrasCompletionPayload, CerebrasUserInfo } from './cerebras-cloud.types';
 import { proxyHandler } from './cerebras-cloud.proxy-handler';
 import { parseSSEStream } from './cerebras-cloud.sse-parser';
 import { usageTracker } from './cerebras-cloud.rate-limiter';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('CerebrasCloudProvider');
 
-// =============================================================================
-// PROVIDER CLASS
-// =============================================================================
+// ─── Provider Class ────────────────────────────────────────────────────
 
 export class CerebrasCloudProvider implements Provider {
   name = 'cerebras-cloud';
   proxyHandler = proxyHandler;
   defaultModel = 'llama-3.3-70b';
 
-  // ---------------------------------------------------------------------------
-  // LOGIN
-  // ---------------------------------------------------------------------------
+  // ─── Login ──────────────────────────────────────────────────────────
 
   async login() {
     logger.info('Starting Cerebras Cloud login...');
@@ -67,9 +91,7 @@ export class CerebrasCloudProvider implements Provider {
     });
   }
 
-  // ---------------------------------------------------------------------------
-  // GET PROFILE
-  // ---------------------------------------------------------------------------
+  // ─── Get Profile ────────────────────────────────────────────────────
 
   async getProfile(credential: string): Promise<CerebrasUserInfo> {
     try {
@@ -95,9 +117,7 @@ export class CerebrasCloudProvider implements Provider {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // GET MODELS
-  // ---------------------------------------------------------------------------
+  // ─── Get Models ─────────────────────────────────────────────────────
 
   async getModels(credential: string): Promise<any[]> {
     logger.info('Fetching Cerebras Cloud models...');
@@ -201,9 +221,7 @@ export class CerebrasCloudProvider implements Provider {
     return models;
   }
 
-  // ---------------------------------------------------------------------------
-  // HANDLE MESSAGE
-  // ---------------------------------------------------------------------------
+  // ─── Handle Message ─────────────────────────────────────────────────
 
   async handleMessage(options: SendMessageOptions): Promise<void> {
     const {
@@ -302,17 +320,13 @@ export class CerebrasCloudProvider implements Provider {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // CONTINUE MESSAGE
-  // ---------------------------------------------------------------------------
+  // ─── Continue Message ───────────────────────────────────────────────
 
   async continueMessage(options: SendMessageOptions): Promise<void> {
     return this.handleMessage(options);
   }
 
-  // ---------------------------------------------------------------------------
-  // HELPERS
-  // ---------------------------------------------------------------------------
+  // ─── Helpers ────────────────────────────────────────────────────────
 
   private extractApiKey(credential: string): string | null {
     if (credential.trim().startsWith('csk-')) {
@@ -387,9 +401,7 @@ export class CerebrasCloudProvider implements Provider {
     };
   }
 
-  // ---------------------------------------------------------------------------
-  // ROUTES & MISC
-  // ---------------------------------------------------------------------------
+  // ─── Routes & Misc ──────────────────────────────────────────────────
 
   registerRoutes(router: Router) {
     router.get('/usage', (req, res) => {

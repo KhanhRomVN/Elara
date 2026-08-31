@@ -3,7 +3,6 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "target": "es2018",
-    "ignoreDeprecations": "6.0",
     "rootDir": "./src",
     "baseUrl": "./src",
     "paths": {

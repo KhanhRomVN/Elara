@@ -1,24 +1,53 @@
-import { Provider, SendMessageOptions } from '../../types';
+/**
+ * ------------------------------------------------------------------
+ * Qwen Provider
+ * ------------------------------------------------------------------
+ * Provider implementation cho Qwen AI (Alibaba Cloud).
+ * Hỗ trợ login qua browser, chat completion với streaming,
+ * thinking mode, search, và token auto-refresh.
+ *
+ * Main features:
+ * - login()                : Đăng nhập qua browser
+ * - handleMessage()        : Gửi tin nhắn với streaming response
+ * - refreshToken()         : Tự động refresh token khi hết hạn
+ * - getModels()            : Lấy danh sách models từ API hoặc fallback
+ * - getProfile()           : Lấy thông tin user profile
+ * - Session locking        : Ngăn concurrent requests trên cùng session
+ * - Parent ID caching      : Cache parent_id để tránh lỗi sibling
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import * as crypto from 'crypto';
 import fetch from 'node-fetch';
-import { createLogger } from '../../utils/logger';
+
+// ── Types ──
+import { Provider, SendMessageOptions } from '../../types';
+
+// ── Services ──
 import { loginService } from '../../services/login/login.service';
 import { proxyEvents } from '../../services/proxy.service';
+
+// ── Database ──
 import { getDb } from '../../database';
 import { updateAccountCredential } from '../../repositories/account.repository';
+
+// ── Utils ──
+import { createLogger } from '../../utils/logger';
+import { StreamingThinkingParser } from '../../utils/thinking-parser';
+
+// ── Qwen Imports ──
 import { proxyHandler } from './qwen.proxy-handler';
 import type { QwenCredential } from './qwen.types';
 
-export { proxyHandler };
-
+// ─── Constants ──────────────────────────────────────────────────────────
 export const BASE_URL = 'https://chat.qwen.ai';
 
 const logger = createLogger('QwenProvider');
 
-// ---------------------------------------------------------------------------
-// Per-session request lock: prevents concurrent requests from overlapping.
-// Key = conversationId (or accountId for new chats without a conversationId).
-// ---------------------------------------------------------------------------
+// ─── Session Lock ──────────────────────────────────────────────────────
+
 const sessionLocks = new Map<string, Promise<void>>();
 
 function acquireLock(key: string): { promise: Promise<void>; release: () => void } {
@@ -27,7 +56,6 @@ function acquireLock(key: string): { promise: Promise<void>; release: () => void
     release = resolve;
   });
   const previous = sessionLocks.get(key) ?? Promise.resolve();
-  // Chain: wait for the previous holder to finish, then this caller gets the slot
   sessionLocks.set(
     key,
     previous.then(() => next),
@@ -35,24 +63,18 @@ function acquireLock(key: string): { promise: Promise<void>; release: () => void
   return { promise: previous, release };
 }
 
-import { StreamingThinkingParser } from '../../utils/thinking-parser';
+// ─── Parent ID Cache ───────────────────────────────────────────────────
 
-// ---------------------------------------------------------------------------
-// Per-conversation parent_id cache.
-// Stores the last assistant response_id returned by Qwen, so the next turn
-// can use it directly as parent_id WITHOUT calling getLastMessageId().
-// This prevents "2/2 siblings" caused by Qwen API eventual consistency.
-// ---------------------------------------------------------------------------
 const lastParentIdCache = new Map<string, string>();
+
+// ─── Provider Class ────────────────────────────────────────────────────
 
 export class QwenProvider implements Provider {
   name = 'Qwen';
   proxyHandler = proxyHandler;
   defaultModel = 'qwen-3.8-max';
 
-  // ===========================================================================
-  // TOKEN HELPERS
-  // ===========================================================================
+  // ─── Token Helpers ─────────────────────────────────────────────────
 
   private parseCredential(credential: string): QwenCredential {
     if (credential.trim().startsWith('{')) {
@@ -208,6 +230,8 @@ export class QwenProvider implements Provider {
     return newToken;
   }
 
+  // ─── Login ──────────────────────────────────────────────────────────
+
   async login() {
     logger.info('Starting Qwen login...');
 
@@ -310,6 +334,8 @@ export class QwenProvider implements Provider {
     }
   }
 
+  // ─── List Chats ─────────────────────────────────────────────────────
+
   private async fetchListChats(
     credential: string,
     headersRef: Record<string, string>,
@@ -364,6 +390,8 @@ export class QwenProvider implements Provider {
     }
   }
 
+  // ─── Profile ────────────────────────────────────────────────────────
+
   async getProfile(
     credential: string,
     extraHeaders?: any,
@@ -415,6 +443,8 @@ export class QwenProvider implements Provider {
     }
   }
 
+  // ─── Create Chat ────────────────────────────────────────────────────
+
   private async createChat(
     credential: string,
     token: string | null,
@@ -446,7 +476,7 @@ export class QwenProvider implements Provider {
     if (bxUmidToken) headers['bx-umidtoken'] = bxUmidToken;
 
     logger.info(`[Qwen] Creating new chat via POST /api/v2/chats/new with model: ${model}`);
-    
+
     const response = await fetch(`${BASE_URL}/api/v2/chats/new`, {
       method: 'POST',
       headers,
@@ -469,7 +499,7 @@ export class QwenProvider implements Provider {
 
     const json = await response.json();
     const chatId = json.data?.id || json.id;
-    
+
     if (!chatId) {
       throw new Error(`No chat_id in response: ${JSON.stringify(json)}`);
     }
@@ -477,6 +507,8 @@ export class QwenProvider implements Provider {
     logger.info(`[Qwen] Chat created successfully: ${chatId}`);
     return chatId;
   }
+
+  // ─── Get Last Message ID ────────────────────────────────────────────
 
   private async getLastMessageId(
     conversationId: string,
@@ -514,33 +546,27 @@ export class QwenProvider implements Provider {
     return null;
   }
 
+  // ─── Handle Message ─────────────────────────────────────────────────
+
   async handleMessage(options: SendMessageOptions): Promise<void> {
     const { messages, onContent, onThinking, onMetadata, onDone, onError } = options;
     const onSessionCreated = options.onSessionCreated;
     let { conversationId } = options;
 
-    // Normalize model name (strip provider/ prefix if present, e.g. 'qwen/qwen-3.8-max' -> 'qwen3.8-max')
     let modelToUse = options.model || this.defaultModel;
     if (modelToUse.includes('/')) {
       modelToUse = modelToUse.split('/').pop() || modelToUse;
     }
     modelToUse = modelToUse.trim();
 
-    // Map qwen-3.x -> qwen3.x for upstream Qwen API
     if (modelToUse.startsWith('qwen-3.')) {
       modelToUse = modelToUse.replace('qwen-', 'qwen');
     }
 
-    // Determine lock key:
-    //  - If we already have a conversationId, lock on it so concurrent turns
-    //    for the same chat are serialized (prevents duplicate parentId / stream interleave).
-    //  - If this is a NEW chat, lock on accountId so two concurrent new-chat
-    //    requests on the same account don't both call createChat() simultaneously.
     const lockKey = conversationId || options.accountId || 'qwen_default';
     const { promise: previousLock, release } = acquireLock(lockKey);
 
     try {
-      // Wait for any in-flight request on the same session to finish first
       await previousLock;
 
       const credential = await this.getFreshCredential(options.credential);
@@ -548,9 +574,7 @@ export class QwenProvider implements Provider {
         this.parseCredential(credential);
 
       const isNewChat = !conversationId;
-      
-      // Qwen API REQUIRES chat_id for EVERY request, even the first one.
-      // So we MUST create a chat first before sending any message.
+
       if (isNewChat) {
         logger.info(`[Qwen] No conversationId provided, creating new chat first with model ${modelToUse}...`);
         conversationId = await this.createChat(
@@ -576,15 +600,11 @@ export class QwenProvider implements Provider {
       let parentId: string | null = options.parent_message_id ?? null;
 
       if (!parentId && conversationId && !isNewChat) {
-        // 1st priority: use our server-side cache (set from the previous turn's response_id).
-        //   This avoids Qwen API eventual-consistency issues where getLastMessageId()
-        //   might return a stale value if called immediately after the previous response.
         const cached = lastParentIdCache.get(conversationId);
         if (cached) {
           parentId = cached;
           logger.debug(`[Qwen] Using cached parentId for ${conversationId}: ${parentId}`);
         } else {
-          // 2nd priority: fall back to fetching from Qwen API (first continuation, no cache yet)
           try {
             parentId = await this.getLastMessageId(
               conversationId,
@@ -679,7 +699,7 @@ export class QwenProvider implements Provider {
       let parentIdCaptured = false;
       let capturedParentId: string | null = null;
       const thinkingParser = new StreamingThinkingParser(onContent, onThinking);
-      
+
       for await (const chunk of response.body as any) {
         buffer += chunk.toString();
         const lines = buffer.split('\n');
@@ -687,8 +707,7 @@ export class QwenProvider implements Provider {
         for (const line of lines) {
           const trimmed = line.trim();
           if (!trimmed) continue;
-          
-          // Handle SSE data lines
+
           let jsonStr = trimmed;
           if (trimmed.startsWith('data: ')) {
             jsonStr = trimmed.slice(6).trim();
@@ -697,57 +716,48 @@ export class QwenProvider implements Provider {
           } else {
             continue;
           }
-          
+
           if (jsonStr === '[DONE]') {
             thinkingParser.flush();
             onDone();
             return;
           }
-          
+
           try {
             const json = JSON.parse(jsonStr);
-            
-            // Handle response.created chunk which contains parent_id and response_id
+
             let responseCreated = null;
             if (json['response.created']) {
               responseCreated = json['response.created'];
             } else if (json.response && json.response.created) {
               responseCreated = json.response.created;
             }
-            
+
             if (responseCreated) {
-              // Capture chat_id if this is a new conversation
               if (isNewChat && !conversationIdCaptured && responseCreated.chat_id) {
                 conversationIdCaptured = true;
                 logger.info(`[Qwen] New conversation created with ID: ${responseCreated.chat_id}`);
                 if (onSessionCreated) onSessionCreated(responseCreated.chat_id);
                 if (onMetadata) onMetadata({ conversation_id: responseCreated.chat_id });
               }
-              
-              // CRITICAL: For Qwen, parent_message_id must be the assistant's response_id,
-              // NOT the user's parent_id. The response_id is what Qwen expects as parent_id
-              // in subsequent requests to maintain conversation context.
+
               if (!parentIdCaptured && responseCreated.response_id) {
                 parentIdCaptured = true;
                 capturedParentId = responseCreated.response_id;
                 logger.info(`[Qwen] Captured response_id (to use as parent_message_id): ${capturedParentId}`);
-                // Cache it server-side so the next turn uses it directly (avoids stale getLastMessageId)
                 const chatIdForCache = responseCreated.chat_id || conversationId;
                 if (chatIdForCache && capturedParentId) {
                   lastParentIdCache.set(chatIdForCache, capturedParentId);
                 }
-                // Emit as parent_message_id so client knows what to send next time
                 if (onMetadata) onMetadata({ parent_message_id: capturedParentId });
               }
             }
-            
-            // Extract reasoning_content if delivered in delta fields
+
             const delta = json.choices?.[0]?.delta;
             if (delta?.reasoning_content && onThinking) {
               onThinking(delta.reasoning_content);
             }
 
-            // Extract content and filter <thinking>...</thinking> blocks
             if (delta?.content) {
               thinkingParser.feed(delta.content);
             }
@@ -758,9 +768,7 @@ export class QwenProvider implements Provider {
       }
 
       thinkingParser.flush();
-      
-      // If we captured a parent_id and this is a new chat with session created,
-      // we should update the conversation's parent_id for future messages
+
       if (capturedParentId && onMetadata) {
         onMetadata({ last_parent_id: capturedParentId });
       }
@@ -768,12 +776,17 @@ export class QwenProvider implements Provider {
     } catch (err: any) {
       onError(err);
     } finally {
-      // Always release the lock so the next queued request can proceed
       release();
-      // Clean up the lock entry if nothing else is waiting
-      // (the entry will be garbage-collected naturally via Promise chain)
     }
   }
+
+  // ─── Continue Message ───────────────────────────────────────────────
+
+  async continueMessage(options: SendMessageOptions): Promise<void> {
+    return this.handleMessage(options);
+  }
+
+  // ─── Get Models ─────────────────────────────────────────────────────
 
   async getModels(credential: string): Promise<any[]> {
     const { token, cookieValue, bxUa, bxUmidToken, userAgent } =
@@ -793,7 +806,6 @@ export class QwenProvider implements Provider {
     if (bxUa) headers['bx-ua'] = bxUa;
     if (bxUmidToken) headers['bx-umidtoken'] = bxUmidToken;
 
-    // Try fetching from live Qwen endpoints dynamically
     const endpoints = [
       `${BASE_URL}/api/models`,
       `${BASE_URL}/api/v2/models`,
@@ -833,7 +845,7 @@ export class QwenProvider implements Provider {
       }
     }
 
-    // Fallback to official up-to-date models matching live browser
+    // Fallback models
     return [
       {
         id: 'qwen-3.8-max',
@@ -842,8 +854,7 @@ export class QwenProvider implements Provider {
         max_context_length: 1000000,
         is_search: true,
         is_image_upload: false,
-        description:
-          'Flagship Qwen3.8 Max with advanced reasoning, coding, and expert-level problem solving',
+        description: 'Flagship Qwen3.8 Max with advanced reasoning',
       },
       {
         id: 'qwen-3.8-plus',
@@ -852,8 +863,7 @@ export class QwenProvider implements Provider {
         max_context_length: 1000000,
         is_search: true,
         is_image_upload: true,
-        description:
-          'High-performance Qwen3.8 with multimodal visual reasoning and tool use',
+        description: 'High-performance Qwen3.8 with multimodal reasoning',
       },
       {
         id: 'qwen-3.7-max',
@@ -871,8 +881,7 @@ export class QwenProvider implements Provider {
         max_context_length: 1000000,
         is_search: true,
         is_image_upload: true,
-        description:
-          'Qwen3.7 with state-of-the-art text and multimodal processing',
+        description: 'Qwen3.7 with text and multimodal processing',
       },
       {
         id: 'qwen-3.6-plus',
@@ -921,6 +930,8 @@ export class QwenProvider implements Provider {
       },
     ];
   }
+
+  // ─── Model Support ──────────────────────────────────────────────────
 
   isModelSupported(model: string): boolean {
     const m = model.toLowerCase();

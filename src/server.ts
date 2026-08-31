@@ -1,15 +1,40 @@
-import http from 'http';
-import https from 'https';
-import fs from 'fs';
+/**
+ * ------------------------------------------------------------------
+ * Server
+ * ------------------------------------------------------------------
+ * HTTP/HTTPS server khởi tạo và quản lý.
+ * Hỗ trợ tự động kill port khi đang sử dụng (interactive mode).
+ *
+ * Main functions:
+ * - startServer() : Khởi động server
+ * - stopServer()  : Dừng server
+ * - getServerInfo(): Lấy thông tin server
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
+import * as fs from 'fs';
+import * as http from 'http';
+import * as https from 'https';
+
+// ── App ──
 import { createApp } from './app';
+
+// ── Config ──
 import { getServerConfig } from './config/server.config';
+
+// ── Utils ──
 import { createLogger } from './utils/logger';
 import { askYesNo } from './utils/prompt';
 import { killProcessOnPort } from './utils/kill-port';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('Server');
 
 let server: http.Server | https.Server | null = null;
+
+// ─── Start ─────────────────────────────────────────────────────────────
 
 export const startServer = async (): Promise<{
   success: boolean;
@@ -46,11 +71,11 @@ export const startServer = async (): Promise<{
             https: config.tls.enable,
           });
         });
+
         server.on('error', async (e: any) => {
           if (e.code === 'EADDRINUSE') {
             logger.error(`Port ${config.port} already in use`);
 
-            // Check if we're in interactive mode
             const isTTY = process.stdin.isTTY;
             let shouldKill = false;
 
@@ -64,23 +89,15 @@ export const startServer = async (): Promise<{
             }
 
             if (shouldKill) {
-              logger.info(
-                `Attempting to kill process on port ${config.port}...`,
-              );
+              logger.info(`Attempting to kill process on port ${config.port}...`);
               const killed = await killProcessOnPort(config.port);
 
               if (killed) {
-                logger.info(
-                  `Process on port ${config.port} killed. Retrying...`,
-                );
-                // Retry: close current server and try listening again
+                logger.info(`Process on port ${config.port} killed. Retrying...`);
                 server?.close(() => {
-                  // Try listening again
                   const newServer = http.createServer(app);
                   newServer.listen(config.port, config.host, () => {
-                    logger.info(
-                      `Listening on ${config.host}:${config.port} (after killing port)`,
-                    );
+                    logger.info(`Listening on ${config.host}:${config.port} (after killing port)`);
                     server = newServer;
                     resolve({
                       success: true,
@@ -130,6 +147,8 @@ export const startServer = async (): Promise<{
   }
 };
 
+// ─── Stop ──────────────────────────────────────────────────────────────
+
 export const stopServer = (): Promise<{
   success: boolean;
   message?: string;
@@ -146,6 +165,8 @@ export const stopServer = (): Promise<{
     });
   });
 };
+
+// ─── Info ──────────────────────────────────────────────────────────────
 
 export const getServerInfo = () => {
   const config = getServerConfig();

@@ -1,4 +1,18 @@
-// Mistral-specific types
+/**
+ * ------------------------------------------------------------------
+ * Mistral Types
+ * ------------------------------------------------------------------
+ * Type definitions cho Mistral AI API.
+ *
+ * Main exports:
+ * - MistralStreamPayload : Stream request payload
+ * - MistralMessagePart   : Message content part
+ * - MistralStreamPatch   : Stream patch structure
+ * - MistralStreamData    : Stream data structure
+ * ------------------------------------------------------------------
+ */
+
+// ─── Types ──────────────────────────────────────────────────────────────
 
 export interface MistralStreamPayload {
   chatId: string;

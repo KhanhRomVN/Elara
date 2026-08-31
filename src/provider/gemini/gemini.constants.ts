@@ -1,10 +1,21 @@
-// =============================================================================
-// CONSTANTS — Gemini
-// =============================================================================
+/**
+ * ------------------------------------------------------------------
+ * Gemini Constants
+ * ------------------------------------------------------------------
+ * Constants cho Gemini Web API.
+ *
+ * Main exports:
+ * - BASE_URL       : Base URL cho Gemini
+ * - GEMINI_BL      : Build label (bl parameter)
+ * - MODEL_MAP      : Mapping từ model name sang mode và think level
+ * ------------------------------------------------------------------
+ */
+
+// ─── Constants ──────────────────────────────────────────────────────────
 
 export const BASE_URL = 'https://gemini.google.com';
 
-// Gemini Web build label (bl parameter) — may need periodic update
+// Gemini Web build label — may need periodic update
 export const GEMINI_BL = 'boq_assistant-bard-web-server_20260525.09_p0';
 
 // Model mapping: MODE_CATEGORY enum from Gemini frontend JS source

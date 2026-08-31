@@ -1,4 +1,20 @@
-// Z.AI-specific types
+/**
+ * ------------------------------------------------------------------
+ * Z.AI Types
+ * ------------------------------------------------------------------
+ * Type definitions cho Z.AI API.
+ *
+ * Main exports:
+ * - ZAIAuthData           : Authentication data
+ * - SignatureResult       : Signature generation result
+ * - ZAIUserAgentDetails   : Parsed user-agent details
+ * - ZAIStreamData         : Stream data structure
+ * - ZAIModel              : Model info structure
+ * - ZAICreateChatPayload  : Create chat request payload
+ * ------------------------------------------------------------------
+ */
+
+// ─── Types ──────────────────────────────────────────────────────────────
 
 export interface ZAIAuthData {
   token: string;

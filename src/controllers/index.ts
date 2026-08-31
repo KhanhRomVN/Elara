@@ -3,4 +3,4 @@ export * from './models.controller';
 export * from './provider.controller';
 export * from './stats.controller';
 export * from './upload.controller';
-export { sendMessageController as default } from './send-message.controller';
+export { sendMessage as default } from './send-message.controller';

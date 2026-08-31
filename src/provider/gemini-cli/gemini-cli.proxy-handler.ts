@@ -1,8 +1,29 @@
+/**
+ * ------------------------------------------------------------------
+ * Gemini CLI Proxy Handler
+ * ------------------------------------------------------------------
+ * Proxy handler để capture tokens, project ID, và user info từ Gemini CLI.
+ * Lắng nghe OAuth token response, project ID từ loadCodeAssist API,
+ * và user info từ Google userinfo API.
+ *
+ * Main features:
+ * - onRequest()       : Capture cookies chứa token
+ * - onResponseBody()  : Capture access token, project ID, email
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Services ──
 import { ProxyHandler } from '../../services/proxy.service';
 import { proxyEvents } from '../../services/proxy.service';
+
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('GeminiCLIProvider');
+
+// ─── Proxy Handler ────────────────────────────────────────────────────
 
 export const proxyHandler: ProxyHandler = {
   onRequest: (ctx: any, callback: () => void) => {

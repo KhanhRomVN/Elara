@@ -1,16 +1,38 @@
-import { spawn, execSync, ChildProcess } from 'child_process';
+/**
+ * ------------------------------------------------------------------
+ * Login Service
+ * ------------------------------------------------------------------
+ * Service login cho các provider. Hỗ trợ 2 phương thức:
+ * - MITM: proxy-based intercept cookies/tokens
+ * - CDP: Chrome DevTools Protocol để capture từ browser
+ *
+ * Main functions:
+ * - login()          : Đăng nhập với provider
+ * - cancelLogin()    : Hủy đăng nhập đang chạy
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import * as fs from 'fs';
-import * as path from 'path';
 import * as os from 'os';
+import * as path from 'path';
+import { spawn, execSync, ChildProcess } from 'child_process';
 import fetch from 'node-fetch';
 import WebSocket from 'ws';
-import { createLogger } from '../../utils/logger';
-import { proxyService, proxyEvents } from '../proxy.service';
-import { findAvailablePort } from '../../utils/net';
 
+// ── Services ──
+import { proxyService, proxyEvents } from '../proxy.service';
 import { cdpLoginService, CDPLoginOptions } from './cdp-login.service';
 
+// ── Utils ──
+import { createLogger } from '../../utils/logger';
+import { findAvailablePort } from '../../utils/net';
+
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('LoginService');
+
+// ─── Types ──────────────────────────────────────────────────────────────
 
 interface LoginOptions {
   providerId: string;
@@ -19,9 +41,9 @@ interface LoginOptions {
   cookieEvent?: string;
   headerEvent?: string;
   infoEvent?: string;
-  extraEvents?: string[]; // Additional provider-specific events
+  extraEvents?: string[];
   skipProxy?: boolean;
-  method?: 'mitm' | 'cdp'; // 'mitm' (default) or 'cdp'
+  method?: 'mitm' | 'cdp';
   validate?: (data: {
     cookies: string;
     headers?: any;
@@ -34,14 +56,17 @@ interface LoginOptions {
   }>;
 }
 
+// ─── Helpers ────────────────────────────────────────────────────────────
+
 const getUserDataPath = () => {
   try {
-    // In Tauri sidecar, we don't have electron. Falling back to .elara
     return path.join(os.homedir(), '.elara');
   } catch (e) {
     return path.join(os.tmpdir(), 'elara-login');
   }
 };
+
+// ─── Class ──────────────────────────────────────────────────────────────
 
 export class LoginService {
   private activeProcesses: Map<string, ChildProcess> = new Map();
@@ -126,10 +151,11 @@ export class LoginService {
     return null;
   }
 
+  // ─── Login ───────────────────────────────────────────────────────────
+
   async login(
     options: LoginOptions,
   ): Promise<{ cookies: string; email?: string; headers?: any }> {
-    // Use CDP method if specified
     if (options.method === 'cdp') {
       logger.info(`[Login] Using CDP method for ${options.providerId}`);
       const cdpOptions: CDPLoginOptions = {
@@ -150,7 +176,7 @@ export class LoginService {
         } : undefined,
         extraEvents: options.extraEvents,
       };
-      
+
       const result = await cdpLoginService.login(cdpOptions);
       if (!result.success) {
         throw new Error(result.error || 'CDP login failed');
@@ -161,7 +187,6 @@ export class LoginService {
       };
     }
 
-    // Default MITM method
     const chromePath = this.findChrome();
     if (!chromePath) {
       throw new Error('Chrome or Chromium not found. Please install it.');
@@ -171,7 +196,6 @@ export class LoginService {
     const userDataPath = getUserDataPath();
     const profilePath = path.join(userDataPath, 'profiles', profileFolderName);
 
-    // Cleanup profile for fresh login
     try {
       if (fs.existsSync(profilePath)) {
         logger.info(`Cleaning profile: ${profilePath}`);
@@ -185,7 +209,6 @@ export class LoginService {
       fs.mkdirSync(profilePath, { recursive: true });
     }
 
-    // Ensure proxy is running
     await proxyService.start();
 
     const proxyConfig = proxyService.getConfig();
@@ -253,7 +276,6 @@ export class LoginService {
             proxyEvents.off(options.headerEvent, onHeader);
           if (options.infoEvent) proxyEvents.off(options.infoEvent, onInfo);
 
-          // Remove extra event listeners
           if (options.extraEvents) {
             for (const eventName of options.extraEvents) {
               proxyEvents.off(eventName, onExtraEvent);
@@ -262,7 +284,8 @@ export class LoginService {
         }
       };
 
-      // Poll browser localStorage via CDP for tokens (e.g. Kimi refresh_token)
+      // ─── CDP Poller for Kimi localStorage ──────────────────────────
+
       if (options.providerId === 'kimi') {
         cdpPoller = setInterval(async () => {
           if (resolved) {
@@ -323,6 +346,8 @@ export class LoginService {
         }, 1000);
       }
 
+      // ─── Resolve Logic ─────────────────────────────────────────────
+
       let isResolving = false;
       const resolveIfReady = async () => {
         if (!capturedCookies || resolved || isResolving) {
@@ -330,37 +355,33 @@ export class LoginService {
         }
         isResolving = true;
         try {
-          // Special handling for Qwen: wait for real bxUa and bxUmidToken headers (not fallback)
           if (options.providerId === 'qwen') {
             const hasBxUa = (capturedHeaders as any)['bx-ua'];
             const hasBxUmidToken = (capturedHeaders as any)['bx-umidtoken'];
-            
-            // Check if headers exist and are real (starts with version digits + !, not fallback)
-            const isRealBxUa = hasBxUa && 
-              typeof hasBxUa === 'string' && 
-              /^\d+!/.test(hasBxUa) && 
+
+            const isRealBxUa = hasBxUa &&
+              typeof hasBxUa === 'string' &&
+              /^\d+!/.test(hasBxUa) &&
               hasBxUa.length > 100 &&
               !hasBxUa.includes('default') &&
               !hasBxUa.includes('not_initialized') &&
               !hasBxUa.includes('not_fun');
-              
-            const isRealBxUmidToken = hasBxUmidToken && 
-              typeof hasBxUmidToken === 'string' && 
-              hasBxUmidToken.length > 30 && 
+
+            const isRealBxUmidToken = hasBxUmidToken &&
+              typeof hasBxUmidToken === 'string' &&
+              hasBxUmidToken.length > 30 &&
               !hasBxUmidToken.includes('default') &&
               !hasBxUmidToken.includes('not_initialized');
-            
-            logger.debug(`[Login] Qwen headers status - bxUa: ${!!hasBxUa} (real: ${isRealBxUa}, len: ${hasBxUa?.length || 0}), bxUmidToken: ${!!hasBxUmidToken} (real: ${isRealBxUmidToken}, len: ${hasBxUmidToken?.length || 0})`);
-            
+
+            logger.debug(`[Login] Qwen headers status - bxUa: ${!!hasBxUa} (real: ${isRealBxUa}), bxUmidToken: ${!!hasBxUmidToken} (real: ${isRealBxUmidToken})`);
+
             if (!isRealBxUa || !isRealBxUmidToken) {
-              logger.debug(`[Login] ⏳ Waiting for real Qwen headers - need real bxUa and bxUmidToken`);
-              return; // Don't resolve yet, wait for real headers from /api/v2/chats/ request
+              logger.debug(`[Login] ⏳ Waiting for real Qwen headers`);
+              return;
             }
-            logger.info(`[Login] ✅ Qwen real headers ready - bxUa length: ${hasBxUa?.length}, bxUmidToken length: ${hasBxUmidToken?.length}`);
-            logger.debug(`[Login] bxUa preview: ${hasBxUa?.substring(0, 50)}...`);
-            logger.debug(`[Login] bxUmidToken preview: ${hasBxUmidToken?.substring(0, 30)}...`);
+            logger.info(`[Login] ✅ Qwen real headers ready`);
           }
-          
+
           if (options.validate) {
             try {
               const result = await options.validate({
@@ -398,6 +419,8 @@ export class LoginService {
         }
       };
 
+      // ─── Event Handlers ─────────────────────────────────────────────
+
       const onCookie = (data: any) => {
         if (typeof data === 'string') {
           if (!capturedCookies || !capturedCookies.includes('refresh_token=')) {
@@ -429,7 +452,6 @@ export class LoginService {
       };
 
       const onExtraEvent = (data: any) => {
-        // Handle extra events (provider-specific)
         if (typeof data === 'string') {
           if (!capturedCookies || !capturedCookies.includes('refresh_token=')) {
             capturedCookies = data;
@@ -452,14 +474,12 @@ export class LoginService {
       if (options.headerEvent) proxyEvents.on(options.headerEvent, onHeader);
       if (options.infoEvent) proxyEvents.on(options.infoEvent, onInfo);
 
-      // Register extra event listeners
       if (options.extraEvents) {
         for (const eventName of options.extraEvents) {
           proxyEvents.on(eventName, onExtraEvent);
         }
       }
 
-      // Timeout 5 mins
       setTimeout(() => {
         if (!resolved) {
           cleanup();
@@ -475,6 +495,8 @@ export class LoginService {
       });
     });
   }
+
+  // ─── Cancel ──────────────────────────────────────────────────────────
 
   cancelLogin(providerId: string) {
     const process = this.activeProcesses.get(providerId);

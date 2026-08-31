@@ -1,23 +1,30 @@
 /**
+ * ------------------------------------------------------------------
  * Chat Session Service
- * Manages session store and request queue for CLI proxy endpoints.
+ * ------------------------------------------------------------------
+ * Quản lý session store và request queue cho CLI proxy endpoints.
+ * Hỗ trợ tạo fingerprint từ API key và messages.
+ *
+ * Main functions:
+ * - generateId()              : Tạo ID ngẫu nhiên
+ * - getSessionKey()           : Lấy session key từ request
+ * - extractCliSessionId()     : Trích xuất CLI session ID từ metadata
+ * - generateSessionFingerprint(): Tạo fingerprint cho session
+ * - isResetCommand()          : Kiểm tra lệnh reset
+ * ------------------------------------------------------------------
  */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import * as crypto from 'crypto';
 import { Request, Response } from 'express';
 
-// ---------------------------------------------------------------------------
-// Session store: fingerprint → provider session ID
-// ---------------------------------------------------------------------------
-export const sessionStore = new Map<string, string>();
+// ─── State ──────────────────────────────────────────────────────────────
 
-// ---------------------------------------------------------------------------
-// Request queue: serialize concurrent requests per session fingerprint
-// ---------------------------------------------------------------------------
+export const sessionStore = new Map<string, string>();
 export const requestQueue = new Map<string, Promise<void>>();
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+// ─── Functions ──────────────────────────────────────────────────────────
 
 export function generateId(prefix: string = 'msg_'): string {
   return `${prefix}${crypto.randomUUID()}`;
@@ -33,9 +40,6 @@ export function getSessionKey(req: Request): string {
   return req.ip || 'default';
 }
 
-/**
- * Extracts explicit CLI Session ID from request body metadata.
- */
 export function extractCliSessionId(body: any): string | null {
   const metadata = body.metadata;
   if (!metadata) return null;
@@ -53,10 +57,6 @@ export function extractCliSessionId(body: any): string | null {
   return null;
 }
 
-/**
- * Generates a unique session fingerprint based on CLI Session IDs
- * or falls back to API key + first message content.
- */
 export function generateSessionFingerprint(
   apiKey: string,
   messages: any[],

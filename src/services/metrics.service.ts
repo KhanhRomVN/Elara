@@ -1,10 +1,27 @@
 /**
+ * ------------------------------------------------------------------
  * Metrics Service
- * Handles token counting, stats recording, account usage refresh,
- * and querying usage history for the metrics table.
+ * ------------------------------------------------------------------
+ * Service ghi nhận và truy vấn metrics usage cho các request.
+ * Hỗ trợ token counting, record success/error, và thống kê theo thời gian.
+ *
+ * Main functions:
+ * - recordRequest()           : Ghi nhận request
+ * - recordSuccess()           : Ghi nhận thành công
+ * - recordError()             : Ghi nhận lỗi
+ * - recordMetric()            : Ghi nhận metric vào database
+ * - recordChatMetrics()       : Ghi nhận metrics cho chat response
+ * - getUsageHistory()         : Lấy lịch sử usage theo period
+ * - getAccountStatsByPeriod() : Thống kê theo account
+ * - getModelStatsByPeriod()   : Thống kê theo model
+ * ------------------------------------------------------------------
  */
-import { createLogger } from '../utils/logger';
-import { countMessagesTokens, countTokens } from '../utils/tokenizer';
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Database ──
+import { getDb } from '../database';
+
+// ── Repositories ──
 import {
   insertMetric,
   queryUsageHistory,
@@ -12,13 +29,15 @@ import {
   queryModelStatsByPeriod,
 } from '../repositories/metrics.repository';
 import { upsertModel, updateModelSuccessRate } from '../repositories/model.repository';
-import { getDb } from '../database';
 
+// ── Utils ──
+import { createLogger } from '../utils/logger';
+import { countMessagesTokens, countTokens } from '../utils/tokenizer';
+
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('MetricsService');
 
-// =============================================================================
-// RECORD FUNCTIONS (for table "metrics")
-// =============================================================================
+// ─── Record Functions ─────────────────────────────────────────────────
 
 export async function recordRequest(providerId: string, modelId: string) {
   try {
@@ -66,18 +85,13 @@ export function recordMetric(
 ) {
   try {
     insertMetric(providerId, modelId, accountId, tokens, status);
-    // Update model success rate after each metric insertion
     updateModelSuccessRateAsync(providerId, modelId);
   } catch (error) {
     logger.error('Error recording metric:', error);
   }
 }
 
-/**
- * Asynchronously update model success rate based on metrics history
- */
 function updateModelSuccessRateAsync(providerId: string, modelId: string): void {
-  // Run asynchronously to not block the main flow
   setImmediate(() => {
     try {
       const db = getDb();
@@ -89,11 +103,10 @@ function updateModelSuccessRateAsync(providerId: string, modelId: string): void 
         FROM metrics 
         WHERE provider_id = ? AND model_id = ?
       `).get(providerId, modelId);
-      
+
       const successRate = (result as any)?.success_rate ?? null;
       updateModelSuccessRate(providerId, modelId, successRate);
 
-      // Invalidate provider cache so next getAllProviders() returns fresh success_rate
       const { invalidateProviderCache } = require('./provider.service');
       invalidateProviderCache();
     } catch (error) {
@@ -102,10 +115,6 @@ function updateModelSuccessRateAsync(providerId: string, modelId: string): void 
   });
 }
 
-/**
- * Records token usage and triggers an account usage refresh.
- * Used at the end of each successful chat response.
- */
 export function recordChatMetrics(
   accountId: string | undefined,
   providerId: string,
@@ -125,7 +134,6 @@ export function recordChatMetrics(
   );
 
   if (accountId) {
-    // Refresh account usage in background — non-blocking
     const { accountRefreshService } = require('./account-refresh.service');
     accountRefreshService.refreshUsage(accountId).catch((err: any) => {
       logger.warn(`Failed to refresh usage for account ${accountId}: ${err.message}`);
@@ -133,9 +141,7 @@ export function recordChatMetrics(
   }
 }
 
-// =============================================================================
-// QUERY HELPERS
-// =============================================================================
+// ─── Query Helpers ────────────────────────────────────────────────────
 
 interface TimeRange {
   startTime: number;
@@ -184,8 +190,6 @@ export function getUsageHistory(
   accountId?: string,
 ) {
   let groupBy: string;
-  let dateFormat: string;
-  const now = new Date();
   const labels: string[] = [];
 
   let startTime: number;
@@ -197,7 +201,6 @@ export function getUsageHistory(
       startTime = new Date(targetYear, 0, 1).getTime();
       endTime = new Date(targetYear, 11, 31, 23, 59, 59, 999).getTime();
       groupBy = '%Y-%m';
-      dateFormat = '%Y-%m';
       const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
       for (let m = 1; m <= 12; m++) {
         const lbl = `${targetYear}-${String(m).padStart(2, '0')}`;
@@ -212,7 +215,6 @@ export function getUsageHistory(
       const lastDay = new Date(targetMonthDate.getFullYear(), targetMonthDate.getMonth() + 1, 0);
       endTime = new Date(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate(), 23, 59, 59, 999).getTime();
       groupBy = '%Y-%m-%d';
-      dateFormat = '%Y-%m-%d';
       const todayStr = now.toISOString().split('T')[0];
       for (let d = 1; d <= lastDay.getDate(); d++) {
         const dateObj = new Date(targetMonthDate.getFullYear(), targetMonthDate.getMonth(), d);
@@ -230,7 +232,6 @@ export function getUsageHistory(
       startTime = startOfPeriod.getTime();
       endTime = endOfPeriod.getTime();
       groupBy = '%Y-%m-%d';
-      dateFormat = '%Y-%m-%d';
       const todayStr = now.toISOString().split('T')[0];
       for (let i = 0; i < 7; i++) {
         const dateObj = new Date(startTime + i * 24 * 60 * 60 * 1000);
@@ -246,7 +247,6 @@ export function getUsageHistory(
       startTime = dayStart.getTime();
       endTime = dayStart.getTime() + 24 * 60 * 60 * 1000 - 1;
       groupBy = '%Y-%m-%d %H:00';
-      dateFormat = '%H:00';
       const currentHour = now.getHours();
       for (let h = 0; h < 24; h++) {
         const lbl = `${String(h).padStart(2, '0')}:00`;

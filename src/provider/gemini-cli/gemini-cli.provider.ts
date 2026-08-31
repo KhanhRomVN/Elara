@@ -1,17 +1,45 @@
-import { Provider, SendMessageOptions } from '../../types';
-import fetch from 'node-fetch';
-import * as path from 'path';
-import * as os from 'os';
+/**
+ * ------------------------------------------------------------------
+ * Gemini CLI Provider
+ * ------------------------------------------------------------------
+ * Provider implementation cho Gemini CLI (Google Cloud Gemini).
+ * Hỗ trợ login qua terminal OAuth flow, refresh token,
+ * và chat completion với streaming response.
+ *
+ * Main features:
+ * - login()          : Đăng nhập qua terminal OAuth
+ * - refreshToken()   : Refresh access token
+ * - fetchProjectId() : Lấy project ID từ API
+ * - handleMessage()  : Gửi tin nhắn với streaming response
+ * - getModels()      : Lấy danh sách models từ quota API
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { spawn, execSync } from 'child_process';
-import { createLogger } from '../../utils/logger';
-import { proxyService } from '../../services/proxy.service';
+import fetch from 'node-fetch';
+
+// ── Types ──
+import { Provider, SendMessageOptions } from '../../types';
+
+// ── Services ──
 import { loginService } from '../../services/login/login.service';
+import { proxyService } from '../../services/proxy.service';
+
+// ── Database ──
 import { getDb } from '../../database';
+
+// ── Utils ──
+import { createLogger } from '../../utils/logger';
+
+// ── Gemini CLI Imports ──
 import { proxyHandler } from './gemini-cli.proxy-handler';
 
-export { proxyHandler };
-
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('GeminiCLIProvider');
 
 const CLIENT_METADATA = { ideType: 9, platform: 3, pluginType: 2 };
@@ -28,10 +56,14 @@ export const GEMINI_CONFIG = {
   ],
 };
 
+// ─── Provider Class ────────────────────────────────────────────────────
+
 export class GeminiCLIProvider implements Provider {
   name = 'gemini-cli';
   proxyHandler = proxyHandler;
   defaultModel = 'gemini-1.5-pro';
+
+  // ─── Login ──────────────────────────────────────────────────────────
 
   async login() {
     logger.info('Starting Gemini CLI login with terminal...');
@@ -157,6 +189,8 @@ export class GeminiCLIProvider implements Provider {
     });
   }
 
+  // ─── Refresh Token ──────────────────────────────────────────────────
+
   async refreshToken(refreshTokenStr: string) {
     const response = await fetch(GEMINI_CONFIG.tokenUrl, {
       method: 'POST',
@@ -174,6 +208,8 @@ export class GeminiCLIProvider implements Provider {
     if (!response.ok) throw new Error('Failed to refresh Gemini CLI token');
     return await response.json();
   }
+
+  // ─── Fetch Project ID ──────────────────────────────────────────────
 
   async fetchProjectId(accessToken: string): Promise<string> {
     const response = await fetch(
@@ -199,6 +235,8 @@ export class GeminiCLIProvider implements Provider {
     }
     return '';
   }
+
+  // ─── Handle Message ─────────────────────────────────────────────────
 
   async handleMessage(options: SendMessageOptions): Promise<void> {
     const {
@@ -310,6 +348,14 @@ export class GeminiCLIProvider implements Provider {
     }
   }
 
+  // ─── Continue Message ───────────────────────────────────────────────
+
+  async continueMessage(options: SendMessageOptions): Promise<void> {
+    return this.handleMessage(options);
+  }
+
+  // ─── Get Models ─────────────────────────────────────────────────────
+
   async getModels(credential: string): Promise<any[]> {
     let tokens: any;
     try {
@@ -343,6 +389,8 @@ export class GeminiCLIProvider implements Provider {
       name: bucket.modelId,
     }));
   }
+
+  // ─── Model Support ──────────────────────────────────────────────────
 
   isModelSupported(model: string): boolean {
     const m = model.toLowerCase();

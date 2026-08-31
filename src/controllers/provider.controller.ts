@@ -1,13 +1,35 @@
+/**
+ * ------------------------------------------------------------------
+ * Provider Controller
+ * ------------------------------------------------------------------
+ * Xử lý các request liên quan đến provider: lấy danh sách provider,
+ * lấy model của một provider cụ thể.
+ *
+ * Main functions:
+ * - getProviders()              : Lấy danh sách tất cả provider
+ * - getProviderModels(): Lấy danh sách model của một provider
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { Request, Response } from 'express';
+
+// ── Services ──
 import {
   getAllProviders,
-  getProviderModels,
+  getProviderModels as getProviderModelsService,
 } from '../services/provider.service';
+
+// ── Utils ──
 import { createLogger } from '../utils/logger';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('ProviderController');
 
-// GET /v1/providers
+// ─── Controller ─────────────────────────────────────────────────────────
+
+// ─── GET /v1/providers ──────────────────────────────────────────────
 export const getProviders = async (
   req: Request,
   res: Response,
@@ -31,14 +53,14 @@ export const getProviders = async (
   }
 };
 
-// GET /v1/providers/:providerId/models
-export const getProviderModelsController = async (
+// ─── GET /v1/providers/:providerId/models ──────────────────────────
+export const getProviderModels = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
   try {
     const { providerId } = req.params;
-    const models = await getProviderModels(providerId);
+    const models = await getProviderModelsService(providerId);
 
     res.status(200).json({
       success: true,

@@ -1,11 +1,41 @@
+/**
+ * ------------------------------------------------------------------
+ * Browser Session Controller
+ * ------------------------------------------------------------------
+ * Xử lý các request liên quan đến phiên đăng nhập qua browser (CDP).
+ * Hỗ trợ đăng nhập qua browser và hoàn tất phiên khi cần nhập email.
+ *
+ * Main functions:
+ * - loginSession()      : Tạo phiên đăng nhập qua browser CDP
+ * - completeSession()   : Hoàn tất phiên đăng nhập với email
+ * - listSessions()      : [Deprecated] Trả về 410
+ * - createSession()     : [Deprecated] Trả về 410
+ * - deleteSession()     : [Deprecated] Trả về 410
+ * - touchSessionHandler(): [Deprecated] Trả về 410
+ * - getActiveSession()  : [Deprecated] Trả về 410
+ * - createProfile()     : [Deprecated] Trả về 410
+ * - activateSessionHandler(): [Deprecated] Trả về 410
+ * - updateSession()     : [Deprecated] Trả về 410
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { Request, Response } from 'express';
+
+// ── Services ──
 import {
   loginViaCDP,
   completePendingSession,
 } from '../services/browser-session.service';
+
+// ── Utils ──
 import { createLogger } from '../utils/logger';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('BrowserSessionController');
+
+// ─── Controller ─────────────────────────────────────────────────────────
 
 // POST /v1/browser-sessions/login
 export const loginSession = async (req: Request, res: Response): Promise<void> => {

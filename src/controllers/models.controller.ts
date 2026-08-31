@@ -1,10 +1,30 @@
+/**
+ * ------------------------------------------------------------------
+ * Models Controller
+ * ------------------------------------------------------------------
+ * Xử lý request lấy danh sách model từ các provider đã bật.
+ *
+ * Main functions:
+ * - getAllModels() : Lấy tất cả model từ các provider được kích hoạt
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { Request, Response } from 'express';
+
+// ── Services ──
 import { getAllModelsFromEnabledProviders } from '../services/provider.service';
+
+// ── Utils ──
 import { createLogger } from '../utils/logger';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('ModelsController');
 
-// GET /v1/models/all
+// ─── Controller ─────────────────────────────────────────────────────────
+
+// ─── GET /v1/models/all ─────────────────────────────────────────────
 export const getAllModels = async (
   req: Request,
   res: Response,

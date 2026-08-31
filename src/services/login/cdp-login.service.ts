@@ -1,8 +1,31 @@
+/**
+ * ------------------------------------------------------------------
+ * CDP Login Service
+ * ------------------------------------------------------------------
+ * Service login sử dụng Chrome DevTools Protocol (CDP).
+ * Mở browser, chờ đăng nhập, capture cookies/email qua Network events.
+ *
+ * Main functions:
+ * - login()          : Mở browser và chờ đăng nhập
+ * - closeSession()   : Đóng một session
+ * - closeAllSessions(): Đóng tất cả sessions
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { EventEmitter } from 'events';
+
+// ── Services ──
 import { createCDPService } from './cdp.service';
+
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('CDPLoginService');
+
+// ─── Types ──────────────────────────────────────────────────────────────
 
 export interface CDPLoginOptions {
   providerId: string;
@@ -20,6 +43,8 @@ export interface CDPLoginResult {
   email?: string;
   error?: string;
 }
+
+// ─── Class ──────────────────────────────────────────────────────────────
 
 export class CDPLoginService extends EventEmitter {
   private activeSessions: Map<string, { cdpService: any; browserProcess: any }> = new Map();
@@ -42,9 +67,7 @@ export class CDPLoginService extends EventEmitter {
       rejectPromise = reject;
     });
 
-    // Listen for cookie changes via Network events
     cdpService.on('response', async (response: any) => {
-      // Look for Set-Cookie headers
       if (response.headers?.['set-cookie']) {
         const cookies = response.headers['set-cookie'];
         if (cookies) {
@@ -57,7 +80,7 @@ export class CDPLoginService extends EventEmitter {
       try {
         const body = data.isBinary ? Buffer.from(data.body, 'base64').toString() : data.body;
         const json = JSON.parse(body);
-        
+
         if (json.email) {
           capturedEmail = json.email;
         }
@@ -68,7 +91,6 @@ export class CDPLoginService extends EventEmitter {
         // Not JSON
       }
 
-      // Trigger validation if we have cookies or email
       if (validate && (capturedCookies || capturedEmail)) {
         const validation = await validate({ cookies: capturedCookies, email: capturedEmail });
         if (validation.isValid) {
@@ -93,7 +115,6 @@ export class CDPLoginService extends EventEmitter {
       }
     });
 
-    // Launch browser and navigate to login URL
     const launched = await cdpService.launchBrowser(loginUrl);
     if (!launched) {
       return { success: false, error: 'Failed to launch browser' };
@@ -101,7 +122,6 @@ export class CDPLoginService extends EventEmitter {
 
     this.activeSessions.set(sessionId, { cdpService, browserProcess: null });
 
-    // Set timeout
     timeoutId = setTimeout(async () => {
       if (resolvePromise) {
         logger.warn(`[CDP Login] Timeout after ${timeout}ms for ${providerId}`);
@@ -111,7 +131,6 @@ export class CDPLoginService extends EventEmitter {
       }
     }, timeout);
 
-    // Wait for user to login manually or auto-fill credentials
     logger.info(`[CDP Login] Browser opened at ${loginUrl}. Waiting for login...`);
 
     return resultPromise;

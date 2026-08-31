@@ -1,8 +1,29 @@
+/**
+ * ------------------------------------------------------------------
+ * Qwen Proxy Handler
+ * ------------------------------------------------------------------
+ * Proxy handler để capture token, headers, và email từ Qwen.
+ * Lắng nghe bx-ua, x-csrf-token, và token từ API response.
+ *
+ * Main features:
+ * - onRequest()       : Capture bx-ua, csrf token, bx-umidtoken
+ * - onRequestData()   : Capture email từ signin request
+ * - onResponseBody()  : Capture token và email từ signin response
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Services ──
 import { ProxyHandler } from '../../services/proxy.service';
 import { proxyEvents } from '../../services/proxy.service';
+
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('QwenProvider');
+
+// ─── Proxy Handler ────────────────────────────────────────────────────
 
 export const proxyHandler: ProxyHandler = {
   onRequest: (ctx: any, callback: () => void) => {

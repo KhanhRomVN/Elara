@@ -1,3 +1,18 @@
+/**
+ * ------------------------------------------------------------------
+ * Server Configuration
+ * ------------------------------------------------------------------
+ * Cấu hình HTTP/HTTPS server.
+ * Đọc port từ environment variables.
+ *
+ * Main exports:
+ * - getServerConfig()   : Lấy cấu hình server hiện tại
+ * - updateServerConfig(): Cập nhật cấu hình server
+ * ------------------------------------------------------------------
+ */
+
+// ─── Types ──────────────────────────────────────────────────────────────
+
 export interface ServerConfig {
   port: number;
   host: string;
@@ -12,7 +27,8 @@ export interface ServerConfig {
   };
 }
 
-// Default configuration
+// ─── Default Config ────────────────────────────────────────────────────
+
 export const defaultConfig: ServerConfig = {
   port: parseInt(
     process.env.VITE_BACKEND_PORT || process.env.PORT || '8888',
@@ -28,7 +44,11 @@ export const defaultConfig: ServerConfig = {
   },
 };
 
+// ─── State ─────────────────────────────────────────────────────────────
+
 let currentConfig: ServerConfig = { ...defaultConfig };
+
+// ─── Functions ──────────────────────────────────────────────────────────
 
 export const getServerConfig = (): ServerConfig => {
   return currentConfig;

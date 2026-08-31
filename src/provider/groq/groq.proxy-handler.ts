@@ -1,8 +1,26 @@
+/**
+ * ------------------------------------------------------------------
+ * Groq Proxy Handler
+ * ------------------------------------------------------------------
+ * Proxy handler để capture stytch_session_jwt cookie từ Groq.
+ *
+ * Main features:
+ * - onRequest() : Capture stytch_session_jwt cookie
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Services ──
 import { ProxyHandler } from '../../services/proxy.service';
 import { proxyEvents } from '../../services/proxy.service';
+
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('GroqProvider');
+
+// ─── Proxy Handler ────────────────────────────────────────────────────
 
 export const proxyHandler: ProxyHandler = {
   onRequest: (ctx: any, callback: () => void) => {

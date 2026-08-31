@@ -1,4 +1,23 @@
+/**
+ * ------------------------------------------------------------------
+ * Metrics Repository
+ * ------------------------------------------------------------------
+ * Repository layer cho bảng metrics. Lưu trữ thống kê usage
+ * của các request gửi đến provider.
+ *
+ * Main functions:
+ * - insertMetric()              : Ghi nhận metric của một request
+ * - queryUsageHistory()         : Lấy lịch sử usage theo khoảng thời gian
+ * - queryAccountStatsByPeriod() : Thống kê usage theo account
+ * - queryModelStatsByPeriod()   : Thống kê usage theo model
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Database ──
 import { getDb } from '../database';
+
+// ─── Inserts ────────────────────────────────────────────────────────────
 
 export const insertMetric = (
   providerId: string,
@@ -16,6 +35,8 @@ export const insertMetric = (
   ).run(providerId, modelId, accountId, status, totalTokens, now);
 };
 
+// ─── Queries ────────────────────────────────────────────────────────────
+
 export const queryUsageHistory = (
   groupBy: string,
   startTime: number,
@@ -31,16 +52,16 @@ export const queryUsageHistory = (
     FROM metrics
     WHERE timestamp >= ? AND timestamp <= ?
   `;
-  
+
   const params: any[] = [groupBy, startTime, endTime];
-  
+
   if (accountId) {
     sql += ` AND account_id = ?`;
     params.push(accountId);
   }
-  
+
   sql += ` GROUP BY date ORDER BY date ASC`;
-  
+
   return db.prepare(sql).all(...params) as any[];
 };
 
@@ -67,16 +88,16 @@ export const queryAccountStatsByPeriod = (
       GROUP BY account_id
     ) stats ON a.id = stats.account_id
   `;
-  
+
   const params: any[] = [startTime, endTime];
-  
+
   if (accountId) {
     sql += ` WHERE a.id = ?`;
     params.push(accountId);
   }
-  
+
   sql += ` ORDER BY total_requests DESC`;
-  
+
   return db.prepare(sql).all(...params);
 };
 

@@ -1,21 +1,44 @@
-import { createLogger } from '../utils/logger';
+/**
+ * ------------------------------------------------------------------
+ * Provider Service
+ * ------------------------------------------------------------------
+ * Service quản lý provider: lấy danh sách providers, models,
+ * kiểm tra trạng thái enabled, và cache kết quả.
+ *
+ * Main functions:
+ * - getAllProviders()              : Lấy danh sách providers với models
+ * - getProviderModels()            : Lấy models của một provider
+ * - isProviderEnabled()            : Kiểm tra provider có enabled
+ * - getAllModelsFromEnabledProviders() : Lấy models từ enabled providers
+ * - invalidateProviderCache()      : Xóa cache providers
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Providers ──
 import { providerRegistry } from '../provider/registry';
 import { providers as bundledProviders } from '../provider/provider-config';
+
+// ── Repositories ──
 import { findAllProviders as findAllProviderRows } from '../repositories/provider.repository';
 import { findAllModels, upsertModel } from '../repositories/model.repository';
 import { findFirstAccountByProvider } from '../repositories/account.repository';
 
+// ── Utils ──
+import { createLogger } from '../utils/logger';
+
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('ProviderService');
 
-// Cache for getAllProviders() results
 let cachedProviders: Provider[] | null = null;
+
+// ─── Types ──────────────────────────────────────────────────────────────
 
 export interface Provider {
   provider_id: string;
   provider_name: string;
   is_enabled: boolean;
   website_url?: string;
-  /** @deprecated use website_url */
   website?: string;
   auth_method?: string[];
   platform?: string;
@@ -25,7 +48,6 @@ export interface Provider {
     name: string;
     is_thinking?: boolean;
     max_context_length?: number | null;
-    /** @deprecated use max_context_length */
     context_length?: number | null;
     success_rate?: number | null;
     max_req_conversation?: number;
@@ -33,12 +55,13 @@ export interface Provider {
     is_search?: boolean;
     is_image_upload?: boolean;
     is_video_upload?: boolean;
-    /** @deprecated use is_image_upload */
     is_upload?: boolean;
   }[];
   is_pausable?: boolean;
   is_memory?: boolean;
 }
+
+// ─── Helpers ────────────────────────────────────────────────────────────
 
 const fetchProviderConfig = async (): Promise<any[]> => bundledProviders;
 
@@ -56,7 +79,6 @@ const fetchModelsFromProvider = async (providerId: string): Promise<any[]> => {
       account.credential,
       account.id,
     );
-    // Cache models to database for future use
     const now = Date.now();
     for (const model of models) {
       upsertModel(
@@ -77,8 +99,9 @@ const fetchModelsFromProvider = async (providerId: string): Promise<any[]> => {
   }
 };
 
+// ─── Main Functions ────────────────────────────────────────────────────
+
 export const getAllProviders = async (): Promise<Provider[]> => {
-  // Return cached result if available
   if (cachedProviders !== null) {
     return cachedProviders;
   }
@@ -109,14 +132,12 @@ export const getAllProviders = async (): Promise<Provider[]> => {
   for (const p of config) {
     let models: any[] | undefined = p.models;
 
-    // If provider has dynamic models (no static models in config), fetch from provider API
     if ((!models || models.length === 0) && p.is_enabled) {
       try {
         const dynamicModels = await fetchModelsFromProvider(p.provider_id);
         if (dynamicModels.length > 0) {
           models = dynamicModels;
         } else {
-          // Fallback to cached models from database
           const cached = modelsMap.get(p.provider_id.toLowerCase()) || [];
           if (cached.length > 0) models = cached;
         }
@@ -127,7 +148,6 @@ export const getAllProviders = async (): Promise<Provider[]> => {
       }
     }
 
-    // Merge success_rate from DB into static config models
     const dbModelsForProvider =
       modelsMap.get(p.provider_id.toLowerCase()) || [];
     const dbModelSuccessRateMap = new Map<string, number | null>(
@@ -140,10 +160,8 @@ export const getAllProviders = async (): Promise<Provider[]> => {
     const dbProvider = providersMap.get(p.provider_id.toLowerCase());
     providersWithModels.push({
       ...p,
-      // Normalize website_url (config uses website_url; keep backward-compat website alias)
       website_url: p.website_url || (p as any).website,
       website: p.website_url || (p as any).website,
-      // Merge memory settings from database if available, fallback to config
       is_memory: dbProvider?.is_memory === 1 ? true : (p.is_memory ?? false),
       models: models?.map((m: any) => ({
         ...m,
@@ -156,17 +174,14 @@ export const getAllProviders = async (): Promise<Provider[]> => {
               : false,
         is_video_upload:
           m.is_video_upload !== undefined ? m.is_video_upload : false,
-        // Keep deprecated is_upload alias
         is_upload:
           m.is_image_upload !== undefined
             ? m.is_image_upload
             : m.is_upload !== undefined
               ? m.is_upload
               : false,
-        // Normalize context length field names
         max_context_length: m.max_context_length ?? m.context_length ?? null,
         context_length: m.max_context_length ?? m.context_length ?? null,
-        // Prefer DB success_rate over static config (which never has it)
         success_rate: dbModelSuccessRateMap.has(m.id?.toLowerCase())
           ? (dbModelSuccessRateMap.get(m.id?.toLowerCase()) ?? null)
           : m.success_rate !== undefined
@@ -180,9 +195,6 @@ export const getAllProviders = async (): Promise<Provider[]> => {
   return providersWithModels;
 };
 
-/**
- * Invalidate the provider cache (call this when accounts or providers change)
- */
 export const invalidateProviderCache = (): void => {
   cachedProviders = null;
 };
@@ -203,7 +215,6 @@ export const getProviderModels = async (
   const remoteConfig = await fetchProviderConfig();
   const provider = remoteConfig.find((c: any) => c.provider_id === providerId);
 
-  // Try to fetch fresh models from provider API
   try {
     const freshModels = await fetchModelsFromProvider(providerId);
     if (freshModels.length > 0) {
@@ -213,7 +224,6 @@ export const getProviderModels = async (
     logger.warn(`Failed to fetch fresh models from ${providerId}:`, e);
   }
 
-  // Fallback to static config if available
   if (
     provider?.models &&
     Array.isArray(provider.models) &&
@@ -227,7 +237,6 @@ export const getProviderModels = async (
     }));
   }
 
-  // Last resort: try direct provider.getModels()
   const dynamicProvider = providerRegistry.getProvider(providerId);
   if (dynamicProvider?.getModels) {
     const account = findFirstAccountByProvider(providerId);
@@ -275,7 +284,6 @@ export const getAllModelsFromEnabledProviders = async (): Promise<
   const allModels: ModelWithProvider[] = [];
 
   for (const provider of enabledProviders) {
-    // Try to fetch fresh models from provider API
     let models: any[] = [];
     try {
       const freshModels = await fetchModelsFromProvider(provider.provider_id);
@@ -289,7 +297,6 @@ export const getAllModelsFromEnabledProviders = async (): Promise<
       );
     }
 
-    // Fallback to static config
     if (
       models.length === 0 &&
       provider.models &&
@@ -298,7 +305,6 @@ export const getAllModelsFromEnabledProviders = async (): Promise<
       models = provider.models;
     }
 
-    // Last resort: try direct provider.getModels()
     if (models.length === 0) {
       const dynamicProvider = providerRegistry.getProvider(
         provider.provider_id,

@@ -1,7 +1,27 @@
+/**
+ * ------------------------------------------------------------------
+ * Z.AI Helpers
+ * ------------------------------------------------------------------
+ * Helper functions cho Z.AI API.
+ *
+ * Main functions:
+ * - getAuthDataFromCredential() : Parse credential thành ZAIAuthData
+ * - parseUserAgentDetails()     : Parse user-agent thành chi tiết
+ * - generateSignatureAndParams(): Tạo signature và query params
+ * - sanitizeCookies()           : Sanitize cookie string với token
+ * - buildZAIHeaders()           : Build headers cho Z.AI request
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
 import * as crypto from 'crypto';
 import type { ZAIAuthData, SignatureResult, ZAIUserAgentDetails } from './zai.types';
 
+// ─── Constants ──────────────────────────────────────────────────────────
+
 const SALT = 'key-@@@@)))()((9))-xxxx&&&%%%%%';
+
+// ─── Functions ──────────────────────────────────────────────────────────
 
 export function getAuthDataFromCredential(credential: string): ZAIAuthData | null {
   if (!credential) return null;

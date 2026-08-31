@@ -1,10 +1,24 @@
-import { v4 as uuidv4 } from 'uuid';
-import { createLogger } from '../utils/logger';
-import { createCDPService } from './login/cdp.service';
-import { browserInstanceManager } from './browser-instance-manager';
+/**
+ * ------------------------------------------------------------------
+ * Browser Session Service
+ * ------------------------------------------------------------------
+ * Quản lý phiên đăng nhập qua browser (CDP). Mở browser, chờ đăng nhập,
+ * lưu profile và tạo account khi hoàn tất.
+ *
+ * Main functions:
+ * - loginViaCDP()          : Mở browser, chờ đăng nhập, trả về pending session
+ * - completePendingSession(): Hoàn tất pending session với email
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import * as fs from 'fs';
-import * as path from 'path';
 import * as os from 'os';
+import * as path from 'path';
+import { v4 as uuidv4 } from 'uuid';
+
+// ── Repositories ──
 import {
   insertAccount,
   findAccountById,
@@ -13,9 +27,18 @@ import {
 } from '../repositories/account.repository';
 import { ensureProviderExists, findProviderById } from '../repositories/provider.repository';
 
+// ── Services ──
+import { browserInstanceManager } from './browser-instance-manager';
+import { createCDPService } from './login/cdp.service';
+
+// ── Utils ──
+import { createLogger } from '../utils/logger';
+
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('BrowserSessionService');
 
-// Store pending sessions waiting for email
+// ─── Types ──────────────────────────────────────────────────────────────
+
 interface PendingSession {
   tempDir: string;
   providerId: string;
@@ -24,13 +47,18 @@ interface PendingSession {
   timeout: NodeJS.Timeout;
 }
 
+// ─── State ──────────────────────────────────────────────────────────────
+
 const pendingSessions = new Map<string, PendingSession>();
+
+// ─── Helpers ────────────────────────────────────────────────────────────
 
 const getTempDir = (): string => {
   return path.join(os.homedir(), '.elara', 'temp');
 };
 
-// Login via CDP - open browser, wait for close, then ask for email
+// ─── Login ─────────────────────────────────────────────────────────────
+
 export const loginViaCDP = async (
   providerId: string,
   loginUrl: string,
@@ -40,10 +68,9 @@ export const loginViaCDP = async (
     `[BrowserSession] Starting browser session for ${providerId} at ${loginUrl}`,
   );
 
-  // Get provider config to find extension folder
   const provider = findProviderById(providerId);
   let extensionPath: string | null = null;
-  
+
   if (provider?.browser_extension_folder) {
     extensionPath = path.join(__dirname, '../../extensions', provider.browser_extension_folder);
     logger.info(`[BrowserSession] Using extension from: ${extensionPath}`);
@@ -51,36 +78,30 @@ export const loginViaCDP = async (
     logger.info(`[BrowserSession] No browser_extension_folder configured for ${providerId}`);
   }
 
-  // Create temp directory for this session
   const tempSessionId = uuidv4();
   const tempDir = path.join(getTempDir(), tempSessionId);
   if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });
   }
 
-  // Launch browser with temp profile and extension if available
   const cdpService = createCDPService(`${providerId}-${tempSessionId}`);
-  
-  // Launch browser with temp user data dir and extension path
+
   const launched = await cdpService.launchBrowser(loginUrl, tempDir, extensionPath || undefined);
   if (!launched) {
     throw new Error('Failed to launch browser');
   }
-  
+
   logger.info(`[BrowserSession] Browser launched for ${providerId}, temp dir: ${tempDir}`);
-  
-  // Return a promise that waits for browser close
+
   return new Promise<{ pending: boolean; tempSessionId: string }>((resolve, reject) => {
-    // Set timeout for browser session (e.g., 10 minutes)
     const timeout = setTimeout(() => {
       if (pendingSessions.has(tempSessionId)) {
         pendingSessions.delete(tempSessionId);
         cdpService.close().catch(() => {});
         reject(new Error('Browser session timeout'));
       }
-    }, 600000); // 10 minutes
+    }, 600000);
 
-    // Store pending session info
     pendingSessions.set(tempSessionId, {
       tempDir,
       providerId,
@@ -89,7 +110,6 @@ export const loginViaCDP = async (
       timeout,
     });
 
-    // Listen for browser close - then resolve the promise
     cdpService.on('browser-exit', () => {
       logger.info(`[BrowserSession] Browser closed for ${providerId}, returning pending info`);
       clearTimeout(timeout);
@@ -98,7 +118,8 @@ export const loginViaCDP = async (
   });
 };
 
-// Complete a pending session with email
+// ─── Complete Session ──────────────────────────────────────────────────
+
 export const completePendingSession = async (
   tempSessionId: string,
   email: string,
@@ -111,39 +132,35 @@ export const completePendingSession = async (
   clearTimeout(pending.timeout);
   pendingSessions.delete(tempSessionId);
 
-  // Move temp directory to final profile location
   const finalProfileName = `profile_${Date.now()}`;
   const finalUserDataDir = browserInstanceManager.getProfilePath(
     pending.providerId,
     finalProfileName,
   );
 
-  // Ensure parent directory exists
   const finalDir = path.dirname(finalUserDataDir);
   if (!fs.existsSync(finalDir)) {
     fs.mkdirSync(finalDir, { recursive: true });
   }
 
-  // Move temp directory to final location
   if (fs.existsSync(pending.tempDir)) {
     fs.renameSync(pending.tempDir, finalUserDataDir);
     logger.info(`[BrowserSession] Moved temp profile to: ${finalUserDataDir}`);
   }
 
-  // Create account record (credential is null for browser-based accounts)
   const accountId = uuidv4();
   insertAccount({
     id: accountId,
     provider_id: pending.providerId,
     email: email,
-    credential: null, // Browser accounts don't have credentials
+    credential: null,
     user_data_dir: finalUserDataDir,
   });
-  
+
   ensureProviderExists(pending.providerId.toLowerCase(), pending.providerId);
 
   const account = findAccountById(accountId);
-  
+
   pending.resolve(account);
   return account;
 };

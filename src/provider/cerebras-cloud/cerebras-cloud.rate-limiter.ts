@@ -1,11 +1,29 @@
+/**
+ * ------------------------------------------------------------------
+ * Cerebras Cloud Rate Limiter
+ * ------------------------------------------------------------------
+ * Rate limiter cho Cerebras Cloud API. Theo dõi số request và token
+ * consumption theo sliding window (minute, hour, day) cho từng account.
+ *
+ * Main functions:
+ * - checkLimit()    : Kiểm tra xem account có vượt rate limit không
+ * - recordRequest() : Ghi nhận một request
+ * - recordTokens()  : Ghi nhận token consumption
+ * - getUsageSummary(): Lấy tổng quan usage cho account
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
+
+// ── Types ──
 import { RATE_LIMITS, WINDOW_MS, CerebrasUsageData } from './cerebras-cloud.types';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('CerebrasRateLimiter');
 
-// =============================================================================
-// USAGE WINDOW
-// =============================================================================
+// ─── Types ──────────────────────────────────────────────────────────────
 
 interface UsageWindow {
   requestTimestamps: number[];
@@ -18,9 +36,7 @@ interface AccountUsage {
   day: UsageWindow;
 }
 
-// =============================================================================
-// USAGE TRACKER (per-account, in-memory sliding window)
-// =============================================================================
+// ─── Class ──────────────────────────────────────────────────────────────
 
 export class CerebrasUsageTracker {
   private usage: Map<string, AccountUsage> = new Map();
@@ -136,5 +152,6 @@ export class CerebrasUsageTracker {
   }
 }
 
-// Singleton tracker
+// ─── Singleton ─────────────────��────────────────────────────────────────
+
 export const usageTracker = new CerebrasUsageTracker();

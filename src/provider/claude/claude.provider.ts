@@ -1,18 +1,49 @@
+/**
+ * ------------------------------------------------------------------
+ * Claude Provider
+ * ------------------------------------------------------------------
+ * Provider implementation cho Claude AI API.
+ * Hỗ trợ login qua browser (basic/google), chat completion,
+ * và lấy thông tin user profile.
+ *
+ * Main features:
+ * - login()          : Đăng nhập qua browser
+ * - handleMessage()  : Gửi tin nhắn với streaming response
+ * - getProfile()     : Lấy thông tin user profile
+ * - isModelSupported(): Kiểm tra model có hỗ trợ không
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { Router } from 'express';
 import fetch from 'node-fetch';
+
+// ── Types ──
+import { Provider, SendMessageOptions } from '../../types';
+
+// ── Services ──
+import { loginService } from '../../services/login/login.service';
+
+// ── Utils ──
 import { HttpClient } from '../../utils/http-client';
 import { createLogger } from '../../utils/logger';
-import { loginService } from '../../services/login/login.service';
-import { Provider, SendMessageOptions } from '../../types';
+
+// ── Claude Imports ──
 import { proxyHandler } from './claude.proxy-handler';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('ClaudeProvider');
 const BASE_URL = 'https://claude.ai';
+
+// ─── Provider Class ────────────────────────────────────────────────────
 
 export class ClaudeProvider implements Provider {
   name = 'Claude';
   proxyHandler = proxyHandler;
   defaultModel = 'claude-sonnet-4-5-20250929';
+
+  // ─── Get Profile ────────────────────────────────────────────────────
 
   async getProfile(credential: string): Promise<{ email: string | null; name?: string; id?: string }> {
     try {
@@ -38,6 +69,8 @@ export class ClaudeProvider implements Provider {
       return { email: null };
     }
   }
+
+  // ─── Login ──────────────────────────────────────────────────────────
 
   async login(options?: { method?: 'basic' | 'google' }) {
     const method = options?.method || 'basic';
@@ -72,6 +105,8 @@ export class ClaudeProvider implements Provider {
       },
     });
   }
+
+  // ─── Handle Message ─────────────────────────────────────────────────
 
   async handleMessage(options: SendMessageOptions): Promise<void> {
     const {
@@ -156,6 +191,14 @@ export class ClaudeProvider implements Provider {
       onError(err);
     }
   }
+
+  // ─── Continue Message ───────────────────────────────────────────────
+
+  async continueMessage(options: SendMessageOptions): Promise<void> {
+    return this.handleMessage(options);
+  }
+
+  // ─── Misc ────────────────────────────────────────────────────────────
 
   isModelSupported(model: string): boolean {
     const m = model.toLowerCase();

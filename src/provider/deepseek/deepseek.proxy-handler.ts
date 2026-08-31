@@ -1,12 +1,30 @@
+/**
+ * ------------------------------------------------------------------
+ * DeepSeek Proxy Handler
+ * ------------------------------------------------------------------
+ * Proxy handler để capture cookies, token, và user info từ DeepSeek.
+ * Lắng nghe Authorization header, login email, login token,
+ * và user info từ API.
+ *
+ * Main features:
+ * - onRequest()       : Capture Authorization header
+ * - onRequestData()   : Capture login email từ request body
+ * - onResponseBody()  : Capture login token và user info từ response
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Services ──
 import { ProxyHandler } from '../../services/proxy.service';
 import { proxyEvents } from '../../services/proxy.service';
+
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('DeepSeekProxy');
 
-// =============================================================================
-// PROXY HANDLER
-// =============================================================================
+// ─── Proxy Handler ────────────────────────────────────────────────────
 
 export const proxyHandler: ProxyHandler = {
   onRequest: (ctx: any, callback: () => void) => {

@@ -1,8 +1,28 @@
+/**
+ * ------------------------------------------------------------------
+ * Z.AI Proxy Handler
+ * ------------------------------------------------------------------
+ * Proxy handler để capture token, cookies, và user-agent từ Z.AI.
+ * Lắng nghe Authorization header, cookie, và token từ auths API.
+ *
+ * Main features:
+ * - onRequest()       : Capture token, cookies, user-agent
+ * - onResponseBody()  : Capture token từ auths API response
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Services ──
 import { ProxyHandler } from '../../services/proxy.service';
 import { proxyEvents } from '../../services/proxy.service';
+
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('ZAIProvider');
+
+// ─── Proxy Handler ────────────────────────────────────────────────────
 
 export const proxyHandler: ProxyHandler = {
   onRequest: (ctx: any, callback: () => void) => {

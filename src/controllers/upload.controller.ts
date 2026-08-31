@@ -1,12 +1,37 @@
+/**
+ * ------------------------------------------------------------------
+ * Upload Controller
+ * ------------------------------------------------------------------
+ * Xử lý request upload file lên provider AI (hỗ trợ file attachments
+ * cho các model hỗ trợ đa phương thức).
+ *
+ * Main functions:
+ * - uploadFile() : Upload file lên provider và trả về file_id
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { Request, Response } from 'express';
-import { createLogger } from '../utils/logger';
-import { providerRegistry } from '../provider/registry';
+
+// ── Services ──
 import { isProviderEnabled } from '../services/provider.service';
+
+// ── Repositories ──
 import { findAccountById } from '../repositories/account.repository';
 
+// ── Providers ──
+import { providerRegistry } from '../provider/registry';
+
+// ── Utils ──
+import { createLogger } from '../utils/logger';
+
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('UploadController');
 
-export const uploadFileController = async (
+// ─── Controller ─────────────────────────────────────────────────────────
+
+export const uploadFile = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
@@ -65,7 +90,7 @@ export const uploadFileController = async (
       res.status(500).json({ error: `Upload failed: ${err.message}` });
     }
   } catch (error: any) {
-    logger.error('Error in uploadFileController', error);
+    logger.error('Error in uploadFile', error);
     res.status(500).json({ error: error.message });
   }
 };

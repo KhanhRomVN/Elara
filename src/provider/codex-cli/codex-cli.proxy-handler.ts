@@ -1,5 +1,22 @@
+/**
+ * ------------------------------------------------------------------
+ * Codex CLI Proxy Handler
+ * ------------------------------------------------------------------
+ * Proxy handler để capture tokens và user info từ Codex CLI.
+ * Lắng nghe access token từ OAuth token endpoint và email từ usage API.
+ *
+ * Main features:
+ * - onResponseBody() : Capture access/refresh token từ auth.openai.com
+ * - onResponseBody() : Capture user email từ chatgpt.com/backend-api
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Services ──
 import { ProxyHandler } from '../../services/proxy.service';
 import { proxyEvents } from '../../services/proxy.service';
+
+// ─── Proxy Handler ────────────────────────────────────────────────────
 
 export const proxyHandler: ProxyHandler = {
   onResponseBody: (ctx: any, body: string) => {

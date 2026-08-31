@@ -1,17 +1,32 @@
+/**
+ * ------------------------------------------------------------------
+ * Kill Port
+ * ------------------------------------------------------------------
+ * Tiện ích kill process đang sử dụng một port cụ thể.
+ * Hỗ trợ Linux với fuser và lsof.
+ *
+ * Main functions:
+ * - killProcessOnPort() : Kill process trên port
+ * - isPortInUse()       : Kiểm tra port đang được sử dụng
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { exec } from 'child_process';
 import { promisify } from 'util';
+
+// ── Utils ──
 import { createLogger } from './logger';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('kill-port');
 const execAsync = promisify(exec);
 
-/**
- * Kill process(es) using a specific port
- * Returns true if successful, false otherwise
- */
+// ─── Functions ──────────────────────────────────────────────────────────
+
 export const killProcessOnPort = async (port: number): Promise<boolean> => {
   try {
-    // Try using fuser (Linux)
     try {
       const { stdout } = await execAsync(`fuser -k ${port}/tcp 2>/dev/null`);
       if (stdout) {
@@ -19,15 +34,11 @@ export const killProcessOnPort = async (port: number): Promise<boolean> => {
         return true;
       }
     } catch (e: any) {
-      // fuser may return non-zero if no process found
       if (e.code === 1) {
-        // No process found - that's fine, port is free
         return true;
       }
-      // Other error, try alternative method
     }
 
-    // Try using lsof + kill
     try {
       const { stdout } = await execAsync(`lsof -ti :${port} 2>/dev/null`);
       if (stdout && stdout.trim()) {
@@ -38,10 +49,8 @@ export const killProcessOnPort = async (port: number): Promise<boolean> => {
         logger.info(`Killed ${pids.length} process(es) on port ${port} using lsof`);
         return true;
       }
-      // No process found
       return true;
     } catch (e) {
-      // lsof may fail if not installed or no process found
       return false;
     }
   } catch (error) {
@@ -50,13 +59,8 @@ export const killProcessOnPort = async (port: number): Promise<boolean> => {
   }
 };
 
-/**
- * Check if a port is in use
- * Returns true if port is in use, false otherwise
- */
 export const isPortInUse = async (port: number): Promise<boolean> => {
   try {
-    // Check with fuser
     try {
       await execAsync(`fuser ${port}/tcp 2>/dev/null`);
       return true;
@@ -64,7 +68,6 @@ export const isPortInUse = async (port: number): Promise<boolean> => {
       // fuser returns non-zero if no process found
     }
 
-    // Check with lsof
     try {
       const { stdout } = await execAsync(`lsof -ti :${port} 2>/dev/null`);
       return !!(stdout && stdout.trim().length > 0);

@@ -1,3 +1,24 @@
+/**
+ * ------------------------------------------------------------------
+ * Provider Configuration
+ * ------------------------------------------------------------------
+ * Cấu hình static cho tất cả provider: thông tin provider, danh sách models,
+ * tính năng hỗ trợ (search, image upload, video upload, thinking, memory).
+ *
+ * Main fields per provider:
+ * - provider_id    : ID định danh provider
+ * - provider_name  : Tên hiển thị
+ * - is_enabled     : Bật/tắt provider
+ * - website_url    : URL website
+ * - auth_method    : Phương thức xác thực (basic, google)
+ * - models         : Danh sách model hỗ trợ
+ * - is_pausable    : Hỗ trợ tạm dừng session
+ * - is_memory      : Hỗ trợ bộ nhớ dài hạn
+ * ------------------------------------------------------------------
+ */
+
+// ─── Providers Configuration ──────────────────────────────────────────
+
 export const providers = [
   {
     provider_id: 'claude',

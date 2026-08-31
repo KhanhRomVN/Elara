@@ -1,16 +1,33 @@
+/**
+ * ------------------------------------------------------------------
+ * DeepSeek File Upload
+ * ------------------------------------------------------------------
+ * Upload file lên DeepSeek API. Hỗ trợ giải PoW challenge,
+ * multipart/form-data upload, và polling để chờ file được xử lý.
+ *
+ * Main functions:
+ * - deepseekUploadFile() : Upload file và trả về file_id + token_usage
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import * as crypto from 'crypto';
 import fetch from 'node-fetch';
+
+// ── Utils ──
 import { HttpClient } from '../../utils/http-client';
 import { createLogger } from '../../utils/logger';
+
+// ── DeepSeek Imports ──
 import { DeepSeekHash, BASE_URL, solvePoW } from './deepseek.pow';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('DeepSeekUpload');
 
-// =============================================================================
-// UPLOAD HELPERS
-// =============================================================================
+// ─── Helpers ────────────────────────────────────────────────────────────
 
-function createClient(credential: string): HttpClient {
+function createUploadClient(credential: string): HttpClient {
   return new HttpClient({
     baseURL: 'https://chat.deepseek.com',
     headers: {
@@ -22,11 +39,9 @@ function createClient(credential: string): HttpClient {
   });
 }
 
-// =============================================================================
-// FILE UPLOAD
-// =============================================================================
+// ─── Main Function ─────────────────────────────────────────────────────
 
-export async function uploadFile(
+export async function deepseekUploadFile(
   credential: string,
   file: any,
   getDsHash: () => Promise<DeepSeekHash>,
@@ -40,7 +55,7 @@ export async function uploadFile(
     Referer: 'https://chat.deepseek.com/',
   };
 
-  const client = createClient(credential);
+  const client = createUploadClient(credential);
 
   try {
     const challengeRes = await client.post(
@@ -64,11 +79,9 @@ export async function uploadFile(
         }
       } catch (e) {
         logger.error(
-          '[DeepSeek Upload] Failed to parse PoW challenge response, continuing without PoW token',
+          '[DeepSeek Upload] Failed to parse PoW challenge response',
           {
             error: e,
-            challengeResStatus: challengeRes.status,
-            challengeResText: await challengeRes.text().catch(() => '<unreadable>'),
           }
         );
       }

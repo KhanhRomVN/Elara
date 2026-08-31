@@ -1,18 +1,45 @@
-import { Provider, SendMessageOptions } from '../../types';
-import fetch from 'node-fetch';
-import * as path from 'path';
+/**
+ * ------------------------------------------------------------------
+ * Qwen CLI Provider
+ * ------------------------------------------------------------------
+ * Provider implementation cho Qwen CLI (Qwen Code CLI).
+ * Hỗ trợ login qua terminal OAuth flow, refresh token,
+ * và chat completion với streaming response.
+ *
+ * Main features:
+ * - login()          : Đăng nhập qua terminal OAuth
+ * - refreshToken()   : Refresh access token
+ * - handleMessage()  : Gửi tin nhắn với streaming response
+ * - getProfile()     : Lấy thông tin user profile
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import * as fs from 'fs';
 import * as os from 'os';
+import * as path from 'path';
 import { spawn, execSync } from 'child_process';
-import { createLogger } from '../../utils/logger';
+import fetch from 'node-fetch';
+
+// ── Types ──
+import { Provider, SendMessageOptions } from '../../types';
+
+// ── Services ──
 import { loginService } from '../../services/login/login.service';
 import { proxyService } from '../../services/proxy.service';
 import { proxyEvents } from '../../services/proxy.service';
+
+// ── Database ──
 import { getDb } from '../../database';
+
+// ── Utils ──
+import { createLogger } from '../../utils/logger';
+
+// ── Qwen CLI Imports ──
 import { proxyHandler } from './qwen-cli.proxy-handler';
 
-export { proxyHandler };
-
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('QwenCLIProvider');
 
 export const QWEN_CONFIG = {
@@ -23,10 +50,14 @@ export const QWEN_CONFIG = {
   codeChallengeMethod: 'S256',
 };
 
+// ─── Provider Class ────────────────────────────────────────────────────
+
 export class QwenCoderCLIProvider implements Provider {
   name = 'qwen-cli';
   proxyHandler = proxyHandler;
   defaultModel = 'coder-model';
+
+  // ─── Login ──────────────────────────────────────────────────────────
 
   async login() {
     logger.info('Starting Qwen CLI login with real CLI module and terminal...');
@@ -124,6 +155,8 @@ export class QwenCoderCLIProvider implements Provider {
     });
   }
 
+  // ─── Profile ────────────────────────────────────────────────────────
+
   async getProfile(accessToken: string) {
     try {
       const response = await fetch('https://chat.qwen.ai/api/v1/user/info', {
@@ -140,6 +173,8 @@ export class QwenCoderCLIProvider implements Provider {
     } catch (e) {}
     return { email: null };
   }
+
+  // ─── Refresh Token ──────────────────────────────────────────────────
 
   async refreshToken(refreshTokenStr: string) {
     const response = await fetch(QWEN_CONFIG.tokenUrl, {
@@ -166,6 +201,8 @@ export class QwenCoderCLIProvider implements Provider {
     }
     return data;
   }
+
+  // ─── Handle Message ─────────────────────────────────────────────────
 
   async handleMessage(options: SendMessageOptions): Promise<void> {
     const {
@@ -260,6 +297,14 @@ export class QwenCoderCLIProvider implements Provider {
       onError(err);
     }
   }
+
+  // ─── Continue Message ───────────────────────────────────────────────
+
+  async continueMessage(options: SendMessageOptions): Promise<void> {
+    return this.handleMessage(options);
+  }
+
+  // ─── Model Support ──────────────────────────────────────────────────
 
   isModelSupported(model: string): boolean {
     const m = model.toLowerCase();
