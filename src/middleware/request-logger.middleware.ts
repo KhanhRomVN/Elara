@@ -35,7 +35,6 @@ export const requestLogger = (
   res.on('finish', () => {
     if (SKIP_PATHS.includes(req.path)) return;
     const duration = Date.now() - start;
-    logger.info(`${req.method} ${req.path} - ${res.statusCode} - ${duration}ms`);
   });
 
   next();

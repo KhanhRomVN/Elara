@@ -7,9 +7,9 @@
  * và lấy thông tin user profile.
  *
  * Main features:
- * - login()          : Đăng nhập qua browser
- * - handleMessage()  : Gửi tin nhắn với streaming response
- * - getProfile()     : Lấy thông tin user profile
+ * - login()           : Đăng nhập qua browser
+ * - handleMessage()   : Gửi tin nhắn với streaming response
+ * - getProfile()      : Lấy thông tin user profile
  * - isModelSupported(): Kiểm tra model có hỗ trợ không
  * ------------------------------------------------------------------
  */
@@ -31,10 +31,16 @@ import { createLogger } from '../../utils/logger';
 
 // ── Claude Imports ──
 import { proxyHandler } from './claude.proxy-handler';
+import {
+  BASE_URL,
+  CLAUDE_EVENTS,
+  USER_AGENT,
+  GOOGLE_OAUTH_LOGIN_URL,
+  API_PATHS,
+} from './claude.constant';
 
 // ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('ClaudeProvider');
-const BASE_URL = 'https://claude.ai';
 
 // ─── Provider Class ────────────────────────────────────────────────────
 
@@ -45,16 +51,18 @@ export class ClaudeProvider implements Provider {
 
   // ─── Get Profile ────────────────────────────────────────────────────
 
-  async getProfile(credential: string): Promise<{ email: string | null; name?: string; id?: string }> {
+  async getProfile(
+    credential: string,
+  ): Promise<{ email: string | null; name?: string; id?: string }> {
     try {
       const client = new HttpClient({
         baseURL: BASE_URL,
         headers: {
           Cookie: credential,
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+          'User-Agent': USER_AGENT,
         },
       });
-      const response = await client.get('/api/auth/me');
+      const response = await client.get(API_PATHS.PROFILE);
       if (response.ok) {
         const data = await response.json();
         return {
@@ -74,21 +82,21 @@ export class ClaudeProvider implements Provider {
 
   async login(options?: { method?: 'basic' | 'google' }) {
     const method = options?.method || 'basic';
-    const loginUrl = method === 'google'
-      ? 'https://accounts.google.com/ServiceLogin?service=lso&passive=1209600&continue=https://claude.ai/login'
-      : 'https://claude.ai/login';
-
-    logger.info(`Starting Claude login with method: ${method}`);
+    const loginUrl =
+      method === 'google' ? GOOGLE_OAUTH_LOGIN_URL : `${BASE_URL}/login`;
 
     return await loginService.login({
       providerId: 'claude',
       loginUrl,
       partition: `claude-${Date.now()}`,
-      cookieEvent: 'claude-login-token',
-      infoEvent: 'claude-login-email',
-      validate: async (data: { cookies: string; headers?: any; email?: string }) => {
+      cookieEvent: CLAUDE_EVENTS.LOGIN_TOKEN,
+      infoEvent: CLAUDE_EVENTS.LOGIN_EMAIL,
+      validate: async (data: {
+        cookies: string;
+        headers?: any;
+        email?: string;
+      }) => {
         if (data.cookies) {
-          logger.info('[Claude] Validating with captured token');
           const token = data.cookies;
           let email = data.email;
 
@@ -126,7 +134,7 @@ export class ClaudeProvider implements Provider {
       headers: {
         Cookie: credential,
         'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        'User-Agent': USER_AGENT,
         Origin: BASE_URL,
         Referer: `${BASE_URL}/`,
       },
@@ -135,7 +143,7 @@ export class ClaudeProvider implements Provider {
     try {
       const payload: any = {
         model,
-        messages: messages.map(m => ({ role: m.role, content: m.content })),
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
         stream: true,
         max_tokens: 4096,
       };
@@ -144,7 +152,7 @@ export class ClaudeProvider implements Provider {
         payload.conversation_id = conversationId;
       }
 
-      const response = await client.post('/api/chat', payload);
+      const response = await client.post(API_PATHS.CHAT, payload);
 
       if (!response.ok) {
         const errorText = await response.text();

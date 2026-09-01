@@ -21,10 +21,12 @@ import { createLogger } from '../../utils/logger';
 // ── Types ──
 import { PoWChallenge, PoWResponse } from './deepseek.types';
 
-// ─── Constants ──────────────────────────────────────────────────────────
-const logger = createLogger('DeepSeekPoW');
+// ── Constants ──
+import { BASE_URL } from './deepseek.constant';
 
-export const BASE_URL = 'https://chat.deepseek.com';
+export { BASE_URL };
+
+const logger = createLogger('DeepSeekPoW');
 
 // ─── Class ──────────────────────────────────────────────────────────────
 

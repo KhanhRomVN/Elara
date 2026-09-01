@@ -36,6 +36,7 @@ import { createLogger } from '../../utils/logger';
 
 // ── ZAI Imports ──
 import { proxyHandler } from './zai.proxy-handler';
+import { BASE_URL, ZAI_EVENTS, DEFAULT_USER_AGENT } from './zai.constant';
 import {
   getAuthDataFromCredential,
   generateSignatureAndParams,
@@ -47,8 +48,6 @@ import {
 // ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('ZAIProvider');
 
-const BASE_URL = 'https://chat.z.ai';
-
 // ─── Provider Class ────────────────────────────────────────────────────
 
 export class ZAIProvider implements Provider {
@@ -59,7 +58,7 @@ export class ZAIProvider implements Provider {
   // ─── User-Agent Rotation ───────────────────────────────────────────
 
   private userAgents: string[] = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    DEFAULT_USER_AGENT,
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -93,7 +92,6 @@ export class ZAIProvider implements Provider {
     const timeSinceLastRequest = now - this.lastRequestTime;
     if (this.lastRequestTime > 0 && timeSinceLastRequest < 500) {
       const delay = Math.random() * 2000 + 500;
-      logger.debug(`[Z.AI] Adding random delay ${Math.round(delay)}ms`);
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
 
@@ -109,8 +107,18 @@ export class ZAIProvider implements Provider {
 
   async getModels(_credential: string): Promise<any[]> {
     return [
-      { id: 'GLM-5.1', name: 'GLM-5.1', is_thinking: false, max_context_length: null },
-      { id: 'GLM-5', name: 'GLM-5', is_thinking: false, max_context_length: null },
+      {
+        id: 'GLM-5.1',
+        name: 'GLM-5.1',
+        is_thinking: false,
+        max_context_length: null,
+      },
+      {
+        id: 'GLM-5',
+        name: 'GLM-5',
+        is_thinking: false,
+        max_context_length: null,
+      },
     ];
   }
 
@@ -125,7 +133,10 @@ export class ZAIProvider implements Provider {
       if (parts.length >= 2) {
         const payloadB64 = parts[1];
         const padding = '='.repeat((4 - (payloadB64.length % 4)) % 4);
-        const payloadJson = Buffer.from(payloadB64 + padding, 'base64').toString('utf-8');
+        const payloadJson = Buffer.from(
+          payloadB64 + padding,
+          'base64',
+        ).toString('utf-8');
         const payload = JSON.parse(payloadJson);
         return {
           email: payload.email || null,
@@ -143,14 +154,12 @@ export class ZAIProvider implements Provider {
   // ─── Login ──────────────────────────────────────────────────────────
 
   async login() {
-    logger.info('Starting Z.AI login...');
-
     return await loginService.login({
       providerId: 'z',
-      loginUrl: 'https://chat.z.ai/',
+      loginUrl: `${BASE_URL}/`,
       partition: `z-${Date.now()}`,
-      cookieEvent: 'zai-token',
-      infoEvent: 'zai-login-email',
+      cookieEvent: ZAI_EVENTS.TOKEN,
+      infoEvent: ZAI_EVENTS.LOGIN_EMAIL,
       validate: async (data: {
         cookies: string;
         headers?: any;
@@ -163,10 +172,7 @@ export class ZAIProvider implements Provider {
             ? emailOrId.toLowerCase().includes('guest')
             : true;
           if (emailOrId && !isGuest) {
-            logger.info(`[Z.AI] Validation success for email: ${emailOrId}`);
             return { isValid: true, email: emailOrId, cookies: data.cookies };
-          } else {
-            logger.info(`[Z.AI] Ignored guest session token: ${emailOrId}`);
           }
         }
         return { isValid: false };
@@ -178,15 +184,25 @@ export class ZAIProvider implements Provider {
 
   async handleMessage(options: SendMessageOptions): Promise<void> {
     const {
-      credential, messages, onContent, onThinking, onMetadata,
-      onDone, onError, onRaw, onSessionCreated, conversationId,
+      credential,
+      messages,
+      onContent,
+      onThinking,
+      onMetadata,
+      onDone,
+      onError,
+      onRaw,
+      onSessionCreated,
+      conversationId,
     } = options;
 
     await this.enforceRateLimit();
 
     const authData = getAuthDataFromCredential(credential);
     if (!authData) {
-      onError(new Error('Z.AI authentication data not found. Please login first.'));
+      onError(
+        new Error('Z.AI authentication data not found. Please login first.'),
+      );
       return;
     }
 
@@ -224,7 +240,11 @@ export class ZAIProvider implements Provider {
             tags: [],
             flags: [],
             features: [
-              { server: 'tool_selector_h', status: 'hidden', type: 'tool_selector' },
+              {
+                server: 'tool_selector_h',
+                status: 'hidden',
+                type: 'tool_selector',
+              },
             ],
             mcp_servers: [],
             enable_thinking: !!options.thinking,
@@ -243,8 +263,8 @@ export class ZAIProvider implements Provider {
           'Content-Type': 'application/json',
           Accept: 'application/json',
           'User-Agent': userAgent,
-          Origin: 'https://chat.z.ai',
-          Referer: 'https://chat.z.ai/',
+          Origin: BASE_URL,
+          Referer: `${BASE_URL}/`,
           'sec-ch-ua': uaDetails.secChUa,
           'sec-ch-ua-mobile': '?0',
           'sec-ch-ua-platform': uaDetails.secChUaPlatform,
@@ -254,7 +274,10 @@ export class ZAIProvider implements Provider {
           'accept-language': 'vi,en-US,en',
         };
         if (authData.cookies) {
-          createHeaders['Cookie'] = sanitizeCookies(authData.cookies, authData.token);
+          createHeaders['Cookie'] = sanitizeCookies(
+            authData.cookies,
+            authData.token,
+          );
         }
 
         const createResponse = await fetch(createChatUrl, {
@@ -265,14 +288,17 @@ export class ZAIProvider implements Provider {
 
         if (!createResponse.ok) {
           const errText = await createResponse.text();
-          throw new Error(`Failed to create chat session: ${createResponse.status} - ${errText}`);
+          throw new Error(
+            `Failed to create chat session: ${createResponse.status} - ${errText}`,
+          );
         }
 
         const createJson = await createResponse.json();
         chatId = createJson.id;
-        if (!chatId) throw new Error('Response from chats/new did not return a valid chat ID');
-
-        logger.info(`[Z.AI] Created new chat session: ${chatId}`);
+        if (!chatId)
+          throw new Error(
+            'Response from chats/new did not return a valid chat ID',
+          );
         if (onSessionCreated) onSessionCreated(chatId);
         if (onMetadata) {
           onMetadata({
@@ -286,11 +312,20 @@ export class ZAIProvider implements Provider {
       const userAgent = authData.userAgent || this.getRandomUserAgent();
 
       const sigRes = generateSignatureAndParams(
-        prompt, authData.token, authData.userId, chatId, undefined, userAgent,
+        prompt,
+        authData.token,
+        authData.userId,
+        chatId,
+        undefined,
+        userAgent,
       );
       const url = `${BASE_URL}/api/v2/chat/completions?${sigRes.queryParams}`;
       const headers = buildZAIHeaders(
-        authData.token, sigRes.signature, chatId, authData.cookies, userAgent,
+        authData.token,
+        sigRes.signature,
+        chatId,
+        authData.cookies,
+        userAgent,
       );
       headers['User-Agent'] = userAgent;
 
@@ -298,7 +333,15 @@ export class ZAIProvider implements Provider {
       const vnTimeStr = vnTime.toISOString().slice(0, 19).replace('T', ' ');
       const localDateStr = vnTimeStr.substring(0, 10);
       const localTimeOnlyStr = vnTimeStr.substring(11);
-      const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const weekdays = [
+        'Sunday',
+        'Monday',
+        'Tuesday',
+        'Wednesday',
+        'Thursday',
+        'Friday',
+        'Saturday',
+      ];
       const weekdayStr = weekdays[vnTime.getUTCDay()];
 
       const payload = {
@@ -362,7 +405,10 @@ export class ZAIProvider implements Provider {
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           const dataStr = line.slice(6).trim();
-          if (dataStr === '[DONE]') { onDone(); return; }
+          if (dataStr === '[DONE]') {
+            onDone();
+            return;
+          }
 
           try {
             const dataJson = JSON.parse(dataStr);
@@ -377,7 +423,10 @@ export class ZAIProvider implements Provider {
                 if (content) onContent(content);
               }
 
-              if (inner.done) { onDone(); return; }
+              if (inner.done) {
+                onDone();
+                return;
+              }
             }
           } catch (e) {}
         }
@@ -402,7 +451,9 @@ export class ZAIProvider implements Provider {
     router.get('/auth/status', (_req, res) => {
       const db = getDb();
       const zaiAccount = db
-        .prepare("SELECT id FROM accounts WHERE provider_id = 'z' OR provider_id = 'zai' LIMIT 1")
+        .prepare(
+          "SELECT id FROM accounts WHERE provider_id = 'z' OR provider_id = 'zai' LIMIT 1",
+        )
         .get();
       res.json({ authenticated: !!zaiAccount });
     });

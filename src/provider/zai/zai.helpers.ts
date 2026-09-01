@@ -16,10 +16,7 @@
 // ─── Imports ────────────────────────────────────────────────────────────
 import * as crypto from 'crypto';
 import type { ZAIAuthData, SignatureResult, ZAIUserAgentDetails } from './zai.types';
-
-// ─── Constants ──────────────────────────────────────────────────────────
-
-const SALT = 'key-@@@@)))()((9))-xxxx&&&%%%%%';
+import { BASE_URL, DEFAULT_USER_AGENT, SALT, FE_VERSION } from './zai.constant';
 
 // ─── Functions ──────────────────────────────────────────────────────────
 
@@ -87,12 +84,10 @@ export function generateSignatureAndParams(
   const timestamp = timestampMs || String(Date.now());
   const requestId = crypto.randomUUID();
 
-  const currentUrl = chatId ? `https://chat.z.ai/c/${chatId}` : 'https://chat.z.ai/';
+  const currentUrl = chatId ? `${BASE_URL}/c/${chatId}` : `${BASE_URL}/`;
   const pathname = chatId ? `/c/${chatId}` : '/';
 
-  const defaultUa =
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-  const activeUa = userAgent || defaultUa;
+  const activeUa = userAgent || DEFAULT_USER_AGENT;
   const uaDetails = parseUserAgentDetails(activeUa);
 
   const metadata: Record<string, string> = {
@@ -175,20 +170,18 @@ export function buildZAIHeaders(
   cookies?: string,
   userAgent?: string,
 ): Record<string, string> {
-  const defaultUa =
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-  const activeUa = userAgent || defaultUa;
+  const activeUa = userAgent || DEFAULT_USER_AGENT;
   const uaDetails = parseUserAgentDetails(activeUa);
-  const referer = chatId ? `https://chat.z.ai/c/${chatId}` : 'https://chat.z.ai/';
+  const referer = chatId ? `${BASE_URL}/c/${chatId}` : `${BASE_URL}/`;
 
   const headers: Record<string, string> = {
     Accept: 'text/event-stream',
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',
     'X-Signature': signature,
-    'X-Fe-Version': 'prod-fe-1.1.35',
+    'X-Fe-Version': FE_VERSION,
     'User-Agent': activeUa,
-    Origin: 'https://chat.z.ai',
+    Origin: BASE_URL,
     Referer: referer,
     'sec-ch-ua': uaDetails.secChUa,
     'sec-ch-ua-mobile': '?0',

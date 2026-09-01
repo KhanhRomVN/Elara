@@ -16,12 +16,7 @@ import { Request, Response } from 'express';
 
 // ── Services ──
 import { isProviderEnabled } from '../services/provider.service';
-
-// ── Repositories ──
-import { findAccountById } from '../repositories/account.repository';
-
-// ── Providers ──
-import { providerRegistry } from '../provider/registry';
+import { getAccountById, uploadFileToProvider } from '../services/account.service';
 
 // ── Utils ──
 import { createLogger } from '../utils/logger';
@@ -44,7 +39,7 @@ export const uploadFile = async (
       return;
     }
 
-    const account = findAccountById(accountId);
+    const account = getAccountById(accountId);
     if (!account) {
       res.status(404).json({ error: 'Account not found' });
       return;
@@ -56,33 +51,22 @@ export const uploadFile = async (
       return;
     }
 
-    const provider = providerRegistry.getProvider(providerId);
-    if (!provider) {
-      res.status(400).json({ error: `Provider ${providerId} not supported` });
-      return;
-    }
-
-    if (!provider.uploadFile) {
-      res.status(400).json({ error: `Provider ${providerId} does not support file upload` });
-      return;
-    }
-
     try {
       if (account.credential === null) {
         res.status(400).json({ error: 'Account has no credential configured' });
         return;
       }
-      const result = await provider.uploadFile(account.credential, file);
+      
+      const result = await uploadFileToProvider(
+        providerId,
+        account.credential,
+        file,
+      );
 
-      const responseData: any = { filename: file.originalname };
-      if (typeof result === 'string') {
-        responseData.file_id = result;
-      } else if (result && result.id) {
-        responseData.file_id = result.id;
-        if (result.token_usage) responseData.token_usage = result.token_usage;
-      } else {
-        responseData.raw = result;
-      }
+      const responseData: any = { 
+        filename: file.originalname,
+        ...result,
+      };
 
       res.status(200).json({ success: true, data: responseData });
     } catch (err: any) {

@@ -23,7 +23,11 @@ import { EventEmitter } from 'events';
 import { createLogger } from '../../utils/logger';
 
 // ── Types ──
-import { ZaiBrowserSession, ZaiBrowserConfig, DEFAULT_ZAI_BROWSER_CONFIG } from './zai-browser.types';
+import {
+  ZaiBrowserSession,
+  ZaiBrowserConfig,
+  DEFAULT_ZAI_BROWSER_CONFIG,
+} from './zai-browser.types';
 
 // ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('ZaiBrowserWebSocket');
@@ -59,21 +63,24 @@ export class ZaiBrowserWebSocketManager extends EventEmitter {
 
   async connect(): Promise<void> {
     if (this.session.ws && this.session.ws.readyState === WebSocket.OPEN) {
-      logger.info('[WebSocket] Already connected');
       return;
     }
 
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
-        reject(new Error(`Extension WebSocket connection timeout after ${this.config.extensionReadyTimeout}ms`));
+        reject(
+          new Error(
+            `Extension WebSocket connection timeout after ${this.config.extensionReadyTimeout}ms`,
+          ),
+        );
       }, this.config.extensionReadyTimeout);
 
-      logger.info(`[WebSocket] Connecting to ws://localhost:${this.config.wsPort}...`);
-      const ws = new WebSocket(`ws://localhost:${this.config.wsPort}?client=server`);
+      const ws = new WebSocket(
+        `ws://localhost:${this.config.wsPort}?client=server`,
+      );
 
       ws.on('open', () => {
         clearTimeout(timeout);
-        logger.info('[WebSocket] Connected to Z.AI Bridge extension');
         this.session.ws = ws;
         this.session.isConnected = true;
         this.session.reconnectAttempts = 0;
@@ -109,18 +116,20 @@ export class ZaiBrowserWebSocketManager extends EventEmitter {
   private scheduleReconnect(): void {
     if (this.session.reconnectTimer) return;
     if (this.session.reconnectAttempts >= this.config.reconnectAttempts) {
-      logger.error(`[WebSocket] Max reconnect attempts (${this.config.reconnectAttempts}) reached`);
+      logger.error(
+        `[WebSocket] Max reconnect attempts (${this.config.reconnectAttempts}) reached`,
+      );
       this.emit('max_reconnect_reached');
       return;
     }
 
     const delay = Math.min(
-      this.config.reconnectDelayMs * Math.pow(1.5, this.session.reconnectAttempts),
-      60000
+      this.config.reconnectDelayMs *
+        Math.pow(1.5, this.session.reconnectAttempts),
+      60000,
     );
     this.session.reconnectAttempts++;
 
-    logger.info(`[WebSocket] Reconnecting in ${Math.round(delay)}ms (attempt ${this.session.reconnectAttempts}/${this.config.reconnectAttempts})`);
     this.session.reconnectTimer = setTimeout(async () => {
       this.session.reconnectTimer = null;
       try {
@@ -165,7 +174,6 @@ export class ZaiBrowserWebSocketManager extends EventEmitter {
           logger.warn(`[WebSocket] WAF block detected: status=${msg.status}`);
           this.emit('waf_block', msg);
         } else if (msg.type === 'page_ready') {
-          logger.info(`[WebSocket] Page ready: context=${msg.context}`);
           this.emit('page_ready', msg);
         }
       } catch (e) {
@@ -205,9 +213,19 @@ export class ZaiBrowserWebSocketManager extends EventEmitter {
 
   // ─── Send Prompt ────────────────────────────────────────────────────
 
-  async sendPrompt(prompt: string, isNewChat: boolean, isSearch: boolean): Promise<string> {
-    if (!this.session.isConnected || !this.session.ws || this.session.ws.readyState !== WebSocket.OPEN) {
-      throw new Error('WebSocket not connected. Please ensure Z.AI Bridge extension is installed and running.');
+  async sendPrompt(
+    prompt: string,
+    isNewChat: boolean,
+    isSearch: boolean,
+  ): Promise<string> {
+    if (
+      !this.session.isConnected ||
+      !this.session.ws ||
+      this.session.ws.readyState !== WebSocket.OPEN
+    ) {
+      throw new Error(
+        'WebSocket not connected. Please ensure Z.AI Bridge extension is installed and running.',
+      );
     }
 
     const requestId = this.generateRequestId();
@@ -222,8 +240,6 @@ export class ZaiBrowserWebSocketManager extends EventEmitter {
     });
 
     this.session.ws.send(message);
-    logger.debug(`[WebSocket] Sent prompt: ${prompt.substring(0, 100)}...`);
-
     return requestId;
   }
 
@@ -237,7 +253,7 @@ export class ZaiBrowserWebSocketManager extends EventEmitter {
       onDone: () => void;
       onError: (err: Error) => void;
       onUsage?: (usage: any) => void;
-    }
+    },
   ): void {
     this.session.pendingRequests.set(requestId, handlers as any);
   }
@@ -247,13 +263,16 @@ export class ZaiBrowserWebSocketManager extends EventEmitter {
   async resetPage(): Promise<void> {
     if (!this.session.isConnected || !this.session.ws) return;
     this.session.ws.send(JSON.stringify({ action: 'reset_page' }));
-    logger.info('[WebSocket] Sent reset_page');
   }
 
   // ─── Status ─────────────────────────────────────────────────────────
 
   isConnected(): boolean {
-    return this.session.isConnected && !!this.session.ws && this.session.ws.readyState === WebSocket.OPEN;
+    return (
+      this.session.isConnected &&
+      !!this.session.ws &&
+      this.session.ws.readyState === WebSocket.OPEN
+    );
   }
 
   // ─── Disconnect ─────────────────────────────────────────────────────
@@ -269,6 +288,5 @@ export class ZaiBrowserWebSocketManager extends EventEmitter {
     }
     this.session.isConnected = false;
     this.session.pendingRequests.clear();
-    logger.info('[WebSocket] Disconnected');
   }
 }

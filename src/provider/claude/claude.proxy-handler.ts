@@ -20,6 +20,9 @@ import { proxyEvents } from '../../services/proxy.service';
 // ── Utils ──
 import { createLogger } from '../../utils/logger';
 
+// ── Constants ──
+import { CLAUDE_EVENTS } from './claude.constant';
+
 // ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('ClaudeProxy');
 
@@ -31,12 +34,10 @@ export const proxyHandler: ProxyHandler = {
     const url = ctx.clientToProxyRequest.url;
 
     if (host && host.includes('claude.ai')) {
-      logger.debug(`[Proxy] Claude Request: ${url}`);
       const auth = ctx.clientToProxyRequest.headers['authorization'];
 
       if (auth) {
-        logger.debug('[Proxy] Intercepting Claude request with Authorization header');
-        proxyEvents.emit('claude-auth-header', auth);
+        proxyEvents.emit(CLAUDE_EVENTS.AUTH_HEADER, auth);
       }
     }
     callback();
@@ -55,8 +56,7 @@ export const proxyHandler: ProxyHandler = {
       try {
         const json = JSON.parse(bodyStr);
         if (json.email) {
-          logger.info(`[Proxy] Captured Claude Login Email: ${json.email}`);
-          proxyEvents.emit('claude-login-email', { email: json.email });
+          proxyEvents.emit(CLAUDE_EVENTS.LOGIN_EMAIL, { email: json.email });
         }
       } catch (e) {
         // Not JSON, ignore
@@ -73,8 +73,7 @@ export const proxyHandler: ProxyHandler = {
       try {
         const json = JSON.parse(body);
         if (json.token) {
-          logger.info('[Proxy] Captured Claude Login Token');
-          proxyEvents.emit('claude-login-token', { cookies: json.token });
+          proxyEvents.emit(CLAUDE_EVENTS.LOGIN_TOKEN, { cookies: json.token });
         }
       } catch (e) {
         logger.error('[Proxy] Failed to parse Claude Login Response:', e);

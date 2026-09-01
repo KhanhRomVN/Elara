@@ -30,7 +30,6 @@ export const killProcessOnPort = async (port: number): Promise<boolean> => {
     try {
       const { stdout } = await execAsync(`fuser -k ${port}/tcp 2>/dev/null`);
       if (stdout) {
-        logger.info(`Killed process on port ${port} using fuser`);
         return true;
       }
     } catch (e: any) {
@@ -46,7 +45,6 @@ export const killProcessOnPort = async (port: number): Promise<boolean> => {
         for (const pid of pids) {
           await execAsync(`kill -9 ${pid} 2>/dev/null`);
         }
-        logger.info(`Killed ${pids.length} process(es) on port ${port} using lsof`);
         return true;
       }
       return true;

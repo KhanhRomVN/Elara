@@ -74,7 +74,8 @@ export class LoginService {
   private findChrome(): string | null {
     if (process.platform === 'win32') {
       const progFiles = process.env['ProgramFiles'] || 'C:\\Program Files';
-      const progFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+      const progFilesX86 =
+        process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
       const localAppData =
         process.env['LocalAppData'] ||
         (process.env['USERPROFILE']
@@ -83,14 +84,56 @@ export class LoginService {
 
       const candidates = [
         path.join(progFiles, 'Google', 'Chrome', 'Application', 'chrome.exe'),
-        path.join(progFilesX86, 'Google', 'Chrome', 'Application', 'chrome.exe'),
-        path.join(localAppData, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+        path.join(
+          progFilesX86,
+          'Google',
+          'Chrome',
+          'Application',
+          'chrome.exe',
+        ),
+        path.join(
+          localAppData,
+          'Google',
+          'Chrome',
+          'Application',
+          'chrome.exe',
+        ),
         path.join(progFiles, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
-        path.join(progFilesX86, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
-        path.join(localAppData, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
-        path.join(progFiles, 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
-        path.join(progFilesX86, 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
-        path.join(localAppData, 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
+        path.join(
+          progFilesX86,
+          'Microsoft',
+          'Edge',
+          'Application',
+          'msedge.exe',
+        ),
+        path.join(
+          localAppData,
+          'Microsoft',
+          'Edge',
+          'Application',
+          'msedge.exe',
+        ),
+        path.join(
+          progFiles,
+          'BraveSoftware',
+          'Brave-Browser',
+          'Application',
+          'brave.exe',
+        ),
+        path.join(
+          progFilesX86,
+          'BraveSoftware',
+          'Brave-Browser',
+          'Application',
+          'brave.exe',
+        ),
+        path.join(
+          localAppData,
+          'BraveSoftware',
+          'Brave-Browser',
+          'Application',
+          'brave.exe',
+        ),
         path.join(progFiles, 'Chromium', 'Application', 'chrome.exe'),
         'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
         'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
@@ -157,23 +200,24 @@ export class LoginService {
     options: LoginOptions,
   ): Promise<{ cookies: string; email?: string; headers?: any }> {
     if (options.method === 'cdp') {
-      logger.info(`[Login] Using CDP method for ${options.providerId}`);
       const cdpOptions: CDPLoginOptions = {
         providerId: options.providerId,
         loginUrl: options.loginUrl,
         partition: options.partition,
         timeout: 300000,
-        validate: options.validate ? async (captured) => {
-          const result = await options.validate!({
-            cookies: captured.cookies || '',
-            email: captured.email || '',
-          });
-          return {
-            isValid: result.isValid,
-            cookies: result.cookies,
-            email: result.email || undefined,
-          };
-        } : undefined,
+        validate: options.validate
+          ? async (captured) => {
+              const result = await options.validate!({
+                cookies: captured.cookies || '',
+                email: captured.email || '',
+              });
+              return {
+                isValid: result.isValid,
+                cookies: result.cookies,
+                email: result.email || undefined,
+              };
+            }
+          : undefined,
         extraEvents: options.extraEvents,
       };
 
@@ -198,7 +242,6 @@ export class LoginService {
 
     try {
       if (fs.existsSync(profilePath)) {
-        logger.info(`Cleaning profile: ${profilePath}`);
         fs.rmSync(profilePath, { recursive: true, force: true });
       }
     } catch (e) {
@@ -235,7 +278,6 @@ export class LoginService {
     const cdpPort = await findAvailablePort(9222);
     args.unshift(`--remote-debugging-port=${cdpPort}`);
 
-    logger.info(`Spawning Chrome for ${options.providerId} with CDP port ${cdpPort}...`);
     const chromeProcess = spawn(chromePath, args, {
       detached: false,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -293,7 +335,9 @@ export class LoginService {
             return;
           }
           try {
-            const listRes = await fetch(`http://127.0.0.1:${cdpPort}/json/list`);
+            const listRes = await fetch(
+              `http://127.0.0.1:${cdpPort}/json/list`,
+            );
             if (!listRes.ok) return;
             const targets = (await listRes.json()) as any[];
             const pageTarget = targets.find(
@@ -306,18 +350,23 @@ export class LoginService {
               if (!wsClient || wsClient.readyState === WebSocket.CLOSED) {
                 wsClient = new WebSocket(pageTarget.webSocketDebuggerUrl);
                 wsClient.on('open', () => {
-                  wsClient?.send(JSON.stringify({ id: 1, method: 'Runtime.enable' }));
+                  wsClient?.send(
+                    JSON.stringify({ id: 1, method: 'Runtime.enable' }),
+                  );
                 });
                 wsClient.on('message', (raw: any) => {
                   try {
                     const msg = JSON.parse(raw.toString());
                     if (msg.id === 2 && msg.result?.result?.value) {
                       const storageData = JSON.parse(msg.result.result.value);
-                      if (storageData.refresh_token && storageData.access_token) {
-                        logger.info('[CDP Poller] Extracted Kimi access_token and refresh_token from browser localStorage!');
+                      if (
+                        storageData.refresh_token &&
+                        storageData.access_token
+                      ) {
                         const cookieWithRefresh = `kimi-auth=${storageData.access_token}; refresh_token=${storageData.refresh_token}`;
                         capturedCookies = cookieWithRefresh;
-                        capturedExtraData.refreshToken = storageData.refresh_token;
+                        capturedExtraData.refreshToken =
+                          storageData.refresh_token;
                         capturedExtraData.token = storageData.access_token;
                         proxyEvents.emit('kimi-login-token', {
                           token: storageData.access_token,
@@ -359,7 +408,8 @@ export class LoginService {
             const hasBxUa = (capturedHeaders as any)['bx-ua'];
             const hasBxUmidToken = (capturedHeaders as any)['bx-umidtoken'];
 
-            const isRealBxUa = hasBxUa &&
+            const isRealBxUa =
+              hasBxUa &&
               typeof hasBxUa === 'string' &&
               /^\d+!/.test(hasBxUa) &&
               hasBxUa.length > 100 &&
@@ -367,19 +417,16 @@ export class LoginService {
               !hasBxUa.includes('not_initialized') &&
               !hasBxUa.includes('not_fun');
 
-            const isRealBxUmidToken = hasBxUmidToken &&
+            const isRealBxUmidToken =
+              hasBxUmidToken &&
               typeof hasBxUmidToken === 'string' &&
               hasBxUmidToken.length > 30 &&
               !hasBxUmidToken.includes('default') &&
               !hasBxUmidToken.includes('not_initialized');
 
-            logger.debug(`[Login] Qwen headers status - bxUa: ${!!hasBxUa} (real: ${isRealBxUa}), bxUmidToken: ${!!hasBxUmidToken} (real: ${isRealBxUmidToken})`);
-
             if (!isRealBxUa || !isRealBxUmidToken) {
-              logger.debug(`[Login] ⏳ Waiting for real Qwen headers`);
               return;
             }
-            logger.info(`[Login] ✅ Qwen real headers ready`);
           }
 
           if (options.validate) {
@@ -388,11 +435,12 @@ export class LoginService {
                 cookies: capturedCookies,
                 headers: capturedHeaders,
                 email: capturedEmail,
-                refreshToken: capturedExtraData.refreshToken || capturedExtraData.refresh_token,
+                refreshToken:
+                  capturedExtraData.refreshToken ||
+                  capturedExtraData.refresh_token,
                 ...capturedExtraData,
               });
               if (result.isValid && !resolved) {
-                logger.info(`Validation success for ${options.providerId}`);
                 const finalCookies = result.cookies || capturedCookies;
                 cleanup();
                 resolve({
@@ -428,13 +476,19 @@ export class LoginService {
           }
         } else if (data && typeof data === 'object') {
           if (data.cookies) {
-            if (!capturedCookies || data.cookies.includes('refresh_token=') || !capturedCookies.includes('refresh_token=')) {
+            if (
+              !capturedCookies ||
+              data.cookies.includes('refresh_token=') ||
+              !capturedCookies.includes('refresh_token=')
+            ) {
               capturedCookies = data.cookies;
             }
           }
           if (data.email) capturedEmail = data.email;
-          if (data.headers) capturedHeaders = { ...capturedHeaders, ...data.headers };
-          if (data.refreshToken) capturedExtraData.refreshToken = data.refreshToken;
+          if (data.headers)
+            capturedHeaders = { ...capturedHeaders, ...data.headers };
+          if (data.refreshToken)
+            capturedExtraData.refreshToken = data.refreshToken;
           capturedExtraData = { ...capturedExtraData, ...data };
         }
         resolveIfReady();
@@ -447,7 +501,8 @@ export class LoginService {
 
       const onInfo = (data: any) => {
         if (data && data.email) capturedEmail = data.email;
-        if (data && typeof data === 'object') capturedExtraData = { ...capturedExtraData, ...data };
+        if (data && typeof data === 'object')
+          capturedExtraData = { ...capturedExtraData, ...data };
         resolveIfReady();
       };
 
@@ -459,12 +514,18 @@ export class LoginService {
         } else if (data && typeof data === 'object') {
           if (data.email) capturedEmail = data.email;
           if (data.cookies) {
-            if (!capturedCookies || data.cookies.includes('refresh_token=') || !capturedCookies.includes('refresh_token=')) {
+            if (
+              !capturedCookies ||
+              data.cookies.includes('refresh_token=') ||
+              !capturedCookies.includes('refresh_token=')
+            ) {
               capturedCookies = data.cookies;
             }
           }
-          if (data.headers) capturedHeaders = { ...capturedHeaders, ...data.headers };
-          if (data.refreshToken) capturedExtraData.refreshToken = data.refreshToken;
+          if (data.headers)
+            capturedHeaders = { ...capturedHeaders, ...data.headers };
+          if (data.refreshToken)
+            capturedExtraData.refreshToken = data.refreshToken;
           capturedExtraData = { ...capturedExtraData, ...data };
         }
         resolveIfReady();

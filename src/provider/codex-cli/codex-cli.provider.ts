@@ -37,6 +37,16 @@ import { createLogger } from '../../utils/logger';
 
 // ── Codex Imports ──
 import { proxyHandler } from './codex-cli.proxy-handler';
+import {
+  CODEX_CLI_EVENTS,
+  CHATGPT_USAGE_URL,
+  CODEX_RESPONSES_URL,
+  AUTH_TOKEN_URL,
+  USER_AGENT,
+  CLIENT_ID,
+  ORIGINATOR,
+  DEFAULT_INSTRUCTIONS,
+} from './codex-cli.constant';
 
 // ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('CodexCLIProvider');
@@ -58,17 +68,13 @@ export class CodexCLIProvider implements Provider {
 
   async getProfile(accessToken: string) {
     try {
-      const response = await fetch(
-        'https://chatgpt.com/backend-api/wham/usage',
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Accept: 'application/json',
-            'User-Agent':
-              'codex_cli_rs/0.104.0 (Ubuntu 24.4.0; x86_64) gnome-terminal',
-          },
+      const response = await fetch(CHATGPT_USAGE_URL, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+          'User-Agent': USER_AGENT,
         },
-      );
+      });
       if (response.ok) {
         const data = await response.json();
         return {
@@ -84,7 +90,6 @@ export class CodexCLIProvider implements Provider {
   // ─── Login ──────────────────────────────────────────────────────────
 
   async login() {
-    logger.info('Starting Codex CLI login with real CLI and terminal...');
     const tempHome = path.join(
       os.homedir(),
       '.elara',
@@ -176,7 +181,10 @@ export class CodexCLIProvider implements Provider {
                 loginUrl: capturedUrl,
                 partition: 'codex-cli',
                 skipProxy: true,
-                extraEvents: ['codex-cli-tokens', 'codex-cli-user-info'],
+                extraEvents: [
+                  CODEX_CLI_EVENTS.TOKENS,
+                  CODEX_CLI_EVENTS.USER_INFO,
+                ],
                 validate: async (captured) => {
                   if (captured.cookies) {
                     try {
@@ -210,10 +218,10 @@ export class CodexCLIProvider implements Provider {
     });
   }
 
-  // ��── Refresh Token ──────────────────────────────────────────────────
+  // ─── Refresh Token ──────────────────────────────────────────────────
 
   async refreshToken(refreshTokenStr: string) {
-    const response = await fetch('https://auth.openai.com/oauth/token', {
+    const response = await fetch(AUTH_TOKEN_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -221,7 +229,7 @@ export class CodexCLIProvider implements Provider {
       },
       body: new URLSearchParams({
         grant_type: 'refresh_token',
-        client_id: 'app_EMoamEEZ73f0CkXaXp7hrann',
+        client_id: CLIENT_ID,
         refresh_token: refreshTokenStr,
       }),
     });
@@ -251,7 +259,7 @@ export class CodexCLIProvider implements Provider {
       tokens = { accessToken: credential };
     }
 
-    const url = 'https://chatgpt.com/backend-api/codex/responses';
+    const url = CODEX_RESPONSES_URL;
 
     const sendRequest = async (token: string) => {
       let chatgptAccountId = '';
@@ -265,7 +273,7 @@ export class CodexCLIProvider implements Provider {
 
       const bodyObj: any = {
         model: model || this.defaultModel,
-        instructions: 'You are Codex, a GPT-5 coding agent.',
+        instructions: DEFAULT_INSTRUCTIONS,
         input: messages.map((m: any) => ({
           type: 'message',
           role: m.role,
@@ -294,9 +302,8 @@ export class CodexCLIProvider implements Provider {
         Accept: 'text/event-stream',
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
-        'User-Agent':
-          'codex_cli_rs/0.104.0 (Ubuntu 24.4.0; x86_64) gnome-terminal',
-        originator: 'codex_cli_rs',
+        'User-Agent': USER_AGENT,
+        originator: ORIGINATOR,
       };
       if (chatgptAccountId) headers['chatgpt-account-id'] = chatgptAccountId;
 

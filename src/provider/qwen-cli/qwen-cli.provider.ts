@@ -38,6 +38,11 @@ import { createLogger } from '../../utils/logger';
 
 // ── Qwen CLI Imports ──
 import { proxyHandler } from './qwen-cli.proxy-handler';
+import {
+  QWEN_CLI_EVENTS,
+  USER_INFO_URL,
+  CHAT_COMPLETIONS_URL,
+} from './qwen-cli.constant';
 
 // ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('QwenCLIProvider');
@@ -60,20 +65,27 @@ export class QwenCoderCLIProvider implements Provider {
   // ─── Login ──────────────────────────────────────────────────────────
 
   async login() {
-    logger.info('Starting Qwen CLI login with real CLI module and terminal...');
     const tempHome = path.join(os.tmpdir(), `qwen-login-fresh`);
     if (fs.existsSync(tempHome))
       fs.rmSync(tempHome, { recursive: true, force: true });
     fs.mkdirSync(tempHome, { recursive: true });
 
-    const cliPath = path.resolve(__dirname, '../../../../../temp/qwen-cli/cli.js');
+    const cliPath = path.resolve(
+      __dirname,
+      '../../../../../temp/qwen-cli/cli.js',
+    );
     await proxyService.start();
     const { port } = proxyService.getServerInfo();
     const logFile = path.join(tempHome, 'qwen-cli.log');
 
     const terminals = [
-      'gnome-terminal', 'konsole', 'xfce4-terminal', 'kitty',
-      'alacritty', 'xterm', 'x-terminal-emulator',
+      'gnome-terminal',
+      'konsole',
+      'xfce4-terminal',
+      'kitty',
+      'alacritty',
+      'xterm',
+      'x-terminal-emulator',
     ];
     let terminal = '';
     for (const t of terminals) {
@@ -101,16 +113,25 @@ export class QwenCoderCLIProvider implements Provider {
     if (terminal === 'gnome-terminal') {
       terminalSpawn = spawn(
         terminal,
-        ['--', 'bash', '-c', `${commandStr}; echo ''; echo 'Press enter to close...'; read`],
+        [
+          '--',
+          'bash',
+          '-c',
+          `${commandStr}; echo ''; echo 'Press enter to close...'; read`,
+        ],
         { detached: true, env, stdio: 'ignore' },
       );
     } else if (terminal) {
       terminalSpawn = spawn(terminal, ['-e', `bash -c "${commandStr}; read"`], {
-        detached: true, env, stdio: 'ignore',
+        detached: true,
+        env,
+        stdio: 'ignore',
       });
     } else {
       terminalSpawn = spawn(nodePath, [cliPath, 'chat', '--empty'], {
-        env, detached: true, stdio: 'ignore',
+        env,
+        detached: true,
+        stdio: 'ignore',
       });
     }
 
@@ -131,14 +152,20 @@ export class QwenCoderCLIProvider implements Provider {
                 loginUrl: capturedUrl,
                 partition: 'qwen-cli',
                 skipProxy: true,
-                extraEvents: ['qwen-cli-tokens', 'qwen-cli-user-info'],
+                extraEvents: [
+                  QWEN_CLI_EVENTS.TOKENS,
+                  QWEN_CLI_EVENTS.USER_INFO,
+                ],
                 validate: async (captured) => {
-                  if (captured.cookies && captured.email) return { isValid: true };
+                  if (captured.cookies && captured.email)
+                    return { isValid: true };
                   return { isValid: false };
                 },
               })
               .then((result) => {
-                try { fs.rmSync(tempHome, { recursive: true, force: true }); } catch (e) {}
+                try {
+                  fs.rmSync(tempHome, { recursive: true, force: true });
+                } catch (e) {}
                 resolve(result);
               })
               .catch(reject);
@@ -159,7 +186,7 @@ export class QwenCoderCLIProvider implements Provider {
 
   async getProfile(accessToken: string) {
     try {
-      const response = await fetch('https://chat.qwen.ai/api/v1/user/info', {
+      const response = await fetch(USER_INFO_URL, {
         headers: {
           'User-Agent': `QwenCode/0.10.6 (${process.platform}; ${process.arch})`,
           'x-dashscope-authtype': 'qwen-oauth',
@@ -197,7 +224,9 @@ export class QwenCoderCLIProvider implements Provider {
       typeof json.response === 'string' &&
       json.response.startsWith('{')
     ) {
-      try { data = JSON.parse(json.response); } catch (e) {}
+      try {
+        data = JSON.parse(json.response);
+      } catch (e) {}
     }
     return data;
   }
@@ -206,8 +235,14 @@ export class QwenCoderCLIProvider implements Provider {
 
   async handleMessage(options: SendMessageOptions): Promise<void> {
     const {
-      credential, messages, model, stream,
-      onContent, onDone, onError, accountId,
+      credential,
+      messages,
+      model,
+      stream,
+      onContent,
+      onDone,
+      onError,
+      accountId,
     } = options;
 
     let tokens: any;
@@ -217,7 +252,7 @@ export class QwenCoderCLIProvider implements Provider {
       tokens = { accessToken: credential };
     }
 
-    const url = 'https://portal.qwen.ai/v1/chat/completions';
+    const url = CHAT_COMPLETIONS_URL;
 
     const sendRequest = async (token: string) => {
       return await fetch(url, {
@@ -235,7 +270,8 @@ export class QwenCoderCLIProvider implements Provider {
             content: [{ type: 'text', text: m.content }],
           })),
           stream: stream !== false,
-          stream_options: stream !== false ? { include_usage: true } : undefined,
+          stream_options:
+            stream !== false ? { include_usage: true } : undefined,
         }),
       });
     };
@@ -258,7 +294,8 @@ export class QwenCoderCLIProvider implements Provider {
                 expiresIn: newTokens.expires_in || 21600,
               });
               db.prepare('UPDATE accounts SET credential = ? WHERE id = ?').run(
-                newCredential, accountId,
+                newCredential,
+                accountId,
               );
             } catch (e) {}
           }
@@ -266,7 +303,8 @@ export class QwenCoderCLIProvider implements Provider {
         } catch (e) {}
       }
 
-      if (!response.ok) throw new Error(`Qwen CLI API Error ${response.status}`);
+      if (!response.ok)
+        throw new Error(`Qwen CLI API Error ${response.status}`);
 
       if (stream !== false) {
         if (!response.body) throw new Error('No response body');
@@ -279,7 +317,10 @@ export class QwenCoderCLIProvider implements Provider {
             const trimmed = line.trim();
             if (!trimmed || !trimmed.startsWith('data: ')) continue;
             const jsonStr = trimmed.slice(6).trim();
-            if (jsonStr === '[DONE]') { onDone(); return; }
+            if (jsonStr === '[DONE]') {
+              onDone();
+              return;
+            }
             try {
               const json = JSON.parse(jsonStr);
               if (json.choices?.[0]?.delta?.content)

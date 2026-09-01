@@ -114,9 +114,6 @@ export async function parseSSEStream(
 
       const jsonStr = line.substring(6).trim();
       if (jsonStr === '[DONE]') {
-        logger.debug(
-          `[DeepSeek] [DONE] received | session=${sessionId}`,
-        );
         return { incomplete: false, responseMessageId, accumulatedContent };
       }
 
@@ -170,9 +167,6 @@ export async function parseSSEStream(
           isIncomplete = true;
           const { hasPartial, toolType } =
             detectPartialToolcall(accumulatedContent);
-          logger.info(
-            `[DeepSeek] INCOMPLETE detected | session=${sessionId} | hasPartialTool=${hasPartial}`,
-          );
           if (onMetadata) {
             onMetadata({
               incomplete_has_partial_tool: hasPartial,
@@ -192,9 +186,6 @@ export async function parseSSEStream(
               isIncomplete = true;
               const { hasPartial, toolType } =
                 detectPartialToolcall(accumulatedContent);
-              logger.info(
-                `[DeepSeek] INCOMPLETE detected (BATCH) | session=${sessionId}`,
-              );
               if (onMetadata) {
                 onMetadata({
                   incomplete_has_partial_tool: hasPartial,
@@ -375,7 +366,7 @@ export async function parseSSEStream(
           {
             message: err?.message || 'Unknown parse error',
             linePreview: line.slice(0, 500),
-          }
+          },
         );
       }
     }

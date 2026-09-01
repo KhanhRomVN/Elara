@@ -35,10 +35,13 @@ import { countTokens, countMessagesTokens } from '../../utils/tokenizer';
 
 // ── HuggingChat Imports ──
 import { proxyHandler } from './huggingchat.proxy-handler';
+import {
+  BASE_URL,
+  HUGGINGCHAT_EVENTS,
+  USER_AGENT,
+} from './huggingchat.constant';
 
-// ─── Constants ──────────────────────────────────────────────────────────
-const BASE_URL = 'https://huggingface.co';
-
+// ─── Constants ─────────────────────────────────────────��────────────────
 const logger = createLogger('HuggingChatProvider');
 
 // ─── Provider Class ────────────────────────────────────────────────────
@@ -51,25 +54,22 @@ export class HuggingChatProvider implements Provider {
   // ─── Login ──────────────────────────────────────────────────────────
 
   async login() {
-    logger.info('Starting HuggingChat login...');
-
     let capturedEmail = '';
 
     const onLoginData = (email: string) => {
-      logger.info(`[HuggingChat] Captured email from form: ${email}`);
       capturedEmail = email;
     };
 
-    proxyEvents.on('hugging-chat-login-data', onLoginData);
+    proxyEvents.on(HUGGINGCHAT_EVENTS.LOGIN_DATA, onLoginData);
 
     try {
       return await loginService.login({
         providerId: 'huggingchat',
-        loginUrl: 'https://huggingface.co/chat/login',
+        loginUrl: `${BASE_URL}/chat/login`,
         partition: `huggingchat-${Date.now()}`,
-        cookieEvent: 'hugging-chat-cookies',
-        infoEvent: 'hugging-chat-login-data',
-        extraEvents: ['hugging-chat-login-data'],
+        cookieEvent: HUGGINGCHAT_EVENTS.COOKIES,
+        infoEvent: HUGGINGCHAT_EVENTS.LOGIN_DATA,
+        extraEvents: [HUGGINGCHAT_EVENTS.LOGIN_DATA],
         validate: async (data: {
           cookies: string;
           headers?: any;
@@ -77,7 +77,6 @@ export class HuggingChatProvider implements Provider {
         }) => {
           if (!data.cookies) return { isValid: false };
 
-          logger.debug('[HuggingChat] Validating session...');
           let identityEmail = '';
           let apiEmail = '';
 
@@ -107,7 +106,7 @@ export class HuggingChatProvider implements Provider {
         },
       });
     } finally {
-      proxyEvents.off('hugging-chat-login-data', onLoginData);
+      proxyEvents.off(HUGGINGCHAT_EVENTS.LOGIN_DATA, onLoginData);
     }
   }
 
@@ -117,7 +116,7 @@ export class HuggingChatProvider implements Provider {
     credential: string,
   ): Promise<{ email: string | null; name?: string; id?: string }> {
     try {
-      const response = await fetch('https://huggingface.co/chat/api/v2/user', {
+      const response = await fetch(`${BASE_URL}/chat/api/v2/user`, {
         headers: {
           Cookie: credential,
           'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
@@ -210,8 +209,7 @@ export class HuggingChatProvider implements Provider {
           headers: {
             Cookie: cookieHeader,
             'Content-Type': `multipart/form-data; boundary=${boundary}`,
-            'User-Agent':
-              'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
+            'User-Agent': USER_AGENT,
             Origin: BASE_URL,
             Referer: `${BASE_URL}/chat/conversation/${conversationId}`,
           },
@@ -326,8 +324,7 @@ export class HuggingChatProvider implements Provider {
       baseURL: BASE_URL,
       headers: {
         Cookie: cookie,
-        'User-Agent':
-          'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
+        'User-Agent': USER_AGENT,
         Accept: 'application/json',
       },
     });

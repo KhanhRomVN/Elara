@@ -31,7 +31,13 @@ import { createLogger } from '../../utils/logger';
 import { countTokens } from '../../utils/tokenizer';
 
 // ── Cerebras Imports ──
-import { BASE_URL, API_BASE_URL, CerebrasCompletionPayload, CerebrasUserInfo } from './cerebras-cloud.types';
+import {
+  BASE_URL,
+  API_BASE_URL,
+  CerebrasCompletionPayload,
+  CerebrasUserInfo,
+} from './cerebras-cloud.types';
+import { CEREBRAS_EVENTS, USER_AGENT } from './cerebras-cloud.constant';
 import { proxyHandler } from './cerebras-cloud.proxy-handler';
 import { parseSSEStream } from './cerebras-cloud.sse-parser';
 import { usageTracker } from './cerebras-cloud.rate-limiter';
@@ -49,14 +55,12 @@ export class CerebrasCloudProvider implements Provider {
   // ─── Login ──────────────────────────────────────────────────────────
 
   async login() {
-    logger.info('Starting Cerebras Cloud login...');
-
     return await loginService.login({
       providerId: 'cerebras-cloud',
       loginUrl: `${BASE_URL}/`,
       partition: `cerebras-cloud-${Date.now()}`,
-      cookieEvent: 'cerebras-cookies',
-      infoEvent: 'cerebras-user-info',
+      cookieEvent: CEREBRAS_EVENTS.COOKIES,
+      infoEvent: CEREBRAS_EVENTS.USER_INFO,
       validate: async (data: {
         cookies: string;
         headers?: any;
@@ -75,9 +79,6 @@ export class CerebrasCloudProvider implements Provider {
         let email = data.email;
 
         if (!email) {
-          logger.info(
-            '[CerebrasCloud] Email not captured directly, fetching profile...',
-          );
           const profile = await this.getProfile(data.cookies);
           email = profile.email || undefined;
         }
@@ -101,7 +102,7 @@ export class CerebrasCloudProvider implements Provider {
       });
 
       if (response.ok) {
-        const json = await response.json() as any;
+        const json = (await response.json()) as any;
         if (json?.user) {
           return {
             email: json.user.email || null,
@@ -120,13 +121,11 @@ export class CerebrasCloudProvider implements Provider {
   // ─── Get Models ─────────────────────────────────────────────────────
 
   async getModels(credential: string): Promise<any[]> {
-    logger.info('Fetching Cerebras Cloud models...');
     try {
       const apiKey = this.extractApiKey(credential);
 
       const headers: Record<string, string> = {
-        'User-Agent':
-          'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+        'User-Agent': USER_AGENT,
         Accept: 'application/json',
         'Content-Type': 'application/json',
         Origin: BASE_URL,
@@ -156,7 +155,7 @@ export class CerebrasCloudProvider implements Provider {
         return this.getFallbackModels(`API Error ${response.status}`);
       }
 
-      const json = await response.json() as any;
+      const json = (await response.json()) as any;
       const modelsData = json.data || json.models || [];
 
       if (!Array.isArray(modelsData)) {
@@ -268,10 +267,6 @@ export class CerebrasCloudProvider implements Provider {
     };
 
     try {
-      logger.info(
-        `[CerebrasCloud] Sending message to model: ${selectedModel}`,
-      );
-
       const headers = this.buildApiHeaders(credential, apiKey);
 
       const response = await fetch(`${API_BASE_URL}/v1/chat/completions`, {
@@ -308,9 +303,6 @@ export class CerebrasCloudProvider implements Provider {
 
       if (totalTokensUsed > 0) {
         usageTracker.recordTokens(accountId, totalTokensUsed);
-        logger.debug(
-          `[CerebrasCloud] Recorded ${totalTokensUsed} tokens for account ${accountId}`,
-        );
       }
 
       onDone();
@@ -347,8 +339,7 @@ export class CerebrasCloudProvider implements Provider {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       Accept: 'application/json',
-      'User-Agent':
-        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+      'User-Agent': USER_AGENT,
       Origin: BASE_URL,
       Referer: `${BASE_URL}/`,
       'sec-ch-ua':
@@ -385,8 +376,7 @@ export class CerebrasCloudProvider implements Provider {
     return {
       'Content-Type': 'application/json',
       Accept: '*/*',
-      'User-Agent':
-        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+      'User-Agent': USER_AGENT,
       Origin: refererBase,
       Referer: `${refererBase}/`,
       'sec-ch-ua':
@@ -407,11 +397,20 @@ export class CerebrasCloudProvider implements Provider {
     router.get('/usage', (req, res) => {
       const accountId = req.query.accountId as string;
       if (!accountId) {
-        res.status(400).json({ success: false, message: 'accountId is required' });
+        res
+          .status(400)
+          .json({ success: false, message: 'accountId is required' });
         return;
       }
       const summary = usageTracker.getUsageSummary(accountId);
-      res.json({ success: true, data: { accountId, usage: summary, limits: { requests: 5, tokens: 30000 } } });
+      res.json({
+        success: true,
+        data: {
+          accountId,
+          usage: summary,
+          limits: { requests: 5, tokens: 30000 },
+        },
+      });
     });
   }
 

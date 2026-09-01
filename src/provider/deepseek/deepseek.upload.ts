@@ -20,7 +20,8 @@ import { HttpClient } from '../../utils/http-client';
 import { createLogger } from '../../utils/logger';
 
 // ── DeepSeek Imports ──
-import { DeepSeekHash, BASE_URL, solvePoW } from './deepseek.pow';
+import { DeepSeekHash, solvePoW } from './deepseek.pow';
+import { BASE_URL } from './deepseek.constant';
 
 // ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('DeepSeekUpload');
@@ -29,7 +30,7 @@ const logger = createLogger('DeepSeekUpload');
 
 function createUploadClient(credential: string): HttpClient {
   return new HttpClient({
-    baseURL: 'https://chat.deepseek.com',
+    baseURL: BASE_URL,
     headers: {
       Cookie: `DS-AUTH-TOKEN=${credential}`,
       Authorization: credential,
@@ -51,8 +52,8 @@ export async function deepseekUploadFile(
     Authorization: credential,
     'User-Agent':
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-    Origin: 'https://chat.deepseek.com',
-    Referer: 'https://chat.deepseek.com/',
+    Origin: BASE_URL,
+    Referer: `${BASE_URL}/`,
   };
 
   const client = createUploadClient(credential);
@@ -70,7 +71,6 @@ export async function deepseekUploadFile(
         const challengeData = challengeJson?.data?.biz_data?.challenge;
 
         if (challengeData) {
-          logger.info('[DeepSeek Upload] Solving PoW...');
           const dsHash = await getDsHash();
           const powAnswer = await solvePoW(dsHash, challengeData);
           powResponseBase64 = Buffer.from(JSON.stringify(powAnswer)).toString(
@@ -82,7 +82,7 @@ export async function deepseekUploadFile(
           '[DeepSeek Upload] Failed to parse PoW challenge response',
           {
             error: e,
-          }
+          },
         );
       }
     }
@@ -112,14 +112,11 @@ export async function deepseekUploadFile(
       headers['X-Ds-Pow-Response'] = powResponseBase64;
     }
 
-    const uploadRes = await fetch(
-      'https://chat.deepseek.com/api/v0/file/upload_file',
-      {
-        method: 'POST',
-        headers,
-        body: payloadBuffer,
-      },
-    );
+    const uploadRes = await fetch(`${BASE_URL}/api/v0/file/upload_file`, {
+      method: 'POST',
+      headers,
+      body: payloadBuffer,
+    });
 
     if (!uploadRes.ok) {
       const errorText = await uploadRes.text();
@@ -159,9 +156,7 @@ export async function deepseekUploadFile(
                 targetFile.status === 'FAIL' ||
                 targetFile.status === 'ERROR'
               ) {
-                throw new Error(
-                  `File processing failed: ${targetFile.status}`,
-                );
+                throw new Error(`File processing failed: ${targetFile.status}`);
               }
             }
           }
@@ -172,7 +167,7 @@ export async function deepseekUploadFile(
               error: e,
               fileId,
               attempt: attempts + 1,
-            }
+            },
           );
         }
         attempts++;

@@ -18,7 +18,10 @@
 import { createLogger } from '../../utils/logger';
 
 // ── Types ──
-import { RATE_LIMITS, WINDOW_MS, CerebrasUsageData } from './cerebras-cloud.types';
+import { CerebrasUsageData } from './cerebras-cloud.types';
+
+// ── Constants ──
+import { RATE_LIMITS, WINDOW_MS } from './cerebras-cloud.constant';
 
 // ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('CerebrasRateLimiter');

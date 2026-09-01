@@ -19,6 +19,9 @@ import { proxyEvents } from '../../services/proxy.service';
 // ── Utils ──
 import { createLogger } from '../../utils/logger';
 
+// ── Constants ──
+import { CEREBRAS_EVENTS } from './cerebras-cloud.constant';
+
 // ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('CerebrasProxy');
 
@@ -31,8 +34,7 @@ export const proxyHandler: ProxyHandler = {
     if (host && host.includes('cloud.cerebras.ai')) {
       const reqCookies = ctx.clientToProxyRequest.headers.cookie;
       if (reqCookies && reqCookies.includes('authjs.session-token')) {
-        logger.debug('[Proxy] Captured Cerebras session-token cookie');
-        proxyEvents.emit('cerebras-cookies', reqCookies);
+        proxyEvents.emit(CEREBRAS_EVENTS.COOKIES, reqCookies);
       }
     }
     callback();
@@ -50,10 +52,7 @@ export const proxyHandler: ProxyHandler = {
       try {
         const json = JSON.parse(body);
         if (json?.user?.email) {
-          logger.info(
-            `[Proxy] Captured Cerebras user email: ${json.user.email}`,
-          );
-          proxyEvents.emit('cerebras-user-info', {
+          proxyEvents.emit(CEREBRAS_EVENTS.USER_INFO, {
             email: json.user.email,
             name: json.user.name,
             id: json.user.id,

@@ -19,12 +19,10 @@ import { Request, Response } from 'express';
 import { sendMessage as sendMessageService } from '../services/chat';
 import { recordRequest, recordError } from '../services/metrics.service';
 import { getAllProviders } from '../services/provider.service';
-
-// ── Repositories ──
-import { findAccountById } from '../repositories/account.repository';
-
-// ── Providers ──
-import { providerRegistry } from '../provider/registry';
+import {
+  getAccountById,
+  getProviderDefaultModel,
+} from '../services/account.service';
 
 // ── Utils ──
 import { createLogger } from '../utils/logger';
@@ -73,7 +71,6 @@ export const sendMessage = async (
         if (!parent_message_id) {
           // Auto-generate UUID v4 fallback conversationId for multi-turn tool executions to prevent session disconnect
           const fallbackConvId = crypto.randomUUID();
-          logger.info(`[Chat] Auto-assigned fallback conversationId: ${fallbackConvId}`);
           req.body.conversationId = fallbackConvId;
         }
       }
@@ -93,7 +90,7 @@ export const sendMessage = async (
       return;
     }
 
-    const account = findAccountById(accountId);
+    const account = getAccountById(accountId);
 
     if (!account) {
       res.status(404).json({
@@ -120,16 +117,9 @@ export const sendMessage = async (
     // Resolve "auto" model - use provider's default model
     let finalModel = modelId;
     if (modelId === 'auto') {
-      const provider = providerRegistry.getProvider(account.provider_id);
-      if (provider?.defaultModel) {
-        finalModel = provider.defaultModel;
-        logger.info(
-          `"auto" model resolved to ${finalModel} for provider ${account.provider_id}`,
-        );
-      } else {
-        logger.warn(
-          `"auto" model requested but no default model for ${account.provider_id}`,
-        );
+      const defaultModel = getProviderDefaultModel(account.provider_id);
+      if (defaultModel) {
+        finalModel = defaultModel;
       }
     }
 
@@ -275,14 +265,14 @@ export const sendMessage = async (
             : '';
 
           // Calculate tokens
-          const inputToken = messages ? countMessagesTokens(messages) : 0;
-          const outputToken = finalOutputMessage
-            ? countTokens(finalOutputMessage)
-            : 0;
+          // const inputToken = messages ? countMessagesTokens(messages) : 0;
+          // const outputToken = finalOutputMessage
+          //   ? countTokens(finalOutputMessage)
+          //   : 0;
 
-          logger.info(
-            `[Transaction Complete] provider_id=${account.provider_id} model_id=${model} account_id=${account.id} conversation_id=${conversationId || 'none'} input_token=${inputToken} output_token=${outputToken}`,
-          );
+          // logger.info(
+          //   `[Transaction Complete] provider_id=${account.provider_id} model_id=${model} account_id=${account.id} conversation_id=${conversationId || 'none'} input_token=${inputToken} output_token=${outputToken}`,
+          // );
 
           if (stream !== false) {
             if (!accumulatedResponse || accumulatedResponse.trim() === '') {

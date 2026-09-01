@@ -20,7 +20,7 @@
 import * as crypto from 'crypto';
 
 // ── Constants ──
-import { GEMINI_BL } from './gemini.constants';
+import { BASE_URL, GEMINI_BL } from './gemini.constants';
 
 // ─── Functions ──────────────────────────────────────────────────────────
 
@@ -28,7 +28,7 @@ export function makeSapisidHash(sapisid: string): string {
   const ts = Math.floor(Date.now() / 1000);
   const hash = crypto
     .createHash('sha1')
-    .update(`${ts} ${sapisid} https://gemini.google.com`)
+    .update(`${ts} ${sapisid} ${BASE_URL}`)
     .digest('hex');
   return `SAPISIDHASH ${ts}_${hash}`;
 }
@@ -84,7 +84,7 @@ export function getStreamGenerateUrl(authUser?: string): string {
   const reqid = Math.floor(Date.now() / 1000) % 1000000;
   const prefix = getAccountPrefix(authUser);
   return (
-    `https://gemini.google.com${prefix}/_/BardChatUi/data/` +
+    `${BASE_URL}${prefix}/_/BardChatUi/data/` +
     `assistant.lamda.BardFrontendService/StreamGenerate` +
     `?bl=${GEMINI_BL}&hl=en&_reqid=${reqid}&rt=c`
   );

@@ -51,19 +51,24 @@ const findBrowser = (): string | null => {
 
   for (const p of commonPaths) {
     if (fs.existsSync(p)) {
-      logger.info(`[BrowserInstanceManager] Found browser at: ${p}`);
       return p;
     }
   }
 
   try {
     const { execSync } = require('child_process');
-    let output = execSync('which firefox', { encoding: 'utf-8', stdio: 'pipe' });
+    let output = execSync('which firefox', {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+    });
     if (!output.trim()) {
       output = execSync('which chromium', { encoding: 'utf-8', stdio: 'pipe' });
     }
     if (!output.trim()) {
-      output = execSync('which google-chrome', { encoding: 'utf-8', stdio: 'pipe' });
+      output = execSync('which google-chrome', {
+        encoding: 'utf-8',
+        stdio: 'pipe',
+      });
     }
     if (output.trim()) return output.trim();
   } catch (e) {
@@ -75,19 +80,17 @@ const findBrowser = (): string | null => {
 
 // ─── Functions ──────────────────────────────────────────────────────────
 
-export const getBrowserStatus = async (userDataDir: string): Promise<{ isRunning: boolean }> => {
-  logger.info(`[BrowserInstanceManager] getBrowserStatus called for ${userDataDir}`);
-
+export const getBrowserStatus = async (
+  userDataDir: string,
+): Promise<{ isRunning: boolean }> => {
   const normalizedKey = userDataDir.replace(/\/$/, '');
   const process = runningBrowsers.get(normalizedKey);
 
   if (process && !process.killed) {
     try {
       process.kill(0);
-      logger.info(`[BrowserInstanceManager] Process ${process.pid} is running`);
       return { isRunning: true };
     } catch (e) {
-      logger.info(`[BrowserInstanceManager] Process ${process.pid} is dead, removing from Map`);
       runningBrowsers.delete(normalizedKey);
       return { isRunning: false };
     }
@@ -95,10 +98,8 @@ export const getBrowserStatus = async (userDataDir: string): Promise<{ isRunning
 
   for (const [key, proc] of runningBrowsers.entries()) {
     if (key.includes(userDataDir) || userDataDir.includes(key)) {
-      logger.info(`[BrowserInstanceManager] Found partial match: key="${key}" vs query="${userDataDir}"`);
       try {
         proc.kill(0);
-        logger.info(`[BrowserInstanceManager] Process ${proc.pid} is running (partial match)`);
         return { isRunning: true };
       } catch (e) {
         runningBrowsers.delete(key);
@@ -107,7 +108,6 @@ export const getBrowserStatus = async (userDataDir: string): Promise<{ isRunning
     }
   }
 
-  logger.info(`[BrowserInstanceManager] No process found for ${userDataDir}`);
   return { isRunning: false };
 };
 
@@ -119,17 +119,17 @@ export const startBrowserForAccount = async (
 ): Promise<{ pid: number; userDataDir: string }> => {
   const status = await getBrowserStatus(userDataDir);
   if (status.isRunning) {
-    logger.info(`[BrowserInstanceManager] Browser already running for ${userDataDir}`);
     return { pid: -1, userDataDir };
   }
 
   let browserPath = findBrowser();
   if (!browserPath) {
-    throw new Error('No browser found. Please install Firefox, Chromium, or Google Chrome.');
+    throw new Error(
+      'No browser found. Please install Firefox, Chromium, or Google Chrome.',
+    );
   }
 
   const isFirefox = browserPath.includes('firefox');
-  const isGoogleChrome = browserPath.includes('google-chrome') || browserPath.includes('Google Chrome');
 
   if (!fs.existsSync(userDataDir)) {
     fs.mkdirSync(userDataDir, { recursive: true });
@@ -148,20 +148,13 @@ export const startBrowserForAccount = async (
       if (!args.includes('--new-window')) {
         args.unshift('--new-window');
       }
-      logger.info(`[BrowserInstanceManager] Loading extension in Firefox from: ${extensionPath}`);
     } else {
-      logger.info(`[BrowserInstanceManager] Using Chrome/Chromium with manually installed extension.`);
-      logger.info(`[BrowserInstanceManager] Ensure extension is installed at: chrome://extensions (Developer mode -> Load unpacked) -> ${extensionPath}`);
     }
   } else {
     if (!isFirefox) {
       args.push('--disable-extensions');
     }
-    logger.info(`[BrowserInstanceManager] No extension provided, disabling all extensions`);
   }
-
-  logger.info(`[BrowserInstanceManager] Launching browser for ${providerId} with profile: ${userDataDir}`);
-  logger.info(`[BrowserInstanceManager] Browser args: ${args.join(' ')}`);
 
   const loggingArgs = [...args];
   if (!loggingArgs.includes('--enable-logging')) {
@@ -180,28 +173,28 @@ export const startBrowserForAccount = async (
 
   chromeProcess.stderr.on('data', (data) => {
     const output = data.toString();
-    if (output.includes('extension') || output.includes('Extension') ||
-      output.includes('manifest') || output.includes('CRX') ||
-      output.includes('Failed to load') || output.includes('error')) {
-      logger.info(`[BrowserInstanceManager] Chrome stderr: ${output.trim()}`);
-    } else if (process.env.DEBUG_CHROME === 'true') {
-      logger.debug(`[BrowserInstanceManager] Chrome stderr: ${output.trim()}`);
+    if (
+      output.includes('extension') ||
+      output.includes('Extension') ||
+      output.includes('manifest') ||
+      output.includes('CRX') ||
+      output.includes('Failed to load') ||
+      output.includes('error')
+    ) {
     }
   });
 
-  chromeProcess.stdout.on('data', (data) => {
-    if (process.env.DEBUG_CHROME === 'true') {
-      logger.debug(`[BrowserInstanceManager] Chrome stdout: ${data.toString().trim()}`);
-    }
-  });
+  chromeProcess.stdout.on('data', (data) => {});
 
   chromeProcess.on('exit', (code, signal) => {
-    logger.info(`[BrowserInstanceManager] Browser exited for ${userDataDir} with code: ${code}, signal: ${signal}`);
     runningBrowsers.delete(userDataDir);
   });
 
   chromeProcess.on('error', (err) => {
-    logger.error(`[BrowserInstanceManager] Browser error for ${userDataDir}:`, err);
+    logger.error(
+      `[BrowserInstanceManager] Browser error for ${userDataDir}:`,
+      err,
+    );
     runningBrowsers.delete(userDataDir);
   });
 
@@ -213,17 +206,27 @@ export const startBrowserForAccount = async (
 export const browserInstanceManager = {
   getProfilePath: (providerId: string, profileName: string): string => {
     const basePath = getUserDataPath();
-    const profilePath = path.join(basePath, 'profiles', providerId, profileName);
-    logger.info(`[BrowserInstanceManager] Profile path for ${providerId}/${profileName}: ${profilePath}`);
+    const profilePath = path.join(
+      basePath,
+      'profiles',
+      providerId,
+      profileName,
+    );
     return profilePath;
   },
 
-  createProfile: async (providerId: string, profileName: string, email?: string): Promise<{ id: string; userDataDir: string }> => {
-    const profilePath = browserInstanceManager.getProfilePath(providerId, profileName);
+  createProfile: async (
+    providerId: string,
+    profileName: string,
+    email?: string,
+  ): Promise<{ id: string; userDataDir: string }> => {
+    const profilePath = browserInstanceManager.getProfilePath(
+      providerId,
+      profileName,
+    );
 
     if (!fs.existsSync(profilePath)) {
       fs.mkdirSync(profilePath, { recursive: true });
-      logger.info(`[BrowserInstanceManager] Created profile directory: ${profilePath}`);
     }
 
     return {

@@ -29,40 +29,26 @@ import {
   getBrowserStatus,
   startBrowserForAccount,
 } from '../services/browser-instance-manager';
-
-// ── Repositories ──
 import {
-  findAccountById,
-  findAccountByEmailAndProvider,
-  findAccountByIdOrEmailProvider,
-  listAccounts,
-  insertAccount,
-  insertAccountsBatch,
-  updateAccountCredential,
-  updateAccountMemory as updateAccountMemoryRepo,
-  deleteAccount as deleteAccountRow,
-} from '../repositories/account.repository';
-import {
-  ensureProviderExists,
-  findProviderById,
-} from '../repositories/provider.repository';
-
-// ── Providers ──
-import { providerRegistry } from '../provider/registry';
+  getAccountById,
+  getAccountByEmailAndProvider,
+  getAccountByIdOrEmailProvider,
+  getAccounts as getAccountsService,
+  createAccount,
+  updateAccount,
+  updateMemoryState,
+  removeAccount,
+  importAccounts as importAccountsService,
+  getProviderConfig,
+  loginWithProvider,
+  type AccountInput,
+} from '../services/account.service';
 
 // ── Utils ──
 import { createLogger } from '../utils/logger';
 
 // ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('AccountController');
-
-// ─── Interfaces ─────────────────────────────────────────────────────────
-interface AccountInput {
-  id: string;
-  provider_id: string;
-  email: string;
-  credential: string;
-}
 
 // ─── Controller ─────────────────────────────────────────────────────────
 
@@ -97,64 +83,21 @@ export const importAccounts = async (
       return;
     }
 
-    const duplicates: AccountInput[] = [];
-    const toInsert: AccountInput[] = [];
+    try {
+      const result = importAccountsService(accounts);
 
-    for (const account of accounts) {
-      const existing = findAccountByEmailAndProvider(
-        account.email,
-        account.provider_id,
-      );
-      if (existing) {
-        duplicates.push(account);
-      } else {
-        toInsert.push(account);
-      }
-    }
-
-    if (toInsert.length > 0) {
-      try {
-        insertAccountsBatch(toInsert);
-
-        const providerIds = [...new Set(toInsert.map((a) => a.provider_id))];
-        for (const pid of providerIds) {
-          ensureProviderExists(pid.toLowerCase(), pid);
-        }
-
-        res.status(200).json({
-          success: true,
-          message: `Successfully imported ${toInsert.length} account(s)`,
-          data: {
-            imported: toInsert.length,
-            skipped: duplicates.length,
-            duplicates: duplicates.map((d) => ({
-              email: d.email,
-              provider_id: d.provider_id,
-            })),
-          },
-          meta: { timestamp: new Date().toISOString() },
-        });
-      } catch (err) {
-        logger.error('Error inserting accounts', err);
-        res.status(500).json({
-          success: false,
-          message: 'Failed to import accounts',
-          error: { code: 'DATABASE_ERROR' },
-          meta: { timestamp: new Date().toISOString() },
-        });
-      }
-    } else {
       res.status(200).json({
         success: true,
-        message: 'All accounts were duplicates',
-        data: {
-          imported: 0,
-          skipped: duplicates.length,
-          duplicates: duplicates.map((d) => ({
-            email: d.email,
-            provider_id: d.provider_id,
-          })),
-        },
+        message: `Successfully imported ${result.imported} account(s)`,
+        data: result,
+        meta: { timestamp: new Date().toISOString() },
+      });
+    } catch (err) {
+      logger.error('Error importing accounts', err);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to import accounts',
+        error: { code: 'DATABASE_ERROR' },
         meta: { timestamp: new Date().toISOString() },
       });
     }
@@ -176,7 +119,7 @@ export const getAccountMemory = async (
 ): Promise<void> => {
   try {
     const { id } = req.params;
-    const account = findAccountById(id);
+    const account = getAccountById(id);
 
     if (!account) {
       res.status(404).json({
@@ -226,7 +169,7 @@ export const updateAccountMemory = async (
       return;
     }
 
-    const account = findAccountById(id);
+    const account = getAccountById(id);
     if (!account) {
       res.status(404).json({
         success: false,
@@ -237,9 +180,7 @@ export const updateAccountMemory = async (
       return;
     }
 
-    updateAccountMemoryRepo(id, is_memory_enabled);
-
-    logger.info(`Memory state updated for account ${id}: ${is_memory_enabled}`);
+    updateMemoryState(id, is_memory_enabled);
 
     res.status(200).json({
       success: true,
@@ -291,7 +232,7 @@ export const addAccount = async (
       return;
     }
 
-    const existing = findAccountByIdOrEmailProvider(
+    const existing = getAccountByIdOrEmailProvider(
       account.id,
       account.email,
       account.provider_id,
@@ -299,7 +240,7 @@ export const addAccount = async (
 
     if (existing) {
       try {
-        updateAccountCredential(existing.id, account.credential);
+        updateAccount(existing.id, account.credential);
         res.status(200).json({
           success: true,
           message: 'Account credential updated successfully',
@@ -322,18 +263,8 @@ export const addAccount = async (
       return;
     }
 
-    const id = account.id || require('crypto').randomUUID();
     try {
-      insertAccount({
-        id,
-        provider_id: account.provider_id,
-        email: account.email,
-        credential: account.credential,
-      });
-      ensureProviderExists(
-        account.provider_id.toLowerCase(),
-        account.provider_id,
-      );
+      const id = createAccount(account);
 
       res.status(201).json({
         success: true,
@@ -379,7 +310,7 @@ export const getAccounts = async (
     const order =
       (req.query.order as string)?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
 
-    const { rows, total } = listAccounts({
+    const { rows, total } = getAccountsService({
       page,
       limit,
       email,
@@ -434,7 +365,7 @@ export const deleteAccount = async (
       return;
     }
 
-    const account = findAccountById(id);
+    const account = getAccountById(id);
     if (!account) {
       res.status(404).json({
         success: false,
@@ -446,11 +377,7 @@ export const deleteAccount = async (
     }
 
     try {
-      deleteAccountRow(id);
-      ensureProviderExists(
-        account.provider_id.toLowerCase(),
-        account.provider_id,
-      );
+      removeAccount(id, account.provider_id);
 
       res.status(200).json({
         success: true,
@@ -480,69 +407,50 @@ export const deleteAccount = async (
 
 // POST /v1/accounts/:provider/login
 export const login = async (req: Request, res: Response): Promise<void> => {
-  logger.info(`[Login] ========== LOGIN REQUEST RECEIVED ==========`);
-  logger.info(`[Login] Full URL: ${req.method} ${req.originalUrl}`);
-  logger.info(`[Login] Params: ${JSON.stringify(req.params)}`);
-  logger.info(`[Login] Body: ${JSON.stringify(req.body)}`);
-
   try {
     const { provider: providerId } = req.params;
     const { method } = req.body;
 
-    logger.info(`[Login] Provider ID from params: "${providerId}"`);
-    logger.info(`[Login] Method: ${method || 'basic'}`);
-
-    const provider = providerRegistry.getProvider(providerId);
-    logger.info(`[Login] Provider found: ${provider ? provider.name : 'null'}`);
-
-    if (!provider) {
-      logger.warn(`[Login] Provider not found: ${providerId}`);
-      res.status(404).json({ success: false, message: 'Provider not found' });
-      return;
-    }
-
-    logger.info(
-      `Browser login started — provider: ${providerId}, method: ${method || 'basic'}`,
-    );
-
-    if (!provider.login) {
-      logger.warn(`[Login] Provider ${providerId} has no login method`);
-      res.status(400).json({
-        success: false,
-        message: `Browser login not supported for ${providerId}`,
+    try {
+      const result = await loginWithProvider(providerId, {
+        method: method === 'google' ? 'google' : 'basic',
       });
+
+      const accountResponse: any = {
+        provider_id: providerId,
+        email: result.email || '',
+        credential: result.cookies,
+        headers: result.headers,
+      };
+
+      // Include pending info for browser providers
+      if (result.pending) {
+        accountResponse.pending = result.pending;
+        accountResponse.tempSessionId = result.tempSessionId;
+      }
+
+      res.status(200).json({
+        success: true,
+        account: accountResponse,
+      });
+    } catch (providerError: any) {
+      logger.warn(`[Login] Provider error: ${providerError.message}`);
+
+      if (providerError.message.includes('not found')) {
+        res.status(404).json({
+          success: false,
+          message: 'Provider not found',
+        });
+      } else if (providerError.message.includes('not support')) {
+        res.status(400).json({
+          success: false,
+          message: providerError.message,
+        });
+      } else {
+        throw providerError;
+      }
       return;
     }
-
-    logger.info(`[Login] Calling provider.login() for ${providerId}`);
-    const result = await provider.login({
-      method: method === 'google' ? 'google' : 'basic',
-    });
-
-    logger.info(
-      `[Login] Login successful, result keys: ${Object.keys(result).join(', ')}`,
-    );
-    logger.info(
-      `[Login] Email: ${(result as any).email}, Cookies length: ${(result as any).cookies?.length || 0}`,
-    );
-
-    const accountResponse: any = {
-      provider_id: providerId,
-      email: (result as any).email || '',
-      credential: (result as any).cookies,
-      headers: (result as any).headers,
-    };
-
-    // Include pending info for browser providers
-    if ((result as any).pending) {
-      accountResponse.pending = (result as any).pending;
-      accountResponse.tempSessionId = (result as any).tempSessionId;
-    }
-
-    res.status(200).json({
-      success: true,
-      account: accountResponse,
-    });
   } catch (error: any) {
     logger.error('[Login] Login failed with error:', error);
     logger.error(`[Login] Error message: ${error.message}`);
@@ -560,7 +468,7 @@ export const getAccountBrowserStatus = async (
 ): Promise<void> => {
   try {
     const { id } = req.params;
-    const account = findAccountById(id);
+    const account = getAccountById(id);
 
     if (!account) {
       res.status(404).json({ success: false, message: 'Account not found' });
@@ -608,7 +516,7 @@ export const startAccountBrowser = async (
 ): Promise<void> => {
   try {
     const { id } = req.params;
-    const account = findAccountById(id);
+    const account = getAccountById(id);
 
     if (!account) {
       res.status(404).json({ success: false, message: 'Account not found' });
@@ -625,7 +533,7 @@ export const startAccountBrowser = async (
     }
 
     // Get provider config to find extension folder
-    const provider = findProviderById(account.provider_id);
+    const provider = getProviderConfig(account.provider_id);
     let extensionPath: string | null = null;
 
     if (provider?.browser_extension_folder) {
@@ -633,11 +541,6 @@ export const startAccountBrowser = async (
         __dirname,
         '../../extensions',
         provider.browser_extension_folder,
-      );
-      logger.info(`[AccountController] Using extension from: ${extensionPath}`);
-    } else {
-      logger.info(
-        `[AccountController] No browser_extension_folder configured for ${account.provider_id}`,
       );
     }
 

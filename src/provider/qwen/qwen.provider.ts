@@ -40,17 +40,19 @@ import { StreamingThinkingParser } from '../../utils/thinking-parser';
 // ── Qwen Imports ──
 import { proxyHandler } from './qwen.proxy-handler';
 import type { QwenCredential } from './qwen.types';
+import { BASE_URL, QWEN_EVENTS, USER_AGENT } from './qwen.constant';
 
 // ─── Constants ──────────────────────────────────────────────────────────
-export const BASE_URL = 'https://chat.qwen.ai';
-
 const logger = createLogger('QwenProvider');
 
 // ─── Session Lock ──────────────────────────────────────────────────────
 
 const sessionLocks = new Map<string, Promise<void>>();
 
-function acquireLock(key: string): { promise: Promise<void>; release: () => void } {
+function acquireLock(key: string): {
+  promise: Promise<void>;
+  release: () => void;
+} {
   let release!: () => void;
   const next = new Promise<void>((resolve) => {
     release = resolve;
@@ -86,9 +88,7 @@ export class QwenProvider implements Provider {
           cookieValue: token ? `token=${token}` : '',
           bxUa: parsed.bxUa || '',
           bxUmidToken: parsed.bxUmidToken || '',
-          userAgent:
-            parsed.userAgent ||
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+          userAgent: parsed.userAgent || USER_AGENT,
         };
       } catch {
         // fall through
@@ -110,8 +110,7 @@ export class QwenProvider implements Provider {
       cookieValue,
       bxUa: '',
       bxUmidToken: '',
-      userAgent:
-        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+      userAgent: USER_AGENT,
     };
   }
 
@@ -150,8 +149,7 @@ export class QwenProvider implements Provider {
       : `token=${token}`;
 
     try {
-      logger.info('[Qwen] Attempting token refresh via /api/v1/auths/');
-      const response = await fetch('https://chat.qwen.ai/api/v1/auths/', {
+      const response = await fetch(`${BASE_URL}/api/v1/auths/`, {
         method: 'GET',
         headers: {
           Cookie: cookieValue,
@@ -160,8 +158,7 @@ export class QwenProvider implements Provider {
           'accept-language': 'en-US,en;q=0.9',
           source: 'web',
           version: '0.2.64',
-          'User-Agent':
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+          'User-Agent': USER_AGENT,
         },
       });
 
@@ -180,11 +177,8 @@ export class QwenProvider implements Provider {
       }
 
       if (newToken === token) {
-        logger.debug('[Qwen] Token refresh returned same token — still valid');
         return newToken;
       }
-
-      logger.info('[Qwen] Token refreshed successfully');
 
       const email: string | undefined = userData?.email;
       if (email) {
@@ -215,13 +209,6 @@ export class QwenProvider implements Provider {
     if (!token) return credential;
 
     if (!this.isTokenExpiringSoon(token)) return credential;
-
-    const exp = this.getTokenExpiry(token);
-    const daysLeft = exp ? Math.round((exp - Date.now() / 1000) / 86400) : null;
-    logger.info(
-      `[Qwen] Token expiring soon (${daysLeft !== null ? daysLeft + ' days left' : 'already expired'}), refreshing...`,
-    );
-
     const newToken = await this.refreshToken(credential);
     if (!newToken) {
       logger.warn('[Qwen] Refresh failed, proceeding with existing credential');
@@ -233,26 +220,23 @@ export class QwenProvider implements Provider {
   // ─── Login ──────────────────────────────────────────────────────────
 
   async login() {
-    logger.info('Starting Qwen login...');
-
     let capturedHeaders: Record<string, string> = {};
     const self = this;
 
     const onHeaders = (headers: Record<string, string>) => {
       capturedHeaders = { ...capturedHeaders, ...headers };
-      logger.debug('[Qwen] Captured headers:', headers);
     };
 
-    proxyEvents.on('qwen-headers', onHeaders);
+    proxyEvents.on(QWEN_EVENTS.HEADERS, onHeaders);
 
     try {
       return await loginService.login({
         providerId: 'qwen',
-        loginUrl: 'https://chat.qwen.ai/auth',
+        loginUrl: `${BASE_URL}/auth`,
         partition: `qwen-${Date.now()}`,
-        cookieEvent: 'qwen-login-token',
-        infoEvent: 'qwen-login-email',
-        extraEvents: ['qwen-headers', 'qwen-cookies'],
+        cookieEvent: QWEN_EVENTS.LOGIN_TOKEN,
+        infoEvent: QWEN_EVENTS.LOGIN_EMAIL,
+        extraEvents: [QWEN_EVENTS.HEADERS, QWEN_EVENTS.COOKIES],
         validate: async (data: {
           cookies: string;
           headers?: any;
@@ -265,7 +249,6 @@ export class QwenProvider implements Provider {
           if (!isRawToken) {
             const hasBxUa = capturedHeaders['bx-ua'];
             if (!hasBxUa) {
-              logger.debug('[Qwen] Waiting for bx-ua header...');
               return { isValid: false };
             }
 
@@ -295,7 +278,6 @@ export class QwenProvider implements Provider {
             !isFallback;
 
           if (isFallback || !isRealBxUa) {
-            logger.info('[Qwen] Detected fallback headers, triggering list chats...');
             try {
               await self.fetchListChats(data.cookies, capturedHeaders);
             } catch (e) {
@@ -304,9 +286,11 @@ export class QwenProvider implements Provider {
           }
 
           if (!email) {
-            logger.info('[Qwen] Email not captured directly, fetching profile...');
             try {
-              const profile = await this.getProfile(data.cookies, capturedHeaders);
+              const profile = await this.getProfile(
+                data.cookies,
+                capturedHeaders,
+              );
               if (profile.email) {
                 email = profile.email;
               }
@@ -330,7 +314,7 @@ export class QwenProvider implements Provider {
         },
       });
     } finally {
-      proxyEvents.off('qwen-headers', onHeaders);
+      proxyEvents.off(QWEN_EVENTS.HEADERS, onHeaders);
     }
   }
 
@@ -359,9 +343,7 @@ export class QwenProvider implements Provider {
 
       const headers: Record<string, string> = {
         Cookie: cookieValue,
-        'User-Agent':
-          headersRef['User-Agent'] ||
-          'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+        'User-Agent': headersRef['User-Agent'] || USER_AGENT,
         accept: 'application/json, text/plain, */*',
         'accept-language': 'en-US,en;q=0.9',
         source: 'web',
@@ -380,7 +362,6 @@ export class QwenProvider implements Provider {
       );
 
       if (response.ok) {
-        logger.info('[Qwen] List chats fetched successfully');
       } else {
         logger.warn(`[Qwen] Failed to fetch list chats: ${response.status}`);
       }
@@ -423,7 +404,7 @@ export class QwenProvider implements Provider {
         headers['x-csrf-token'] = extraHeaders['x-csrf-token'];
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const response = await fetch('https://chat.qwen.ai/api/v1/auths/', {
+      const response = await fetch(`${BASE_URL}/api/v1/auths/`, {
         headers,
       });
 
@@ -461,21 +442,24 @@ export class QwenProvider implements Provider {
       Cookie: cookieValue,
       source: 'web',
       version: '0.2.64',
-      'Referer': `${BASE_URL}/c/new-chat`,
-      'Origin': BASE_URL,
+      Referer: `${BASE_URL}/c/new-chat`,
+      Origin: BASE_URL,
       'X-Request-Id': crypto.randomUUID(),
-      'sec-ch-ua': '"Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"',
+      'sec-ch-ua':
+        '"Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"',
       'sec-ch-ua-mobile': '?0',
       'sec-ch-ua-platform': '"Linux"',
       'Accept-Language': 'en-US,en;q=0.9',
-      'Timezone': new Date().toDateString() + ' ' + new Date().toTimeString().split(' ')[0] + ' GMT+0700',
+      Timezone:
+        new Date().toDateString() +
+        ' ' +
+        new Date().toTimeString().split(' ')[0] +
+        ' GMT+0700',
       'bx-v': '2.5.36',
     };
     if (token) headers['Authorization'] = `Bearer ${token}`;
     if (bxUa) headers['bx-ua'] = bxUa;
     if (bxUmidToken) headers['bx-umidtoken'] = bxUmidToken;
-
-    logger.info(`[Qwen] Creating new chat via POST /api/v2/chats/new with model: ${model}`);
 
     const response = await fetch(`${BASE_URL}/api/v2/chats/new`, {
       method: 'POST',
@@ -504,7 +488,6 @@ export class QwenProvider implements Provider {
       throw new Error(`No chat_id in response: ${JSON.stringify(json)}`);
     }
 
-    logger.info(`[Qwen] Chat created successfully: ${chatId}`);
     return chatId;
   }
 
@@ -549,7 +532,8 @@ export class QwenProvider implements Provider {
   // ─── Handle Message ─────────────────────────────────────────────────
 
   async handleMessage(options: SendMessageOptions): Promise<void> {
-    const { messages, onContent, onThinking, onMetadata, onDone, onError } = options;
+    const { messages, onContent, onThinking, onMetadata, onDone, onError } =
+      options;
     const onSessionCreated = options.onSessionCreated;
     let { conversationId } = options;
 
@@ -576,7 +560,6 @@ export class QwenProvider implements Provider {
       const isNewChat = !conversationId;
 
       if (isNewChat) {
-        logger.info(`[Qwen] No conversationId provided, creating new chat first with model ${modelToUse}...`);
         conversationId = await this.createChat(
           credential,
           token,
@@ -603,7 +586,6 @@ export class QwenProvider implements Provider {
         const cached = lastParentIdCache.get(conversationId);
         if (cached) {
           parentId = cached;
-          logger.debug(`[Qwen] Using cached parentId for ${conversationId}: ${parentId}`);
         } else {
           try {
             parentId = await this.getLastMessageId(
@@ -614,7 +596,6 @@ export class QwenProvider implements Provider {
               bxUmidToken,
               userAgent,
             );
-            logger.debug(`[Qwen] Fetched parentId from API for ${conversationId}: ${parentId}`);
           } catch (e) {
             logger.warn('[Qwen] Failed to fetch last message ID');
           }
@@ -679,17 +660,25 @@ export class QwenProvider implements Provider {
         ? `${BASE_URL}/api/v2/chat/completions?chat_id=${conversationId}`
         : `${BASE_URL}/api/v2/chat/completions`;
 
-      const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
 
       const actualStatusCode = response.headers.get('x-actual-status-code');
       if (actualStatusCode && actualStatusCode !== '200') {
         const errText = await response.text();
-        throw new Error(`Qwen API Error ${actualStatusCode}: ${errText.slice(0, 500)}`);
+        throw new Error(
+          `Qwen API Error ${actualStatusCode}: ${errText.slice(0, 500)}`,
+        );
       }
 
       if (!response.ok) {
         const errText = await response.text();
-        throw new Error(`Qwen API Error ${response.status}: ${errText.slice(0, 500)}`);
+        throw new Error(
+          `Qwen API Error ${response.status}: ${errText.slice(0, 500)}`,
+        );
       }
 
       if (!response.body) throw new Error('No response body');
@@ -734,22 +723,27 @@ export class QwenProvider implements Provider {
             }
 
             if (responseCreated) {
-              if (isNewChat && !conversationIdCaptured && responseCreated.chat_id) {
+              if (
+                isNewChat &&
+                !conversationIdCaptured &&
+                responseCreated.chat_id
+              ) {
                 conversationIdCaptured = true;
-                logger.info(`[Qwen] New conversation created with ID: ${responseCreated.chat_id}`);
                 if (onSessionCreated) onSessionCreated(responseCreated.chat_id);
-                if (onMetadata) onMetadata({ conversation_id: responseCreated.chat_id });
+                if (onMetadata)
+                  onMetadata({ conversation_id: responseCreated.chat_id });
               }
 
               if (!parentIdCaptured && responseCreated.response_id) {
                 parentIdCaptured = true;
                 capturedParentId = responseCreated.response_id;
-                logger.info(`[Qwen] Captured response_id (to use as parent_message_id): ${capturedParentId}`);
-                const chatIdForCache = responseCreated.chat_id || conversationId;
+                const chatIdForCache =
+                  responseCreated.chat_id || conversationId;
                 if (chatIdForCache && capturedParentId) {
                   lastParentIdCache.set(chatIdForCache, capturedParentId);
                 }
-                if (onMetadata) onMetadata({ parent_message_id: capturedParentId });
+                if (onMetadata)
+                  onMetadata({ parent_message_id: capturedParentId });
               }
             }
 
@@ -820,7 +814,6 @@ export class QwenProvider implements Provider {
           const items =
             json?.data || json?.models || (Array.isArray(json) ? json : null);
           if (items && Array.isArray(items) && items.length > 0) {
-            logger.info(`[Qwen] Fetched ${items.length} live models from ${ep}`);
             return items.map((model: any) => ({
               id: model.id || model.model_id,
               name: model.name || model.label || model.id,

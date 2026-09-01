@@ -250,6 +250,24 @@ export const updateAccountLastUsed = (id: string): void => {
   db.prepare('UPDATE accounts SET last_refreshed_at = ? WHERE id = ?').run(Date.now(), id);
 };
 
+export const updateAccountUsage = (
+  id: string,
+  usage: string,
+  resetPeriod: string,
+): void => {
+  const db = getDb();
+  db.prepare('UPDATE accounts SET usage = ?, reset_period = ? WHERE id = ?').run(
+    usage,
+    resetPeriod,
+    id,
+  );
+};
+
+export const findAllAccounts = (): AccountRow[] => {
+  const db = getDb();
+  return db.prepare('SELECT * FROM accounts').all() as AccountRow[];
+};
+
 // ─── Delete ────────────────────────────────────────────────────────────
 
 export const deleteAccount = (id: string): void => {

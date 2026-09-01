@@ -110,7 +110,6 @@ function migrateAccounts(db: Database.Database): void {
         db.exec(
           'ALTER TABLE accounts ADD COLUMN is_memory_enabled INTEGER DEFAULT 0',
         );
-        logger.info('Added is_memory_enabled column to accounts table');
       } catch (e) {
         logger.warn('Failed to add is_memory_enabled to accounts', e);
       }
@@ -162,7 +161,6 @@ function migrateProviders(db: Database.Database): void {
     if (!providerCols.includes('platform')) {
       try {
         db.exec("ALTER TABLE providers ADD COLUMN platform TEXT DEFAULT 'web'");
-        logger.info('Added platform column to providers table');
       } catch (e) {
         logger.warn('Failed to add platform column to providers', e);
       }
@@ -172,7 +170,6 @@ function migrateProviders(db: Database.Database): void {
         db.exec(
           "ALTER TABLE providers ADD COLUMN connection_type TEXT DEFAULT 'https'",
         );
-        logger.info('Added connection_type column to providers table');
       } catch (e) {
         logger.warn('Failed to add connection_type to providers', e);
       }
@@ -182,7 +179,6 @@ function migrateProviders(db: Database.Database): void {
         db.exec(
           'ALTER TABLE providers ADD COLUMN is_enabled INTEGER DEFAULT 1',
         );
-        logger.info('Added is_enabled column to providers table');
       } catch (e) {
         logger.warn('Failed to add is_enabled to providers', e);
       }
@@ -194,7 +190,6 @@ function migrateProviders(db: Database.Database): void {
     ) {
       try {
         db.exec('ALTER TABLE providers RENAME COLUMN website TO website_url');
-        logger.info('Renamed website to website_url in providers table');
       } catch (e) {
         logger.warn('Failed to rename website to website_url in providers', e);
       }
@@ -205,7 +200,6 @@ function migrateProviders(db: Database.Database): void {
     ) {
       try {
         db.exec('ALTER TABLE providers ADD COLUMN website_url TEXT');
-        logger.info('Added website_url column to providers table');
       } catch (e) {
         logger.warn('Failed to add website_url to providers', e);
       }
@@ -213,7 +207,6 @@ function migrateProviders(db: Database.Database): void {
     if (!providerCols.includes('auth_method')) {
       try {
         db.exec('ALTER TABLE providers ADD COLUMN auth_method TEXT');
-        logger.info('Added auth_method column to providers table');
       } catch (e) {
         logger.warn('Failed to add auth_method to providers', e);
       }
@@ -223,7 +216,6 @@ function migrateProviders(db: Database.Database): void {
         db.exec(
           'ALTER TABLE providers ADD COLUMN is_pausable INTEGER DEFAULT 0',
         );
-        logger.info('Added is_pausable column to providers table');
       } catch (e) {
         logger.warn('Failed to add is_pausable to providers', e);
       }
@@ -231,7 +223,6 @@ function migrateProviders(db: Database.Database): void {
     if (!providerCols.includes('is_memory')) {
       try {
         db.exec('ALTER TABLE providers ADD COLUMN is_memory INTEGER DEFAULT 0');
-        logger.info('Added is_memory column to providers table');
       } catch (e) {
         logger.warn('Failed to add is_memory to providers', e);
       }
@@ -242,7 +233,6 @@ function migrateProviders(db: Database.Database): void {
         db.exec(
           'ALTER TABLE providers ADD COLUMN browser_extension_folder TEXT',
         );
-        logger.info('Added browser_extension_folder column to providers table');
       } catch (e) {
         logger.warn('Failed to add browser_extension_folder to providers', e);
       }
@@ -286,9 +276,6 @@ function migrateModels(db: Database.Database): void {
         db.exec(
           'ALTER TABLE models RENAME COLUMN context_length TO max_context_length',
         );
-        logger.info(
-          'Renamed context_length to max_context_length in models table',
-        );
       } catch (e) {
         logger.warn(
           'Failed to rename context_length to max_context_length in models',
@@ -302,7 +289,6 @@ function migrateModels(db: Database.Database): void {
     ) {
       try {
         db.exec('ALTER TABLE models ADD COLUMN max_context_length INTEGER');
-        logger.info('Added max_context_length column to models table');
       } catch (e) {
         logger.warn('Failed to add max_context_length to models', e);
       }
@@ -317,7 +303,6 @@ function migrateModels(db: Database.Database): void {
         db.exec(
           'ALTER TABLE models RENAME COLUMN is_upload TO is_image_upload',
         );
-        logger.info('Renamed is_upload to is_image_upload in models table');
       } catch (e) {
         logger.warn(
           'Failed to rename is_upload to is_image_upload in models',
@@ -333,7 +318,6 @@ function migrateModels(db: Database.Database): void {
         db.exec(
           'ALTER TABLE models ADD COLUMN is_image_upload INTEGER DEFAULT 0',
         );
-        logger.info('Added is_image_upload column to models table');
       } catch (e) {
         logger.warn('Failed to add is_image_upload to models', e);
       }
@@ -345,7 +329,6 @@ function migrateModels(db: Database.Database): void {
         db.exec(
           'ALTER TABLE models ADD COLUMN is_video_upload INTEGER DEFAULT 0',
         );
-        logger.info('Added is_video_upload column to models table');
       } catch (e) {
         logger.warn('Failed to add is_video_upload to models', e);
       }
@@ -355,7 +338,6 @@ function migrateModels(db: Database.Database): void {
     if (!modelCols.includes('success_rate')) {
       try {
         db.exec('ALTER TABLE models ADD COLUMN success_rate REAL DEFAULT NULL');
-        logger.info('Added success_rate column to models table');
       } catch (e) {
         logger.warn('Failed to add success_rate column to models', e);
       }
@@ -365,7 +347,6 @@ function migrateModels(db: Database.Database): void {
     if (!modelCols.includes('description')) {
       try {
         db.exec('ALTER TABLE models ADD COLUMN description TEXT');
-        logger.info('Added description column to models table');
       } catch (e) {
         logger.warn('Failed to add description column to models', e);
       }
@@ -398,7 +379,6 @@ function migrateMetrics(db: Database.Database): void {
     if (!metricsCols.includes('status')) {
       try {
         db.exec("ALTER TABLE metrics ADD COLUMN status TEXT DEFAULT 'success'");
-        logger.info('Added status column to metrics table');
       } catch (e) {
         logger.warn('Failed to add status column to metrics', e);
       }
@@ -430,18 +410,13 @@ function migrateBrowserSessions(db: Database.Database): void {
     );
     if (!accountCols.includes('user_data_dir')) {
       db.exec('ALTER TABLE accounts ADD COLUMN user_data_dir TEXT');
-      logger.info('Added user_data_dir column to accounts table');
     }
 
-    // Make credential nullable for browser-based accounts
-    // SQLite doesn't support ALTER COLUMN directly, need to recreate table or just allow NULL
-    // We'll just update the column to allow NULL by creating a new table and copying data
     const hasCredentialNotNull = (
       db.pragma('table_info(accounts)') as any[]
     ).find((c) => c.name === 'credential' && c.notnull === 1);
 
     if (hasCredentialNotNull) {
-      logger.info('Recreating accounts table to make credential nullable...');
       // Backup existing data
       interface AccountRow {
         id: string;
@@ -495,8 +470,6 @@ function migrateBrowserSessions(db: Database.Database): void {
           row.user_data_dir,
         );
       }
-
-      logger.info('Accounts table recreated with nullable credential');
     }
 
     // Drop old browser_sessions table

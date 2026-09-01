@@ -47,3 +47,14 @@ export const MODEL_MAP: Record<
   },
   'gemini-flash-lite': { mode: 6, think: 4, desc: 'Lightweight fast model' },
 };
+
+export const USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36';
+
+export const GEMINI_EVENTS = {
+  COOKIES: 'gemini-cookies',
+  EMAIL: 'gemini-email',
+  SAPISID: 'gemini-sapisid',
+  AUTH_USER: 'gemini-auth-user',
+  XSRF: 'gemini-xsrf',
+} as const;

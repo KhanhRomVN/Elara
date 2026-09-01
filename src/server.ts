@@ -84,20 +84,15 @@ export const startServer = async (): Promise<{
                 `Port ${config.port} is already in use. Do you want to kill the process using this port?`,
               );
               shouldKill = answer === true;
-            } else {
-              logger.info('Non-interactive mode - skipping port kill prompt');
             }
 
             if (shouldKill) {
-              logger.info(`Attempting to kill process on port ${config.port}...`);
               const killed = await killProcessOnPort(config.port);
 
               if (killed) {
-                logger.info(`Process on port ${config.port} killed. Retrying...`);
                 server?.close(() => {
                   const newServer = http.createServer(app);
                   newServer.listen(config.port, config.host, () => {
-                    logger.info(`Listening on ${config.host}:${config.port} (after killing port)`);
                     server = newServer;
                     resolve({
                       success: true,
@@ -159,7 +154,6 @@ export const stopServer = (): Promise<{
 
   return new Promise((resolve) => {
     server?.close(() => {
-      logger.info('Server stopped');
       server = null;
       resolve({ success: true });
     });

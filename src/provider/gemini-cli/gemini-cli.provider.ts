@@ -38,11 +38,19 @@ import { createLogger } from '../../utils/logger';
 
 // ── Gemini CLI Imports ──
 import { proxyHandler } from './gemini-cli.proxy-handler';
+import {
+  GEMINI_CLI_EVENTS,
+  CLOUDCODE_LOAD_CODE_ASSIST_URL,
+  CLOUDCODE_STREAM_GENERATE_URL,
+  CLOUDCODE_RETRIEVE_QUOTA_URL,
+  USER_AGENT,
+  X_GOOG_API_CLIENT,
+  CLIENT_METADATA,
+  DEFAULT_PROJECT_ID,
+} from './gemini-cli.constant';
 
 // ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('GeminiCLIProvider');
-
-const CLIENT_METADATA = { ideType: 9, platform: 3, pluginType: 2 };
 
 export const GEMINI_CONFIG = {
   clientId: process.env.GEMINI_CLIENT_ID || '',
@@ -66,7 +74,6 @@ export class GeminiCLIProvider implements Provider {
   // ─── Login ──────────────────────────────────────────────────────────
 
   async login() {
-    logger.info('Starting Gemini CLI login with terminal...');
     const tempHome = path.join(os.tmpdir(), `gemini-login-fresh-${Date.now()}`);
     fs.mkdirSync(tempHome, { recursive: true });
 
@@ -76,8 +83,13 @@ export class GeminiCLIProvider implements Provider {
     const logFile = path.join(tempHome, 'gemini-cli.log');
 
     const terminals = [
-      'gnome-terminal', 'konsole', 'xfce4-terminal', 'kitty',
-      'alacritty', 'xterm', 'x-terminal-emulator',
+      'gnome-terminal',
+      'konsole',
+      'xfce4-terminal',
+      'kitty',
+      'alacritty',
+      'xterm',
+      'x-terminal-emulator',
     ];
     let terminal = '';
     for (const t of terminals) {
@@ -105,16 +117,25 @@ export class GeminiCLIProvider implements Provider {
     if (terminal === 'gnome-terminal') {
       terminalSpawn = spawn(
         terminal,
-        ['--', 'bash', '-c', `${commandStr}; echo ''; echo 'Press enter to close...'; read`],
+        [
+          '--',
+          'bash',
+          '-c',
+          `${commandStr}; echo ''; echo 'Press enter to close...'; read`,
+        ],
         { detached: true, env, stdio: 'ignore' },
       );
     } else if (terminal) {
       terminalSpawn = spawn(terminal, ['-e', `bash -c "${commandStr}; read"`], {
-        detached: true, env, stdio: 'ignore',
+        detached: true,
+        env,
+        stdio: 'ignore',
       });
     } else {
       terminalSpawn = spawn('bash', ['-c', commandStr], {
-        env, detached: true, stdio: 'ignore',
+        env,
+        detached: true,
+        stdio: 'ignore',
       });
     }
 
@@ -136,7 +157,10 @@ export class GeminiCLIProvider implements Provider {
                 loginUrl: capturedUrl,
                 partition: `gemini-cli-${Date.now()}`,
                 skipProxy: true,
-                extraEvents: ['gemini-cli-tokens', 'gemini-cli-user-info'],
+                extraEvents: [
+                  GEMINI_CLI_EVENTS.TOKENS,
+                  GEMINI_CLI_EVENTS.USER_INFO,
+                ],
                 validate: async (captured) => {
                   if (captured.cookies || captured.headers) {
                     try {
@@ -212,20 +236,16 @@ export class GeminiCLIProvider implements Provider {
   // ─── Fetch Project ID ──────────────────────────────────────────────
 
   async fetchProjectId(accessToken: string): Promise<string> {
-    const response = await fetch(
-      'https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-          'User-Agent':
-            'GeminiCLI/0.29.7/gemini-3-pro-preview (linux; x64) google-api-nodejs-client/9.15.1',
-          'X-Goog-Api-Client': 'gl-node/22.21.1',
-        },
-        body: JSON.stringify({ metadata: CLIENT_METADATA, mode: 1 }),
+    const response = await fetch(CLOUDCODE_LOAD_CODE_ASSIST_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'User-Agent': USER_AGENT,
+        'X-Goog-Api-Client': X_GOOG_API_CLIENT,
       },
-    );
+      body: JSON.stringify({ metadata: CLIENT_METADATA, mode: 1 }),
+    });
     if (!response.ok) return '';
     const data = await response.json();
     if (data.cloudaicompanionProject) {
@@ -240,8 +260,14 @@ export class GeminiCLIProvider implements Provider {
 
   async handleMessage(options: SendMessageOptions): Promise<void> {
     const {
-      credential, messages, model, stream,
-      onContent, onDone, onError, accountId,
+      credential,
+      messages,
+      model,
+      stream,
+      onContent,
+      onDone,
+      onError,
+      accountId,
     } = options;
 
     let tokens: any;
@@ -257,15 +283,14 @@ export class GeminiCLIProvider implements Provider {
       } catch (e) {}
     }
 
-    const url =
-      'https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse';
+    const url = CLOUDCODE_STREAM_GENERATE_URL;
 
     const sendRequest = async (token: string, projectId?: string) => {
       const sessionId = Math.random().toString(36).substring(2, 15);
       const userPromptId = `${sessionId}########1`;
       const body: any = {
         model: model || this.defaultModel,
-        project: projectId || 'reference-courage-zzsgc',
+        project: projectId || DEFAULT_PROJECT_ID,
         user_prompt_id: userPromptId,
         request: {
           contents: messages.map((m) => ({
@@ -280,9 +305,8 @@ export class GeminiCLIProvider implements Provider {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
-          'User-Agent':
-            'GeminiCLI/0.29.7/gemini-3-pro-preview (linux; x64) google-api-nodejs-client/9.15.1',
-          'X-Goog-Api-Client': 'gl-node/22.21.1',
+          'User-Agent': USER_AGENT,
+          'X-Goog-Api-Client': X_GOOG_API_CLIENT,
         },
         body: JSON.stringify(body),
       });
@@ -304,7 +328,8 @@ export class GeminiCLIProvider implements Provider {
             try {
               const db = getDb();
               db.prepare('UPDATE accounts SET credential = ? WHERE id = ?').run(
-                JSON.stringify(tokens), accountId,
+                JSON.stringify(tokens),
+                accountId,
               );
             } catch (dbError) {}
           }
@@ -313,7 +338,9 @@ export class GeminiCLIProvider implements Provider {
       }
 
       if (!response.ok)
-        throw new Error(`Gemini CLI API Error ${response.status}: ${await response.text()}`);
+        throw new Error(
+          `Gemini CLI API Error ${response.status}: ${await response.text()}`,
+        );
 
       if (stream !== false) {
         if (!response.body) throw new Error('No response body');
@@ -326,11 +353,15 @@ export class GeminiCLIProvider implements Provider {
             const trimmed = line.trim();
             if (!trimmed || !trimmed.startsWith('data: ')) continue;
             const jsonStr = trimmed.slice(6).trim();
-            if (jsonStr === '[DONE]') { onDone(); return; }
+            if (jsonStr === '[DONE]') {
+              onDone();
+              return;
+            }
             try {
               const json = JSON.parse(jsonStr);
               const responseObj = json.response || json;
-              const content = responseObj.candidates?.[0]?.content?.parts?.[0]?.text;
+              const content =
+                responseObj.candidates?.[0]?.content?.parts?.[0]?.text;
               if (content) onContent(content);
             } catch (e) {}
           }
@@ -339,7 +370,8 @@ export class GeminiCLIProvider implements Provider {
       } else {
         const json = await response.json();
         const responseObj = json.response || json;
-        const content = responseObj.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const content =
+          responseObj.candidates?.[0]?.content?.parts?.[0]?.text || '';
         onContent(content);
         onDone();
       }
@@ -364,23 +396,20 @@ export class GeminiCLIProvider implements Provider {
       tokens = { accessToken: credential };
     }
     if (!tokens.accessToken) return [];
-    let projectId = tokens.projectId || (await this.fetchProjectId(tokens.accessToken));
-    if (!projectId) projectId = 'reference-courage-zzsgc';
+    let projectId =
+      tokens.projectId || (await this.fetchProjectId(tokens.accessToken));
+    if (!projectId) projectId = DEFAULT_PROJECT_ID;
 
-    const response = await fetch(
-      'https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${tokens.accessToken}`,
-          'Content-Type': 'application/json',
-          'User-Agent':
-            'GeminiCLI/0.29.7/gemini-3-pro-preview (linux; x64) google-api-nodejs-client/9.15.1',
-          'X-Goog-Api-Client': 'gl-node/22.21.1',
-        },
-        body: JSON.stringify({ project: projectId }),
+    const response = await fetch(CLOUDCODE_RETRIEVE_QUOTA_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${tokens.accessToken}`,
+        'Content-Type': 'application/json',
+        'User-Agent': USER_AGENT,
+        'X-Goog-Api-Client': X_GOOG_API_CLIENT,
       },
-    );
+      body: JSON.stringify({ project: projectId }),
+    });
     if (!response.ok) return [];
     const data = await response.json();
     if (!data.buckets) return [];

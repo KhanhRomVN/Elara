@@ -49,7 +49,6 @@ export async function parseSSEStream(
       if (!trimmedLine) continue;
 
       if (trimmedLine === 'data: [DONE]') {
-        logger.debug('[CerebrasCloud] Stream complete [DONE]');
         return;
       }
 
@@ -93,11 +92,7 @@ export async function parseSSEStream(
         if (finishReason && onMetadata) {
           onMetadata({ finish_reason: finishReason });
         }
-      } catch (_e) {
-        // Bỏ qua các dòng JSON không hợp lệ
-      }
+      } catch (_e) {}
     }
   }
-
-  logger.debug('[CerebrasCloud] Stream ended naturally');
 }

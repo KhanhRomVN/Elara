@@ -18,12 +18,10 @@
  */
 
 // ─── Imports ────────────────────────────────────────────────────────────
-// ── Database ──
-import { getDb } from '../database';
-
 // ── Repositories ──
 import {
   insertMetric,
+  calculateModelSuccessRate,
   queryUsageHistory,
   queryAccountStatsByPeriod,
   queryModelStatsByPeriod,
@@ -94,17 +92,7 @@ export function recordMetric(
 function updateModelSuccessRateAsync(providerId: string, modelId: string): void {
   setImmediate(() => {
     try {
-      const db = getDb();
-      const result = db.prepare(`
-        SELECT ROUND(
-          SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 
-          2
-        ) as success_rate
-        FROM metrics 
-        WHERE provider_id = ? AND model_id = ?
-      `).get(providerId, modelId);
-
-      const successRate = (result as any)?.success_rate ?? null;
+      const successRate = calculateModelSuccessRate(providerId, modelId);
       updateModelSuccessRate(providerId, modelId, successRate);
 
       const { invalidateProviderCache } = require('./provider.service');
@@ -134,7 +122,7 @@ export function recordChatMetrics(
   );
 
   if (accountId) {
-    const { accountRefreshService } = require('./account-refresh.service');
+    const { accountRefreshService } = require('./account.service');
     accountRefreshService.refreshUsage(accountId).catch((err: any) => {
       logger.warn(`Failed to refresh usage for account ${accountId}: ${err.message}`);
     });

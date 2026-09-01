@@ -25,7 +25,10 @@ import {
   updateAccountCredential,
   updateAccountUserDataDir,
 } from '../repositories/account.repository';
-import { ensureProviderExists, findProviderById } from '../repositories/provider.repository';
+import {
+  ensureProviderExists,
+  findProviderById,
+} from '../repositories/provider.repository';
 
 // ── Services ──
 import { browserInstanceManager } from './browser-instance-manager';
@@ -64,18 +67,15 @@ export const loginViaCDP = async (
   loginUrl: string,
   profileName?: string,
 ): Promise<{ pending: boolean; tempSessionId: string }> => {
-  logger.info(
-    `[BrowserSession] Starting browser session for ${providerId} at ${loginUrl}`,
-  );
-
   const provider = findProviderById(providerId);
   let extensionPath: string | null = null;
 
   if (provider?.browser_extension_folder) {
-    extensionPath = path.join(__dirname, '../../extensions', provider.browser_extension_folder);
-    logger.info(`[BrowserSession] Using extension from: ${extensionPath}`);
-  } else {
-    logger.info(`[BrowserSession] No browser_extension_folder configured for ${providerId}`);
+    extensionPath = path.join(
+      __dirname,
+      '../../extensions',
+      provider.browser_extension_folder,
+    );
   }
 
   const tempSessionId = uuidv4();
@@ -86,36 +86,39 @@ export const loginViaCDP = async (
 
   const cdpService = createCDPService(`${providerId}-${tempSessionId}`);
 
-  const launched = await cdpService.launchBrowser(loginUrl, tempDir, extensionPath || undefined);
+  const launched = await cdpService.launchBrowser(
+    loginUrl,
+    tempDir,
+    extensionPath || undefined,
+  );
   if (!launched) {
     throw new Error('Failed to launch browser');
   }
 
-  logger.info(`[BrowserSession] Browser launched for ${providerId}, temp dir: ${tempDir}`);
+  return new Promise<{ pending: boolean; tempSessionId: string }>(
+    (resolve, reject) => {
+      const timeout = setTimeout(() => {
+        if (pendingSessions.has(tempSessionId)) {
+          pendingSessions.delete(tempSessionId);
+          cdpService.close().catch(() => {});
+          reject(new Error('Browser session timeout'));
+        }
+      }, 600000);
 
-  return new Promise<{ pending: boolean; tempSessionId: string }>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      if (pendingSessions.has(tempSessionId)) {
-        pendingSessions.delete(tempSessionId);
-        cdpService.close().catch(() => {});
-        reject(new Error('Browser session timeout'));
-      }
-    }, 600000);
+      pendingSessions.set(tempSessionId, {
+        tempDir,
+        providerId,
+        resolve: (value: any) => resolve(value),
+        reject,
+        timeout,
+      });
 
-    pendingSessions.set(tempSessionId, {
-      tempDir,
-      providerId,
-      resolve: (value: any) => resolve(value),
-      reject,
-      timeout,
-    });
-
-    cdpService.on('browser-exit', () => {
-      logger.info(`[BrowserSession] Browser closed for ${providerId}, returning pending info`);
-      clearTimeout(timeout);
-      resolve({ pending: true, tempSessionId });
-    });
-  });
+      cdpService.on('browser-exit', () => {
+        clearTimeout(timeout);
+        resolve({ pending: true, tempSessionId });
+      });
+    },
+  );
 };
 
 // ─── Complete Session ──────────────────────────────────────────────────
@@ -145,7 +148,6 @@ export const completePendingSession = async (
 
   if (fs.existsSync(pending.tempDir)) {
     fs.renameSync(pending.tempDir, finalUserDataDir);
-    logger.info(`[BrowserSession] Moved temp profile to: ${finalUserDataDir}`);
   }
 
   const accountId = uuidv4();

@@ -60,20 +60,17 @@ export class ZaiBrowserProvider implements Provider {
 
     const anyConnectedSession = wsServer.getAnyConnectedContentSession();
     if (anyConnectedSession && anyConnectedSession !== sessionId) {
-      logger.info(`[ZaiBrowser] Found active connection with session ${anyConnectedSession}, remapping to ${sessionId}`);
       wsServer.updateSessionId(anyConnectedSession, sessionId);
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       wsServer.setAccountId(sessionId, sessionId);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       if (wsServer.isConnected(sessionId)) {
-        logger.info(`[ZaiBrowser] Successfully remapped session to ${sessionId}`);
         return wsServer;
       }
     }
 
-    logger.info('[ZaiBrowser] Waiting for extension to connect...');
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
         wsServer.off('connected', onConnected);
@@ -112,7 +109,8 @@ export class ZaiBrowserProvider implements Provider {
         is_search: true,
         is_image_upload: false,
         is_video_upload: false,
-        description: 'Z.AI GLM-5.1 - Advanced language model with thinking mode and web search',
+        description:
+          'Z.AI GLM-5.1 - Advanced language model with thinking mode and web search',
       },
       {
         id: 'GLM-5',
@@ -122,7 +120,8 @@ export class ZaiBrowserProvider implements Provider {
         is_search: true,
         is_image_upload: false,
         is_video_upload: false,
-        description: 'Z.AI GLM-5 - Fast and efficient model with thinking capabilities',
+        description:
+          'Z.AI GLM-5 - Fast and efficient model with thinking capabilities',
       },
     ];
   }
@@ -186,9 +185,6 @@ export class ZaiBrowserProvider implements Provider {
       );
       if (userContentMatch && userContentMatch[1]) {
         prompt = userContentMatch[1].trim();
-        logger.debug(
-          `[ZaiBrowser] Stripped system prompt, sending only user content (${prompt.length} chars)`,
-        );
       }
     }
 
@@ -222,11 +218,7 @@ export class ZaiBrowserProvider implements Provider {
         onError: (err: Error) => {
           onError(err);
         },
-        onUsage: (usage: any) => {
-          logger.info(
-            `[ZaiBrowser] Usage: prompt=${usage.prompt_tokens}, completion=${usage.completion_tokens}, total=${usage.total_tokens}`,
-          );
-        },
+        onUsage: () => {},
       });
     } catch (err: any) {
       logger.error('[ZaiBrowser] Error sending message:', err);
@@ -249,8 +241,6 @@ export class ZaiBrowserProvider implements Provider {
     tempSessionId?: string;
   }> {
     const loginUrl = 'https://chat.z.ai/';
-    logger.info(`[ZaiBrowser] Starting login via CDP at ${loginUrl}`);
-
     try {
       const result = await loginViaCDP('zai-browser', loginUrl, 'zai-default');
 
@@ -284,9 +274,7 @@ export class ZaiBrowserProvider implements Provider {
 
   // ─── Disconnect ─────────────────────────────────────────────────────
 
-  async disconnect(): Promise<void> {
-    logger.info('[ZaiBrowser] Disconnect called (no-op for shared WebSocket)');
-  }
+  async disconnect(): Promise<void> {}
 }
 
 export default new ZaiBrowserProvider();

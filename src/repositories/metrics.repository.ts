@@ -124,3 +124,22 @@ export const queryModelStatsByPeriod = (
     )
     .all(startTime, endTime);
 };
+
+export const calculateModelSuccessRate = (
+  providerId: string,
+  modelId: string,
+): number | null => {
+  const db = getDb();
+  const result = db
+    .prepare(
+      `SELECT ROUND(
+        SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 
+        2
+      ) as success_rate
+      FROM metrics
+      WHERE provider_id = ? AND model_id = ?`,
+    )
+    .get(providerId, modelId) as any;
+
+  return result?.success_rate ?? null;
+};

@@ -43,7 +43,6 @@ export const proxyHandler: ProxyHandler = {
             cookiesVal += `|||${userAgentHeader}`;
           }
         }
-        logger.info('[Proxy] Captured Z.AI token, cookies and user-agent');
         proxyEvents.emit('zai-browser-token', { cookies: cookiesVal });
       }
     }
@@ -59,7 +58,6 @@ export const proxyHandler: ProxyHandler = {
         try {
           const json = JSON.parse(body);
           if (json.token) {
-            logger.info('[Proxy] Captured Z.AI Login Token from auths API');
             let cookiesVal = json.token;
             if (ctx.capturedZaiCookie) {
               cookiesVal += `|||${ctx.capturedZaiCookie}`;

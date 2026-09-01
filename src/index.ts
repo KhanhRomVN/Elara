@@ -47,14 +47,8 @@ const main = async (options?: { dbPath?: string }) => {
   const result = await startServer();
 
   if (result.success) {
-    logger.info(
-      `Server started on port ${result.port}${result.https ? ' (HTTPS)' : ''}`,
-    );
     startWebSocketServer();
-    logger.info('WebSocket server started on port 8899');
-    const {
-      accountRefreshService,
-    } = require('./services/account-refresh.service');
+    const { accountRefreshService } = require('./services/account.service');
     accountRefreshService.start();
   } else {
     logger.error(`Failed to start server: ${result.error}`);
@@ -63,7 +57,6 @@ const main = async (options?: { dbPath?: string }) => {
   }
 
   const shutdown = () => {
-    logger.info('Shutting down...');
     if (require.main === module) process.exit(0);
   };
 

@@ -13,7 +13,6 @@
  * - continueIncompleteResponse() : Tiếp tục response bị truncate
  * - uploadFile()           : Upload file lên DeepSeek
  * - getProfile()           : Lấy thông tin user profile
- * - solve PoW              : Tự động giải PoW challenge
  * ------------------------------------------------------------------
  */
 
@@ -38,10 +37,16 @@ import { countMessagesTokens } from '../../utils/tokenizer';
 
 // ── DeepSeek Imports ──
 import { PoWChallenge, ChatPayload } from './deepseek.types';
-import { DeepSeekHash, BASE_URL, solvePoW } from './deepseek.pow';
+import { DeepSeekHash, solvePoW } from './deepseek.pow';
 import { proxyHandler } from './deepseek.proxy-handler';
 import { parseSSEStream } from './deepseek.sse-parser';
 import { deepseekUploadFile } from './deepseek.upload';
+import {
+  BASE_URL,
+  DEEPSEEK_EVENTS,
+  MAX_CONTINUATIONS,
+  GOOGLE_OAUTH_LOGIN_URL,
+} from './deepseek.constant';
 
 // ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('DeepSeekProvider');
@@ -95,32 +100,24 @@ export class DeepSeekProvider implements Provider {
   async login(options?: { deepseekMethod?: 'basic' | 'google' }) {
     const method = options?.deepseekMethod || 'basic';
     const loginUrl =
-      method === 'google'
-        ? 'https://accounts.google.com/ServiceLogin?service=lso&passive=1209600&continue=https://chat.deepseek.com/login'
-        : 'https://chat.deepseek.com/login';
-
-    logger.info(`Starting DeepSeek login with method: ${method}`);
+      method === 'google' ? GOOGLE_OAUTH_LOGIN_URL : `${BASE_URL}/login`;
 
     return await loginService.login({
       providerId: 'deepseek',
       loginUrl,
       partition: `deepseek-${Date.now()}`,
-      cookieEvent: 'deepseek-login-token',
-      infoEvent: 'deepseek-login-email',
+      cookieEvent: DEEPSEEK_EVENTS.LOGIN_TOKEN,
+      infoEvent: DEEPSEEK_EVENTS.LOGIN_EMAIL,
       validate: async (data: {
         cookies: string;
         headers?: any;
         email?: string;
       }) => {
         if (data.cookies) {
-          logger.info('[DeepSeek] Validating with captured token');
           const token = data.cookies;
           let email = data.email;
 
           if (!email) {
-            logger.info(
-              '[DeepSeek] Email not captured directly, fetching profile...',
-            );
             const profile = await this.getProfile(token);
             email = profile.email || undefined;
           }
@@ -210,10 +207,6 @@ export class DeepSeekProvider implements Provider {
       fallback_to_resume: true,
     };
 
-    logger.info(
-      `[DeepSeek] Calling /chat/continue for session=${sessionId} msgId=${responseMessageId}`,
-    );
-
     const response = await client.post(
       '/api/v0/chat/continue',
       continuePayload,
@@ -252,8 +245,8 @@ export class DeepSeekProvider implements Provider {
       'Content-Type': 'application/json',
       'User-Agent':
         'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
-      Origin: 'https://chat.deepseek.com',
-      Referer: 'https://chat.deepseek.com/',
+      Origin: BASE_URL,
+      Referer: `${BASE_URL}/`,
       'X-App-Version': '2.0.0',
       'X-Client-Version': '2.0.0',
       'X-Client-Platform': 'web',
@@ -261,14 +254,18 @@ export class DeepSeekProvider implements Provider {
     };
 
     const client = new HttpClient({
-      baseURL: 'https://chat.deepseek.com',
+      baseURL: BASE_URL,
       headers: baseHeaders,
     });
 
     let sessionId: string | undefined = options.conversationId;
 
     const isUUID = (str?: string) =>
-      str ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str) : false;
+      str
+        ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            str,
+          )
+        : false;
 
     if (sessionId && !isUUID(sessionId)) {
       logger.warn(
@@ -285,9 +282,6 @@ export class DeepSeekProvider implements Provider {
       if (sessionId && messages.length > 1) {
         const lastMsgId = await this.getLastMessageId(client, sessionId);
         if (lastMsgId === null) {
-          logger.info(
-            `[DeepSeek] Session '${sessionId}' not found. Creating fresh session.`,
-          );
           needsNewSession = true;
         }
       } else {
@@ -313,7 +307,6 @@ export class DeepSeekProvider implements Provider {
             `Session ID missing from response: ${JSON.stringify(sessionData)}`,
           );
         }
-        logger.info(`[DeepSeek] Created new server chat session: ${sessionId}`);
       }
 
       if (!sessionId) throw new Error('Failed to obtain session ID');
@@ -336,10 +329,10 @@ export class DeepSeekProvider implements Provider {
 
       // ── PoW Challenge ──────────────────────────────────────────────────
       const challengeClient = new HttpClient({
-        baseURL: 'https://chat.deepseek.com',
+        baseURL: BASE_URL,
         headers: {
           ...baseHeaders,
-          Referer: `https://chat.deepseek.com/a/chat/s/${sessionId}`,
+          Referer: `${BASE_URL}/a/chat/s/${sessionId}`,
         },
       });
 
@@ -385,10 +378,10 @@ export class DeepSeekProvider implements Provider {
       };
 
       const completionClient = new HttpClient({
-        baseURL: 'https://chat.deepseek.com',
+        baseURL: BASE_URL,
         headers: {
           ...baseHeaders,
-          Referer: `https://chat.deepseek.com/a/chat/s/${sessionId}`,
+          Referer: `${BASE_URL}/a/chat/s/${sessionId}`,
           'X-Ds-Pow-Response': powResponseBase64,
         },
       });
@@ -415,10 +408,10 @@ export class DeepSeekProvider implements Provider {
       };
 
       const continueClient = new HttpClient({
-        baseURL: 'https://chat.deepseek.com',
+        baseURL: BASE_URL,
         headers: {
           ...baseHeaders,
-          Referer: `https://chat.deepseek.com/a/chat/s/${sessionId}`,
+          Referer: `${BASE_URL}/a/chat/s/${sessionId}`,
         },
       });
 
@@ -434,7 +427,6 @@ export class DeepSeekProvider implements Provider {
           currentModeRef,
         });
 
-      const MAX_CONTINUATIONS = 10;
       let continuationCount = 0;
 
       while (
@@ -443,9 +435,6 @@ export class DeepSeekProvider implements Provider {
         continuationCount < MAX_CONTINUATIONS
       ) {
         continuationCount++;
-        logger.info(
-          `[DeepSeek] Auto-continue attempt ${continuationCount}/${MAX_CONTINUATIONS} | session=${sessionId}`,
-        );
 
         if (onMetadata) {
           onMetadata({
@@ -469,9 +458,7 @@ export class DeepSeekProvider implements Provider {
         }
 
         if (!continueResponse.body) {
-          logger.warn(
-            '[DeepSeek] /chat/continue returned no body, stopping',
-          );
+          logger.warn('[DeepSeek] /chat/continue returned no body, stopping');
           break;
         }
 
@@ -495,9 +482,6 @@ export class DeepSeekProvider implements Provider {
         if (continueResult.responseMessageId !== null) {
           responseMessageId = continueResult.responseMessageId;
         }
-        logger.info(
-          `[DeepSeek] Auto-continue ${continuationCount} result | incomplete=${continueResult.incomplete}`,
-        );
       }
 
       if (continuationCount >= MAX_CONTINUATIONS && incomplete) {
@@ -573,7 +557,7 @@ export class DeepSeekProvider implements Provider {
 
   private createClient(credential: string) {
     return new HttpClient({
-      baseURL: 'https://chat.deepseek.com',
+      baseURL: BASE_URL,
       headers: {
         Cookie: `DS-AUTH-TOKEN=${credential}`,
         Authorization: credential,

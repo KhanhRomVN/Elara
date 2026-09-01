@@ -324,10 +324,6 @@ export class ExtensionWebSocketServer extends EventEmitter {
     });
 
     connection.contentWs.send(message);
-    logger.debug(
-      `[WebSocketServer] Sent prompt to session ${sessionId}: ${prompt.substring(0, 100)}...`,
-    );
-
     (connection as any).__pendingResolveLock = resolveLock;
 
     return requestId;
@@ -343,7 +339,8 @@ export class ExtensionWebSocketServer extends EventEmitter {
     const connection = this.connections.get(sessionId);
     if (!connection) return;
 
-    const resolveLock: (() => void) | undefined = (connection as any).__pendingResolveLock;
+    const resolveLock: (() => void) | undefined = (connection as any)
+      .__pendingResolveLock;
     if (resolveLock) {
       delete (connection as any).__pendingResolveLock;
     }
@@ -400,9 +397,6 @@ export class ExtensionWebSocketServer extends EventEmitter {
         connection.contentWs &&
         connection.contentWs.readyState === WebSocket.OPEN
       ) {
-        logger.debug(
-          `[WebSocketServer] Found active content session: ${sessionId}`,
-        );
         return sessionId;
       }
     }

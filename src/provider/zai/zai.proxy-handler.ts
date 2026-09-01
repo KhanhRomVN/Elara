@@ -19,6 +19,9 @@ import { proxyEvents } from '../../services/proxy.service';
 // ── Utils ──
 import { createLogger } from '../../utils/logger';
 
+// ── Constants ──
+import { ZAI_EVENTS } from './zai.constant';
+
 // ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('ZAIProvider');
 
@@ -43,8 +46,7 @@ export const proxyHandler: ProxyHandler = {
             cookiesVal += `|||${userAgentHeader}`;
           }
         }
-        logger.info('[Proxy] Captured Z.AI token, cookies and user-agent');
-        proxyEvents.emit('zai-token', { cookies: cookiesVal });
+        proxyEvents.emit(ZAI_EVENTS.TOKEN, { cookies: cookiesVal });
       }
     }
     callback();
@@ -59,7 +61,6 @@ export const proxyHandler: ProxyHandler = {
         try {
           const json = JSON.parse(body);
           if (json.token) {
-            logger.info('[Proxy] Captured Z.AI Login Token from auths API');
             let cookiesVal = json.token;
             if (ctx.capturedZaiCookie) {
               cookiesVal += `|||${ctx.capturedZaiCookie}`;
@@ -67,7 +68,7 @@ export const proxyHandler: ProxyHandler = {
                 cookiesVal += `|||${ctx.capturedZaiUserAgent}`;
               }
             }
-            proxyEvents.emit('zai-token', {
+            proxyEvents.emit(ZAI_EVENTS.TOKEN, {
               cookies: cookiesVal,
               email: json.email,
             });

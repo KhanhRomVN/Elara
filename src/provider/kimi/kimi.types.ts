@@ -14,24 +14,12 @@
  * ------------------------------------------------------------------
  */
 
-// ─── Constants ──────────────────────────────────────────────────────────
+// ─── Constants (re-export) ─────────────────────────────────────────────
 
-export const KIMI_BASE_URL = 'https://www.kimi.ai';
+export { KIMI_BASE_URL, KIMI_MODELS } from './kimi.constant';
+export type { KimiModel } from './kimi.constant';
 
-export const KIMI_MODELS = {
-  K3: 'k3',
-  K3_SWARM: 'k3-swarm',
-  INSTANT: 'instant',
-  K2D6_THINKING: 'k2d6-thinking',
-  K2D6: 'k2d6',
-  K2D6_AGENT: 'k2d6-agent',
-  K2D6_AGENT_ULTRA: 'k2d6-agent-ultra',
-  KIMI_LATEST: 'kimi-latest',
-} as const;
-
-export type KimiModel = typeof KIMI_MODELS[keyof typeof KIMI_MODELS];
-
-// ─── Types ──────────────────────────────────────────────────────────────
+// ─── Types ──────────────────────────────────────────���───────────────────
 
 export interface KimiCredential {
   token: string;

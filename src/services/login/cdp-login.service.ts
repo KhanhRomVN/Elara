@@ -33,7 +33,9 @@ export interface CDPLoginOptions {
   partition?: string;
   timeout?: number;
   keepBrowserOpen?: boolean;
-  validate?: (captured: any) => Promise<{ isValid: boolean; cookies?: string; email?: string }>;
+  validate?: (
+    captured: any,
+  ) => Promise<{ isValid: boolean; cookies?: string; email?: string }>;
   extraEvents?: string[];
 }
 
@@ -47,13 +49,20 @@ export interface CDPLoginResult {
 // ─── Class ──────────────────────────────────────────────────────────────
 
 export class CDPLoginService extends EventEmitter {
-  private activeSessions: Map<string, { cdpService: any; browserProcess: any }> = new Map();
+  private activeSessions: Map<
+    string,
+    { cdpService: any; browserProcess: any }
+  > = new Map();
 
   async login(options: CDPLoginOptions): Promise<CDPLoginResult> {
-    const { providerId, loginUrl, timeout = 120000, validate, extraEvents = [] } = options;
+    const {
+      providerId,
+      loginUrl,
+      timeout = 120000,
+      validate,
+      extraEvents = [],
+    } = options;
     const sessionId = `${providerId}-${Date.now()}`;
-
-    logger.info(`[CDP Login] Starting login for ${providerId} with URL ${loginUrl}`);
 
     const cdpService = createCDPService(sessionId);
     let capturedCookies = '';
@@ -78,7 +87,9 @@ export class CDPLoginService extends EventEmitter {
 
     cdpService.on('response-body', async (data: any) => {
       try {
-        const body = data.isBinary ? Buffer.from(data.body, 'base64').toString() : data.body;
+        const body = data.isBinary
+          ? Buffer.from(data.body, 'base64').toString()
+          : data.body;
         const json = JSON.parse(body);
 
         if (json.email) {
@@ -92,9 +103,11 @@ export class CDPLoginService extends EventEmitter {
       }
 
       if (validate && (capturedCookies || capturedEmail)) {
-        const validation = await validate({ cookies: capturedCookies, email: capturedEmail });
+        const validation = await validate({
+          cookies: capturedCookies,
+          email: capturedEmail,
+        });
         if (validation.isValid) {
-          logger.info(`[CDP Login] Validation successful for ${providerId}`);
           if (resolvePromise) {
             if (timeoutId) clearTimeout(timeoutId);
             await cdpService.close();
@@ -127,11 +140,12 @@ export class CDPLoginService extends EventEmitter {
         logger.warn(`[CDP Login] Timeout after ${timeout}ms for ${providerId}`);
         await cdpService.close();
         this.activeSessions.delete(sessionId);
-        resolvePromise({ success: false, error: `Login timeout after ${timeout}ms` });
+        resolvePromise({
+          success: false,
+          error: `Login timeout after ${timeout}ms`,
+        });
       }
     }, timeout);
-
-    logger.info(`[CDP Login] Browser opened at ${loginUrl}. Waiting for login...`);
 
     return resultPromise;
   }

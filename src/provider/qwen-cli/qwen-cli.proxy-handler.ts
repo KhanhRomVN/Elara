@@ -16,6 +16,9 @@
 import { ProxyHandler } from '../../services/proxy.service';
 import { proxyEvents } from '../../services/proxy.service';
 
+// ── Constants ──
+import { QWEN_CLI_EVENTS } from './qwen-cli.constant';
+
 // ─── Proxy Handler ────────────────────────────────────────────────────
 
 export const proxyHandler: ProxyHandler = {
@@ -36,7 +39,7 @@ export const proxyHandler: ProxyHandler = {
             try { tokenData = JSON.parse(json.response); } catch (e) {}
           }
           if (tokenData.access_token) {
-            proxyEvents.emit('qwen-cli-tokens', {
+            proxyEvents.emit(QWEN_CLI_EVENTS.TOKENS, {
               cookies: JSON.stringify({
                 accessToken: tokenData.access_token,
                 refreshToken: tokenData.refresh_token || '',
@@ -58,7 +61,7 @@ export const proxyHandler: ProxyHandler = {
             try { data = JSON.parse(json.response); } catch (e) {}
           }
           const email = data.email || data.data?.email;
-          if (email) proxyEvents.emit('qwen-cli-user-info', { email });
+          if (email) proxyEvents.emit(QWEN_CLI_EVENTS.USER_INFO, { email });
         } catch (e) {}
       }
     }

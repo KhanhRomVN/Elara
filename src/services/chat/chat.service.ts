@@ -27,10 +27,6 @@ import { createLogger } from '../../utils/logger';
 // ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('ChatService');
 
-// ─── State ──────────────────────────────────────────────────────────────
-
-const pendingConversations = new Map<string, Promise<string>>();
-
 // ─── Main Function ─────────────────────────────────────────────────────
 
 export const sendMessage = async (

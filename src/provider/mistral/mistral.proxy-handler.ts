@@ -17,7 +17,10 @@ import { proxyEvents } from '../../services/proxy.service';
 // ── Utils ──
 import { createLogger } from '../../utils/logger';
 
-// ─── Constants ───────────────────────────────���──────────────────────────
+// ── Constants ──
+import { MISTRAL_EVENTS } from './mistral.constant';
+
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('MistralProvider');
 
 // ─── Proxy Handler ────────────────────────────────────────────────────
@@ -32,8 +35,7 @@ export const proxyHandler: ProxyHandler = {
     ) {
       const reqCookies = ctx.clientToProxyRequest.headers.cookie;
       if (reqCookies && reqCookies.length > 0) {
-        logger.debug('[Proxy] Captured Mistral cookies');
-        proxyEvents.emit('mistral-cookies', reqCookies);
+        proxyEvents.emit(MISTRAL_EVENTS.COOKIES, reqCookies);
       }
     }
     callback();

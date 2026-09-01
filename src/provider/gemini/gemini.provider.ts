@@ -33,7 +33,12 @@ import { countTokens, countMessagesTokens } from '../../utils/tokenizer';
 
 // ── Gemini Imports ──
 import { GeminiCredential } from './gemini.types';
-import { MODEL_MAP } from './gemini.constants';
+import {
+  BASE_URL,
+  USER_AGENT,
+  GEMINI_EVENTS,
+  MODEL_MAP,
+} from './gemini.constants';
 import { proxyHandler } from './gemini.proxy-handler';
 import {
   makeSapisidHash,
@@ -62,10 +67,9 @@ export class GeminiProvider implements Provider {
     try {
       const cred = this.parseCredential(credential);
       const prefix = getAccountPrefix(cred.authUser);
-      const url = `https://gemini.google.com${prefix}/app`;
+      const url = `${BASE_URL}${prefix}/app`;
       const headers: Record<string, string> = {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+        'User-Agent': USER_AGENT,
       };
       if (cred.cookie) {
         headers['Cookie'] = cred.cookie;
@@ -104,9 +108,7 @@ export class GeminiProvider implements Provider {
 
   async login(options?: { method?: 'google' | 'basic' }) {
     const method = options?.method || 'google';
-    const loginUrl = 'https://gemini.google.com/app';
-
-    logger.info(`Starting Gemini login with method: ${method}`);
+    const loginUrl = `${BASE_URL}/app`;
 
     let validating = false;
     const captured = { xsrfToken: '', authUser: '' };
@@ -116,17 +118,21 @@ export class GeminiProvider implements Provider {
     const onAuthUser = (data: any) => {
       if (data?.authUser) captured.authUser = data.authUser;
     };
-    proxyEvents.on('gemini-xsrf', onXsrf);
-    proxyEvents.on('gemini-auth-user', onAuthUser);
+    proxyEvents.on(GEMINI_EVENTS.XSRF, onXsrf);
+    proxyEvents.on(GEMINI_EVENTS.AUTH_USER, onAuthUser);
 
     return await loginService
       .login({
         providerId: 'gemini',
         loginUrl,
         partition: `gemini-${Date.now()}`,
-        cookieEvent: 'gemini-cookies',
-        infoEvent: 'gemini-email',
-        extraEvents: ['gemini-sapisid', 'gemini-auth-user', 'gemini-xsrf'],
+        cookieEvent: GEMINI_EVENTS.COOKIES,
+        infoEvent: GEMINI_EVENTS.EMAIL,
+        extraEvents: [
+          GEMINI_EVENTS.SAPISID,
+          GEMINI_EVENTS.AUTH_USER,
+          GEMINI_EVENTS.XSRF,
+        ],
         validate: async (data: {
           cookies: string;
           headers?: any;
@@ -138,7 +144,6 @@ export class GeminiProvider implements Provider {
           validating = true;
 
           try {
-            logger.info('[Gemini] Validating captured cookies');
             const cookie = data.cookies;
             let email = data.email;
 
@@ -146,9 +151,6 @@ export class GeminiProvider implements Provider {
             const sapisid = sapisidMatch ? sapisidMatch[1] : '';
 
             if (!email) {
-              logger.info(
-                '[Gemini] Email not captured directly, fetching profile...',
-              );
               try {
                 const credStr = JSON.stringify({ cookie, sapisid });
                 const profile = await this.getProfile(credStr);
@@ -159,9 +161,6 @@ export class GeminiProvider implements Provider {
             }
 
             if (!captured.xsrfToken) {
-              logger.debug(
-                '[Gemini] XSRF missing, waiting 1.5s for xsrf event...',
-              );
               await new Promise((r) => setTimeout(r, 1500));
             }
 
@@ -175,9 +174,6 @@ export class GeminiProvider implements Provider {
                 authUser: captured.authUser,
                 email: email || '',
               });
-              logger.info(
-                `[Gemini] Login accepted${email ? ` | email=${email}` : ' | email=unknown'}${captured.xsrfToken ? ' | xsrf=yes' : ' | xsrf=missing'}`,
-              );
               return {
                 isValid: true,
                 cookies: credential,
@@ -192,8 +188,8 @@ export class GeminiProvider implements Provider {
         },
       })
       .finally(() => {
-        proxyEvents.off('gemini-xsrf', onXsrf);
-        proxyEvents.off('gemini-auth-user', onAuthUser);
+        proxyEvents.off(GEMINI_EVENTS.XSRF, onXsrf);
+        proxyEvents.off(GEMINI_EVENTS.AUTH_USER, onAuthUser);
       });
   }
 
@@ -246,11 +242,10 @@ export class GeminiProvider implements Provider {
       const buildHeaders = (c: typeof cred): Record<string, string> => {
         const h: Record<string, string> = {
           'Content-Type': 'application/x-www-form-urlencoded',
-          Origin: 'https://gemini.google.com',
-          Referer: `https://gemini.google.com${getAccountPrefix(c.authUser)}/app`,
+          Origin: BASE_URL,
+          Referer: `${BASE_URL}${getAccountPrefix(c.authUser)}/app`,
           'X-Same-Domain': '1',
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+          'User-Agent': USER_AGENT,
         };
         if (c.authUser) h['X-Goog-AuthUser'] = c.authUser;
         if (c.cookie) h['Cookie'] = c.cookie;
@@ -271,11 +266,6 @@ export class GeminiProvider implements Provider {
           currentCred.xsrfToken,
         );
         const headers = buildHeaders(currentCred);
-
-        logger.info(
-          `[Gemini] Sending request | attempt=${attempt} | model=${model}`,
-        );
-
         const response = await fetch(url, { method: 'POST', headers, body });
 
         if (!response.ok) {
@@ -283,9 +273,6 @@ export class GeminiProvider implements Provider {
 
           const xsrfFromError = errorText.match(/"xsrf","([^"]+)"/)?.[1];
           if (xsrfFromError && attempt === 1) {
-            logger.info(
-              `[Gemini] Got XSRF from error response, retrying`,
-            );
             currentCred = { ...currentCred, xsrfToken: xsrfFromError };
             continue;
           }
@@ -348,10 +335,6 @@ export class GeminiProvider implements Provider {
           }
         }
 
-        logger.debug(
-          `[Gemini] Stream complete | model=${model} | totalBytes=${totalBytes}`,
-        );
-
         onDone();
         return;
       }
@@ -412,9 +395,7 @@ export class GeminiProvider implements Provider {
     };
   }
 
-  async stopStream(_credential: string, _chatId: string, _messageId: string) {
-    logger.debug('[Gemini] stopStream called (no-op for Gemini Web)');
-  }
+  async stopStream(_credential: string, _chatId: string, _messageId: string) {}
 
   // ─── Routes ─────────────────────────────────────────────────────────
 

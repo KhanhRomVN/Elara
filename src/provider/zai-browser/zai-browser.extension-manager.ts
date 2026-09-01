@@ -24,22 +24,26 @@ const logger = createLogger('ZaiBrowserExtensionManager');
 // ─── Class ──────────────────────────────────────────────────────────────
 
 export class ZaiBrowserExtensionManager {
-  private static EXTENSION_PATH = path.join(__dirname, '../../../extensions/zai-bridge');
+  private static EXTENSION_PATH = path.join(
+    __dirname,
+    '../../../extensions/zai-bridge',
+  );
 
   static validateExtension(): boolean {
     if (!fs.existsSync(this.EXTENSION_PATH)) {
       logger.error(
         `Z.AI Browser extension not found at ${this.EXTENSION_PATH}\n` +
-        `Please copy extension folder from reverse-z-ai-5.0/extension to server/extensions/zai-bridge/`
+          `Please copy extension folder from reverse-z-ai-5.0/extension to server/extensions/zai-bridge/`,
       );
       return false;
     }
     const manifestPath = path.join(this.EXTENSION_PATH, 'manifest.json');
     if (!fs.existsSync(manifestPath)) {
-      logger.error(`Invalid extension: manifest.json not found at ${manifestPath}`);
+      logger.error(
+        `Invalid extension: manifest.json not found at ${manifestPath}`,
+      );
       return false;
     }
-    logger.info(`[Extension] Validated at ${this.EXTENSION_PATH}`);
     return true;
   }
 
@@ -65,7 +69,10 @@ export class ZaiBrowserExtensionManager {
     return args;
   }
 
-  static async waitForWebSocket(port: number = 8899, timeoutMs: number = 30000): Promise<boolean> {
+  static async waitForWebSocket(
+    port: number = 8899,
+    timeoutMs: number = 30000,
+  ): Promise<boolean> {
     const net = await import('net');
     const start = Date.now();
 
@@ -84,10 +91,9 @@ export class ZaiBrowserExtensionManager {
           });
           socket.on('error', reject);
         });
-        logger.info(`[Extension] WebSocket server ready on port ${port}`);
         return true;
       } catch (e) {
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise((r) => setTimeout(r, 500));
       }
     }
     logger.error(`[Extension] WebSocket server not ready after ${timeoutMs}ms`);

@@ -30,10 +30,15 @@ import { createLogger } from '../../utils/logger';
 
 // ── Groq Imports ──
 import { proxyHandler } from './groq.proxy-handler';
+import {
+  BASE_URL,
+  API_CHAT_COMPLETIONS_URL,
+  API_MODELS_URL,
+  SESSION_COOKIE_NAME,
+  GROQ_EVENTS,
+} from './groq.constant';
 
 // ─── Constants ──────────────────────────────────────────────────────────
-export const BASE_URL = 'https://console.groq.com';
-
 const logger = createLogger('GroqProvider');
 
 // ─── Provider Class ────────────────────────────────────────────────────
@@ -46,13 +51,11 @@ export class GroqProvider implements Provider {
   // ─── Login ──────────────────────────────────────────────────────────
 
   async login() {
-    logger.info('Starting Groq login...');
-
     return await loginService.login({
       providerId: 'groq',
-      loginUrl: 'https://console.groq.com/login',
+      loginUrl: `${BASE_URL}/login`,
       partition: `groq-${Date.now()}`,
-      cookieEvent: 'groq-cookies',
+      cookieEvent: GROQ_EVENTS.COOKIES,
       validate: async (data: {
         cookies: string;
         headers?: any;
@@ -68,7 +71,7 @@ export class GroqProvider implements Provider {
           });
 
           const sessionJwt = cookieList.find(
-            (c) => c.name === 'stytch_session_jwt',
+            (c) => c.name === SESSION_COOKIE_NAME,
           )?.value;
           if (sessionJwt) {
             const base64Url = sessionJwt.split('.')[1];
@@ -90,7 +93,6 @@ export class GroqProvider implements Provider {
               email =
                 stytchSession.authentication_factors[0].email_factor
                   .email_address;
-              logger.info(`[Groq] Extracted email from JWT: ${email}`);
             }
           }
         } catch (e) {
@@ -115,7 +117,7 @@ export class GroqProvider implements Provider {
       });
 
       const sessionJwt = cookieList.find(
-        (c) => c.name === 'stytch_session_jwt',
+        (c) => c.name === SESSION_COOKIE_NAME,
       )?.value;
       if (sessionJwt) {
         const base64Url = sessionJwt.split('.')[1];
@@ -169,21 +171,16 @@ export class GroqProvider implements Provider {
     }
 
     try {
-      logger.info(`Sending message to Groq model: ${payload.model}`);
-
-      const response = await fetch(
-        'https://api.groq.com/openai/v1/chat/completions',
-        {
-          method: 'POST',
-          headers: {
-            Cookie: credential,
-            'Content-Type': 'application/json',
-            Origin: 'https://console.groq.com',
-            Referer: 'https://console.groq.com/',
-          },
-          body: JSON.stringify(payload),
+      const response = await fetch(API_CHAT_COMPLETIONS_URL, {
+        method: 'POST',
+        headers: {
+          Cookie: credential,
+          'Content-Type': 'application/json',
+          Origin: BASE_URL,
+          Referer: `${BASE_URL}/`,
         },
-      );
+        body: JSON.stringify(payload),
+      });
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -230,13 +227,14 @@ export class GroqProvider implements Provider {
     return this.handleMessage(options);
   }
 
-  // ─── Get Models ─────────────────────────────────────────────────────
+  // ─── Get Models ─────���───────────────────────────────────────────────
 
   async getModels(credential: string): Promise<any[]> {
-    logger.info(`Fetching Groq models dynamically...`);
     try {
       let token = '';
-      const match = credential.match(/(?:^|;\s*)stytch_session_jwt=([^;]+)/);
+      const match = credential.match(
+        new RegExp(`(?:^|;\\s*)${SESSION_COOKIE_NAME}=([^;]+)`),
+      );
       if (match && match[1]) {
         token = match[1];
       }
@@ -269,8 +267,8 @@ export class GroqProvider implements Provider {
         Authorization: `Bearer ${token}`,
         Cookie: credential,
         'Content-Type': 'application/json',
-        Origin: 'https://console.groq.com',
-        Referer: 'https://console.groq.com/',
+        Origin: BASE_URL,
+        Referer: `${BASE_URL}/`,
         'User-Agent':
           'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
       };
@@ -279,7 +277,7 @@ export class GroqProvider implements Provider {
         headers['groq-organization'] = organization;
       }
 
-      const response = await fetch('https://api.groq.com/internal/v1/models', {
+      const response = await fetch(API_MODELS_URL, {
         method: 'GET',
         headers,
       });

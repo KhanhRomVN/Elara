@@ -29,10 +29,14 @@ import { createLogger } from '../../utils/logger';
 
 // ── Mistral Imports ──
 import { proxyHandler } from './mistral.proxy-handler';
+import {
+  BASE_URL,
+  CHAT_BASE_URL,
+  AUTH_LOGIN_URL,
+  MISTRAL_EVENTS,
+} from './mistral.constant';
 
 // ─── Constants ──────────────────────────────────────────────────────────
-export const BASE_URL = 'https://console.mistral.ai';
-
 const logger = createLogger('MistralProvider');
 
 // ─── Provider Class ────────────────────────────────────────────────────
@@ -45,13 +49,11 @@ export class MistralProvider implements Provider {
   // ─── Login ──────────────────────────────────────────────────────────
 
   async login() {
-    logger.info('Starting Mistral login...');
-
     return await loginService.login({
       providerId: 'mistral',
-      loginUrl: 'https://auth.mistral.ai/ui/login',
+      loginUrl: AUTH_LOGIN_URL,
       partition: `mistral-${Date.now()}`,
-      cookieEvent: 'mistral-cookies',
+      cookieEvent: MISTRAL_EVENTS.COOKIES,
       validate: async (data: {
         cookies: string;
         headers?: any;
@@ -60,9 +62,6 @@ export class MistralProvider implements Provider {
         if (data.cookies && data.cookies.length > 0) {
           const profile = await this.getProfile(data.cookies);
           if (profile.email) {
-            logger.info(
-              `[Mistral] Validation success for email: ${profile.email}`,
-            );
             return {
               isValid: true,
               email: profile.email,
@@ -81,7 +80,7 @@ export class MistralProvider implements Provider {
     credential: string,
   ): Promise<{ email: string | null; name?: string; id?: string }> {
     try {
-      const response = await fetch('https://console.mistral.ai/api/users/me', {
+      const response = await fetch(`${BASE_URL}/api/users/me`, {
         method: 'GET',
         headers: {
           Cookie: credential,
@@ -195,15 +194,15 @@ export class MistralProvider implements Provider {
       payload.integrations = [];
     }
 
-    const response = await fetch('https://chat.mistral.ai/api/chat', {
+    const response = await fetch(`${CHAT_BASE_URL}/api/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         Cookie: credential,
-        Origin: 'https://chat.mistral.ai',
-        Referer: `https://chat.mistral.ai/chat/${chatId}`,
+        Origin: CHAT_BASE_URL,
+        Referer: `${CHAT_BASE_URL}/chat/${chatId}`,
       },
       body: JSON.stringify(payload),
     });
