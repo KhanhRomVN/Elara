@@ -16,7 +16,8 @@ import { Request, Response } from 'express';
 
 // ── Services ──
 import { isProviderEnabled } from '../services/provider.service';
-import { getAccountById, uploadFileToProvider } from '../services/account.service';
+import { getAccountById } from '../services/account.service';
+import { uploadFileToProvider } from '../services/upload.service';
 
 // ── Utils ──
 import { createLogger } from '../utils/logger';

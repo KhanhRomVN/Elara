@@ -16,10 +16,6 @@
  * - removeAccount()                            : Xóa account
  * - importAccounts()                           : Import hàng loạt accounts
  * - getProviderConfig()                        : Lấy provider config theo ID
- * - loginWithProvider()                        : Login qua provider
- * - uploadFileToProvider()                     : Upload file qua provider
- * - getProviderDefaultModel()                  : Lấy default model của provider
- * - getAllAccounts()                           : Lấy tất cả accounts (cho background jobs)
  * - updateAccountCredentialAndLastRefresh()    : Cập nhật credential và last_refreshed_at
  * - updateAccountUsageInfo()                   : Cập nhật usage và reset period
  * - refreshAccountToken()                      : Refresh token qua provider
@@ -42,8 +38,9 @@ import {
   updateAccountCredentialAndRefresh,
   updateAccountMemory as updateAccountMemoryRepo,
   updateAccountUsage,
+  updateAccountUserDataDir as updateAccountUserDataDirRepo,
   deleteAccount as deleteAccountRow,
-  findAllAccounts,
+  findAccountsNeedingRefresh,
 } from '../repositories/account.repository';
 import {
   ensureProviderExists,
@@ -64,7 +61,8 @@ export interface AccountInput {
   id?: string;
   provider_id: string;
   email: string;
-  credential: string;
+  credential?: string;
+  user_data_dir?: string | null;
 }
 
 export interface ListAccountsOptions {
@@ -80,24 +78,6 @@ export interface ImportAccountsResult {
   imported: number;
   skipped: number;
   duplicates: Array<{ email: string; provider_id: string }>;
-}
-
-export interface LoginOptions {
-  method?: 'basic' | 'google';
-}
-
-export interface LoginResult {
-  email?: string;
-  cookies?: string;
-  headers?: any;
-  pending?: boolean;
-  tempSessionId?: string;
-}
-
-export interface UploadResult {
-  file_id?: string;
-  token_usage?: number;
-  raw?: any;
 }
 
 // ─── Service Functions ──────────────────────────────────────────────────
@@ -156,7 +136,8 @@ export function createAccount(accountData: AccountInput): string {
     id,
     provider_id: accountData.provider_id,
     email: accountData.email,
-    credential: accountData.credential,
+    credential: accountData.credential || null,
+    user_data_dir: accountData.user_data_dir || null,
   });
   ensureProviderExists(
     accountData.provider_id.toLowerCase(),
@@ -170,6 +151,13 @@ export function createAccount(accountData: AccountInput): string {
  */
 export function updateAccount(accountId: string, credential: string): void {
   updateAccountCredential(accountId, credential);
+}
+
+export function updateAccountUserDataDir(
+  accountId: string,
+  userDataDir: string,
+): void {
+  updateAccountUserDataDirRepo(accountId, userDataDir);
 }
 
 /**
@@ -193,9 +181,7 @@ export function removeAccount(accountId: string, providerId: string): void {
 /**
  * Import hàng loạt accounts
  */
-export function importAccounts(
-  accounts: AccountInput[],
-): ImportAccountsResult {
+export function importAccounts(accounts: AccountInput[]): ImportAccountsResult {
   const duplicates: AccountInput[] = [];
   const toInsert: Array<{
     id: string;
@@ -218,7 +204,7 @@ export function importAccounts(
         id,
         provider_id: account.provider_id,
         email: account.email,
-        credential: account.credential,
+        credential: account.credential || '',
       });
     }
   }
@@ -247,78 +233,6 @@ export function importAccounts(
  */
 export function getProviderConfig(providerId: string) {
   return findProviderById(providerId);
-}
-
-/**
- * Login qua provider
- */
-export async function loginWithProvider(
-  providerId: string,
-  options: LoginOptions,
-): Promise<LoginResult> {
-  const provider = providerRegistry.getProvider(providerId);
-
-  if (!provider) {
-    throw new Error(`Provider ${providerId} not found`);
-  }
-
-  if (!provider.login) {
-    throw new Error(`Provider ${providerId} does not support browser login`);
-  }
-
-  const result = await provider.login({
-    method: options.method || 'basic',
-  });
-
-  return result as LoginResult;
-}
-
-/**
- * Upload file qua provider
- */
-export async function uploadFileToProvider(
-  providerId: string,
-  credential: string,
-  file: Express.Multer.File,
-): Promise<UploadResult> {
-  const provider = providerRegistry.getProvider(providerId);
-
-  if (!provider) {
-    throw new Error(`Provider ${providerId} not supported`);
-  }
-
-  if (!provider.uploadFile) {
-    throw new Error(`Provider ${providerId} does not support file upload`);
-  }
-
-  const result = await provider.uploadFile(credential, file);
-
-  // Normalize result format
-  if (typeof result === 'string') {
-    return { file_id: result };
-  } else if (result && typeof result === 'object' && 'id' in result) {
-    return {
-      file_id: result.id,
-      token_usage: (result as any).token_usage,
-    };
-  } else {
-    return { raw: result };
-  }
-}
-
-/**
- * Lấy default model của provider
- */
-export function getProviderDefaultModel(providerId: string): string | undefined {
-  const provider = providerRegistry.getProvider(providerId);
-  return provider?.defaultModel;
-}
-
-/**
- * Lấy tất cả accounts (dùng cho background jobs)
- */
-export function getAllAccounts(): AccountRow[] {
-  return findAllAccounts();
 }
 
 /**
@@ -358,7 +272,7 @@ export async function refreshAccountToken(
   expires_in?: number;
 } | null> {
   const provider = providerRegistry.getProvider(providerId);
-  
+
   if (!provider?.refreshToken) {
     return null;
   }
@@ -378,7 +292,7 @@ export async function getAccountUsageFromProvider(
   credential: string,
 ): Promise<{ usage: string; resetPeriod: string } | null> {
   const provider = providerRegistry.getProvider(providerId);
-  
+
   if (!provider?.getUsage) {
     return null;
   }
@@ -429,7 +343,7 @@ export class AccountRefreshService {
    * Kiểm tra và refresh token cho tất cả accounts
    */
   async checkAndRefresh() {
-    const accounts = getAllAccounts();
+    const accounts = findAccountsNeedingRefresh(this.AUTO_REFRESH_THRESHOLD);
 
     for (const account of accounts) {
       try {
@@ -491,12 +405,29 @@ export class AccountRefreshService {
           }
         }
 
-        // Refresh usage
-        await this.refreshUsage(account.id);
+        // Refresh usage only when reset period has elapsed
+        if (this.shouldRefreshUsage(account)) {
+          await this.refreshUsage(account.id);
+        }
       } catch (e: any) {
         logger.error(`Error processing account ${account.id}: ${e.message}`);
       }
     }
+  }
+
+  /**
+   * Kiểm tra xem account có cần refresh usage theo chu kỳ reset không.
+   * ceiling: dùng last_refreshed_at làm proxy vì chưa có last_usage_refreshed_at riêng.
+   * upgrade path: thêm field riêng khi cần tách chính xác.
+   */
+  private shouldRefreshUsage(account: AccountRow): boolean {
+    const period = account.reset_period;
+    const lastRefreshed = account.last_refreshed_at || 0;
+    if (!period) return false;
+    const now = Date.now();
+    const interval =
+      period === 'month' ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+    return now - lastRefreshed >= interval;
   }
 
   /**
@@ -536,5 +467,3 @@ export class AccountRefreshService {
  * Singleton instance của AccountRefreshService
  */
 export const accountRefreshService = new AccountRefreshService();
-
-

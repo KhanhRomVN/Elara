@@ -26,7 +26,7 @@ import fetch from 'node-fetch';
 import { Provider, SendMessageOptions } from '../../types';
 
 // ── Services ──
-import { loginService } from '../../services/login/login.service';
+import { loginService } from '../../services/login.service';
 import { proxyEvents } from '../../services/proxy.service';
 
 // ── Database ──
@@ -91,7 +91,9 @@ export class QwenProvider implements Provider {
           userAgent: parsed.userAgent || USER_AGENT,
         };
       } catch {
-        // fall through
+        logger.warn(
+          '[Qwen] Credential is not valid JSON, falling through to raw token parsing',
+        );
       }
     }
 
@@ -230,7 +232,7 @@ export class QwenProvider implements Provider {
     proxyEvents.on(QWEN_EVENTS.HEADERS, onHeaders);
 
     try {
-      return await loginService.login({
+      return await loginService.captureCredentialsViaCDP({
         providerId: 'qwen',
         loginUrl: `${BASE_URL}/auth`,
         partition: `qwen-${Date.now()}`,
@@ -249,6 +251,9 @@ export class QwenProvider implements Provider {
           if (!isRawToken) {
             const hasBxUa = capturedHeaders['bx-ua'];
             if (!hasBxUa) {
+              logger.warn(
+                '[Qwen] Login validation failed: missing bx-ua header',
+              );
               return { isValid: false };
             }
 
@@ -294,7 +299,9 @@ export class QwenProvider implements Provider {
               if (profile.email) {
                 email = profile.email;
               }
-            } catch (e) {}
+            } catch (e) {
+              logger.warn('[Qwen] Login profile fetch failed:', e);
+            }
           }
 
           return {
@@ -411,12 +418,16 @@ export class QwenProvider implements Provider {
       if (response.ok) {
         const json: any = await response.json();
         const userData = json.data ?? json;
+        if (!userData?.email) {
+          logger.warn('[Qwen] Get Profile response missing email field');
+        }
         return {
           email: userData?.email || null,
           name: userData?.name,
           id: userData?.id,
         };
       }
+      logger.warn(`[Qwen] Get Profile returned status ${response.status}`);
       return { email: null };
     } catch (e) {
       logger.error('[Qwen] Get Profile Error:', e);
@@ -516,7 +527,12 @@ export class QwenProvider implements Provider {
       `${BASE_URL}/api/v2/chats/${conversationId}/messages/`,
       { headers },
     );
-    if (!response.ok) return null;
+    if (!response.ok) {
+      logger.warn(
+        `[Qwen] Failed to fetch last message ID: HTTP ${response.status}`,
+      );
+      return null;
+    }
 
     const json = await response.json();
     const messages = json.messages || json.data || [];
@@ -756,7 +772,7 @@ export class QwenProvider implements Provider {
               thinkingParser.feed(delta.content);
             }
           } catch (e) {
-            // Skip non-JSON lines
+            logger.warn('[Qwen] Failed to parse SSE line:', e);
           }
         }
       }
@@ -768,6 +784,7 @@ export class QwenProvider implements Provider {
       }
       onDone();
     } catch (err: any) {
+      logger.error('[Qwen] handleMessage error:', err);
       onError(err);
     } finally {
       release();
@@ -834,7 +851,7 @@ export class QwenProvider implements Provider {
           }
         }
       } catch (e) {
-        // try next endpoint
+        logger.warn(`[Qwen] Failed to fetch models from ${ep}:`, e);
       }
     }
 

@@ -63,7 +63,9 @@ export const proxyHandler: ProxyHandler = {
         const json = JSON.parse(body);
         if (json.access_token)
           proxyEvents.emit(GEMINI_CLI_EVENTS.TOKENS, JSON.stringify(json));
-      } catch (e) {}
+      } catch (e) {
+        logger.error('[Proxy] Failed to parse Gemini CLI token response:', e);
+      }
     }
 
     if (
@@ -80,7 +82,9 @@ export const proxyHandler: ProxyHandler = {
               : json.cloudaicompanionProject.id;
           proxyEvents.emit(GEMINI_CLI_EVENTS.USER_INFO, { projectId });
         }
-      } catch (e) {}
+      } catch (e) {
+        logger.error('[Proxy] Failed to parse Gemini CLI loadCodeAssist response:', e);
+      }
     }
 
     if (
@@ -95,7 +99,9 @@ export const proxyHandler: ProxyHandler = {
             email: json.email,
             name: json.name,
           });
-      } catch (e) {}
+      } catch (e) {
+        logger.error('[Proxy] Failed to parse Gemini CLI userinfo response:', e);
+      }
     }
   },
 };

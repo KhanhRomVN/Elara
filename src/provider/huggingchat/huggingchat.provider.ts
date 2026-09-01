@@ -25,7 +25,7 @@ import fetch from 'node-fetch';
 import { Provider, SendMessageOptions } from '../../types';
 
 // ── Services ──
-import { loginService } from '../../services/login/login.service';
+import { loginService } from '../../services/login.service';
 import { proxyEvents } from '../../services/proxy.service';
 
 // ── Utils ──
@@ -63,7 +63,7 @@ export class HuggingChatProvider implements Provider {
     proxyEvents.on(HUGGINGCHAT_EVENTS.LOGIN_DATA, onLoginData);
 
     try {
-      return await loginService.login({
+      return await loginService.captureCredentialsViaCDP({
         providerId: 'huggingchat',
         loginUrl: `${BASE_URL}/chat/login`,
         partition: `huggingchat-${Date.now()}`,
@@ -102,6 +102,9 @@ export class HuggingChatProvider implements Provider {
               email: identityEmail,
             };
           }
+          logger.warn(
+            '[HuggingChat] Login validation failed: could not determine email',
+          );
           return { isValid: false };
         },
       });
@@ -126,6 +129,11 @@ export class HuggingChatProvider implements Provider {
 
       if (response.ok) {
         const chatUser = await response.json();
+        if (!chatUser.email && !chatUser.username) {
+          logger.warn(
+            '[HuggingChat] Get Profile response missing email/username',
+          );
+        }
         return {
           email:
             chatUser.email ||
@@ -134,6 +142,9 @@ export class HuggingChatProvider implements Provider {
           id: chatUser.id || chatUser._id,
         };
       }
+      logger.warn(
+        `[HuggingChat] Get Profile returned status ${response.status}`,
+      );
       return { email: null };
     } catch (e) {
       logger.error('[HuggingChat] Get Profile Error:', e);
@@ -270,11 +281,14 @@ export class HuggingChatProvider implements Provider {
             } else if (json.type === 'title' && json.title && onMetadata) {
               onMetadata({ conversation_title: json.title });
             }
-          } catch (e) {}
+          } catch (e) {
+            logger.warn('[HuggingChat] Failed to parse SSE line:', e);
+          }
         }
       }
       onDone();
     } catch (err: any) {
+      logger.error('[HuggingChat] Error in handleMessage:', err);
       onError(err);
     }
   }

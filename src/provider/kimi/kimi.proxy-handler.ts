@@ -45,7 +45,7 @@ function extractInfoFromJwt(token: string): {
       };
     }
   } catch {
-    // ignore
+    logger.warn('[Proxy] Failed to extract JWT info');
   }
   return {};
 }
@@ -231,7 +231,7 @@ export const kimiProxyHandler: ProxyHandler = {
           proxyEvents.emit(KIMI_EVENTS.LOGIN_EMAIL, { email: json.email });
         }
       } catch {
-        // Not JSON
+        logger.warn('[Proxy] Kimi response body is not JSON');
       }
     }
   },

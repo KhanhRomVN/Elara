@@ -7,7 +7,7 @@
  *
  * Main functions:
  * - recordMetrics() : Ghi nhận metrics cho một cuộc gọi thành công
- * - getStats()               : Lấy thống kê usage, accounts, models theo period
+ * - getStats()      : Lấy thống kê usage, accounts, models theo period
  * ------------------------------------------------------------------
  */
 

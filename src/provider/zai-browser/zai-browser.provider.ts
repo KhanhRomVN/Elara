@@ -29,7 +29,7 @@ import {
 } from '../../repositories/account.repository';
 
 // ── Services ──
-import { loginViaCDP } from '../../services/browser-session.service';
+import { loginService } from '../../services/login.service';
 import { getWebSocketServer } from '../../websocket-server';
 
 // ── Utils ──
@@ -74,6 +74,7 @@ export class ZaiBrowserProvider implements Provider {
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
         wsServer.off('connected', onConnected);
+        logger.error('[ZaiBrowser] Extension connection timeout after 30 seconds');
         reject(new Error('Extension connection timeout after 30 seconds'));
       }, 30000);
 
@@ -133,6 +134,7 @@ export class ZaiBrowserProvider implements Provider {
   ): Promise<{ email: string | null; name?: string; id?: string }> {
     const parsed = parseZaiBrowserCredential(credential);
     if (!parsed) {
+      logger.warn('[ZaiBrowser] Get Profile: failed to parse credential');
       return { email: null };
     }
 
@@ -141,6 +143,7 @@ export class ZaiBrowserProvider implements Provider {
       return { email: decodeURIComponent(emailMatch[1]) };
     }
 
+    logger.warn('[ZaiBrowser] Get Profile: no email found in cookie');
     return { email: null };
   }
 
@@ -162,6 +165,7 @@ export class ZaiBrowserProvider implements Provider {
     const sessions = findBrowserAccountsByProvider('zai-browser');
     const session = sessions.length > 0 ? sessions[0] : null;
     if (!session) {
+      logger.error('[ZaiBrowser] No active browser session found');
       onError(
         new Error(
           'No active browser session. Please create a session via POST /v1/browser-sessions/login',
@@ -234,21 +238,17 @@ export class ZaiBrowserProvider implements Provider {
 
   // ─── Login ──────────────────────────────────────────────────────────
 
-  async login(): Promise<{
-    cookies: string;
-    email?: string;
-    pending?: boolean;
-    tempSessionId?: string;
-  }> {
+  async login(): Promise<{ user_data_dir?: string }> {
     const loginUrl = 'https://chat.z.ai/';
     try {
-      const result = await loginViaCDP('zai-browser', loginUrl, 'zai-default');
+      const result = await loginService.captureBrowserProfileViaCDP(
+        'zai-browser',
+        loginUrl,
+        'zai-default',
+      );
 
       return {
-        pending: true,
-        tempSessionId: result.tempSessionId,
-        cookies: '',
-        email: '',
+        user_data_dir: result.user_data_dir,
       };
     } catch (error: any) {
       logger.error('[ZaiBrowser] Login failed:', error);

@@ -16,8 +16,14 @@
 import { ProxyHandler } from '../../services/proxy.service';
 import { proxyEvents } from '../../services/proxy.service';
 
+// ── Utils ──
+import { createLogger } from '../../utils/logger';
+
 // ── Constants ──
 import { CODEX_CLI_EVENTS } from './codex-cli.constant';
+
+// ─── Constants ──────────────────────────────────────────────────────────
+const logger = createLogger('CodexCLIProxy');
 
 // ─── Proxy Handler ────────────────────────────────────────────────────
 
@@ -42,7 +48,9 @@ export const proxyHandler: ProxyHandler = {
             }),
           });
         }
-      } catch (e) {}
+      } catch (e) {
+        logger.error('[Proxy] Failed to parse Codex CLI token response:', e);
+      }
     }
 
     if (
@@ -53,7 +61,9 @@ export const proxyHandler: ProxyHandler = {
       try {
         const json = JSON.parse(body);
         if (json.email) proxyEvents.emit(CODEX_CLI_EVENTS.USER_INFO, json);
-      } catch (e) {}
+      } catch (e) {
+        logger.error('[Proxy] Failed to parse Codex CLI usage response:', e);
+      }
     }
   },
 };

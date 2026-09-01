@@ -26,7 +26,7 @@ import fetch from 'node-fetch';
 import { Provider, SendMessageOptions } from '../../types';
 
 // ── Services ──
-import { loginService } from '../../services/login/login.service';
+import { loginService } from '../../services/login.service';
 
 // ── Database ──
 import { getDb } from '../../database';
@@ -144,6 +144,7 @@ export class ZAIProvider implements Provider {
           name: payload.name,
         };
       }
+      logger.warn('[Z.AI] Get Profile: credential is not a valid JWT');
       return { email: null };
     } catch (e) {
       logger.error('[Z.AI] Get Profile Error:', e);
@@ -154,7 +155,7 @@ export class ZAIProvider implements Provider {
   // ─── Login ──────────────────────────────────────────────────────────
 
   async login() {
-    return await loginService.login({
+    return await loginService.captureCredentialsViaCDP({
       providerId: 'z',
       loginUrl: `${BASE_URL}/`,
       partition: `z-${Date.now()}`,
@@ -174,6 +175,9 @@ export class ZAIProvider implements Provider {
           if (emailOrId && !isGuest) {
             return { isValid: true, email: emailOrId, cookies: data.cookies };
           }
+          logger.warn(
+            '[Z.AI] Login validation failed: guest account or missing identity',
+          );
         }
         return { isValid: false };
       },
@@ -200,6 +204,7 @@ export class ZAIProvider implements Provider {
 
     const authData = getAuthDataFromCredential(credential);
     if (!authData) {
+      logger.error('[Z.AI] Authentication data not found in credential');
       onError(
         new Error('Z.AI authentication data not found. Please login first.'),
       );
@@ -428,7 +433,9 @@ export class ZAIProvider implements Provider {
                 return;
               }
             }
-          } catch (e) {}
+          } catch (e) {
+            logger.warn('[Z.AI] Failed to parse SSE line:', e);
+          }
         }
       }
 

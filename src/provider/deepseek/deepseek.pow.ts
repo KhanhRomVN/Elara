@@ -118,6 +118,10 @@ export async function solvePoW(
     prefix,
   );
 
+  if (answer === null) {
+    logger.warn('[DeepSeek] PoW solver returned null answer, using 0');
+  }
+
   return {
     algorithm: challenge.algorithm,
     challenge: challenge.challenge,

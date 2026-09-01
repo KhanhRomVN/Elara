@@ -26,7 +26,7 @@ import fetch from 'node-fetch';
 import { Provider, SendMessageOptions } from '../../types';
 
 // ── Services ──
-import { loginService } from '../../services/login/login.service';
+import { loginService } from '../../services/login.service';
 import { proxyService } from '../../services/proxy.service';
 import { proxyEvents } from '../../services/proxy.service';
 
@@ -96,6 +96,12 @@ export class QwenCoderCLIProvider implements Provider {
       } catch (e) {}
     }
 
+    if (!terminal) {
+      logger.warn(
+        '[QwenCLI] No supported terminal emulator found, falling back to direct node spawn',
+      );
+    }
+
     const nodePath = process.execPath;
     const proxyUrl = `http://127.0.0.1:${port}`;
     const env = {
@@ -147,7 +153,7 @@ export class QwenCoderCLIProvider implements Provider {
             capturedUrl = urlMatch[0];
             clearInterval(checkInterval);
             loginService
-              .login({
+              .captureCredentialsViaCDP({
                 providerId: 'qwen-cli',
                 loginUrl: capturedUrl,
                 partition: 'qwen-cli',
@@ -165,7 +171,9 @@ export class QwenCoderCLIProvider implements Provider {
               .then((result) => {
                 try {
                   fs.rmSync(tempHome, { recursive: true, force: true });
-                } catch (e) {}
+                } catch (e) {
+                  logger.warn('[QwenCLI] Failed to clean up temp home:', e);
+                }
                 resolve(result);
               })
               .catch(reject);
@@ -176,6 +184,7 @@ export class QwenCoderCLIProvider implements Provider {
       setTimeout(() => {
         if (!capturedUrl) {
           clearInterval(checkInterval);
+          logger.error('[QwenCLI] Login timed out waiting for OAuth URL');
           reject(new Error('Timed out'));
         }
       }, 60000);
@@ -195,9 +204,15 @@ export class QwenCoderCLIProvider implements Provider {
       });
       if (response.ok) {
         const data = await response.json();
+        if (!data.email && !data.username) {
+          logger.warn('[QwenCLI] Get Profile response missing email/username');
+        }
         return { email: data.email || data.username || null };
       }
-    } catch (e) {}
+      logger.warn(`[QwenCLI] Get Profile returned status ${response.status}`);
+    } catch (e) {
+      logger.error('[QwenCLI] Get Profile Error:', e);
+    }
     return { email: null };
   }
 
@@ -216,7 +231,12 @@ export class QwenCoderCLIProvider implements Provider {
         refresh_token: refreshTokenStr,
       }),
     });
-    if (!response.ok) throw new Error('Failed to refresh Qwen token');
+    if (!response.ok) {
+      logger.error(
+        `[QwenCLI] Token refresh failed with status ${response.status}`,
+      );
+      throw new Error('Failed to refresh Qwen token');
+    }
     const json = await response.json();
     let data = json;
     if (
@@ -226,7 +246,9 @@ export class QwenCoderCLIProvider implements Provider {
     ) {
       try {
         data = JSON.parse(json.response);
-      } catch (e) {}
+      } catch (e) {
+        logger.warn('[QwenCLI] Failed to parse nested token response:', e);
+      }
     }
     return data;
   }
@@ -249,6 +271,9 @@ export class QwenCoderCLIProvider implements Provider {
     try {
       tokens = JSON.parse(credential);
     } catch (e) {
+      logger.warn(
+        '[QwenCLI] Credential is not valid JSON, treating as raw access token',
+      );
       tokens = { accessToken: credential };
     }
 
@@ -297,10 +322,17 @@ export class QwenCoderCLIProvider implements Provider {
                 newCredential,
                 accountId,
               );
-            } catch (e) {}
+            } catch (e) {
+              logger.error(
+                '[QwenCLI] Failed to persist refreshed token to DB:',
+                e,
+              );
+            }
           }
           response = await sendRequest(tokens.accessToken);
-        } catch (e) {}
+        } catch (e) {
+          logger.error('[QwenCLI] Token refresh failed:', e);
+        }
       }
 
       if (!response.ok)
@@ -325,7 +357,9 @@ export class QwenCoderCLIProvider implements Provider {
               const json = JSON.parse(jsonStr);
               if (json.choices?.[0]?.delta?.content)
                 onContent(json.choices[0].delta.content);
-            } catch (e) {}
+            } catch (e) {
+              logger.warn('[QwenCLI] Failed to parse SSE line:', e);
+            }
           }
         }
         onDone();
@@ -335,6 +369,7 @@ export class QwenCoderCLIProvider implements Provider {
         onDone();
       }
     } catch (err: any) {
+      logger.error('[QwenCLI] Error in handleMessage:', err);
       onError(err);
     }
   }

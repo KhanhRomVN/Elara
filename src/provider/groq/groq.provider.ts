@@ -23,7 +23,7 @@ import fetch from 'node-fetch';
 import { Provider, SendMessageOptions } from '../../types';
 
 // ── Services ──
-import { loginService } from '../../services/login/login.service';
+import { loginService } from '../../services/login.service';
 
 // ── Utils ──
 import { createLogger } from '../../utils/logger';
@@ -51,7 +51,7 @@ export class GroqProvider implements Provider {
   // ─── Login ──────────────────────────────────────────────────────────
 
   async login() {
-    return await loginService.login({
+    return await loginService.captureCredentialsViaCDP({
       providerId: 'groq',
       loginUrl: `${BASE_URL}/login`,
       partition: `groq-${Date.now()}`,
@@ -138,8 +138,12 @@ export class GroqProvider implements Provider {
             stytchSession.authentication_factors[0].email_factor.email_address;
         }
       }
+      if (!email) {
+        logger.warn('[Groq] Get Profile: no email found in session JWT');
+      }
       return { email };
     } catch (e) {
+      logger.error('[Groq] Get Profile Error:', e);
       return { email: null };
     }
   }
@@ -209,7 +213,9 @@ export class GroqProvider implements Provider {
               if (delta?.content) {
                 onContent(delta.content);
               }
-            } catch (e) {}
+            } catch (e) {
+              logger.warn('[Groq] Failed to parse SSE line:', e);
+            }
           }
         }
       }
@@ -294,6 +300,7 @@ export class GroqProvider implements Provider {
       const modelsData = json.data || [];
 
       if (!Array.isArray(modelsData)) {
+        logger.warn('[Groq] Models API returned invalid format');
         return this.getFallbackModels('Invalid API Format');
       }
 

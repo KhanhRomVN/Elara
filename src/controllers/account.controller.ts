@@ -13,7 +13,6 @@
  * - deleteAccount()            : Xóa tài khoản theo id
  * - getAccountMemory()         : Lấy trạng thái memory của tài khoản
  * - updateAccountMemory()      : Cập nhật trạng thái memory
- * - login()                    : Đăng nhập qua browser cho provider
  * - getAccountBrowserStatus()  : Kiểm tra trạng thái browser của tài khoản
  * - startAccountBrowser()      : Khởi động browser cho tài khoản
  * ------------------------------------------------------------------
@@ -36,11 +35,11 @@ import {
   getAccounts as getAccountsService,
   createAccount,
   updateAccount,
+  updateAccountUserDataDir,
   updateMemoryState,
   removeAccount,
   importAccounts as importAccountsService,
   getProviderConfig,
-  loginWithProvider,
   type AccountInput,
 } from '../services/account.service';
 
@@ -222,10 +221,15 @@ export const addAccount = async (
       return;
     }
 
-    if (!account.provider_id || !account.email || !account.credential) {
+    if (
+      !account.provider_id ||
+      !account.email ||
+      (!account.credential && !account.user_data_dir)
+    ) {
       res.status(400).json({
         success: false,
-        message: 'Missing required fields: provider_id, email, credential',
+        message:
+          'Missing required fields: provider_id, email, and either credential or user_data_dir',
         error: { code: 'INVALID_INPUT' },
         meta: { timestamp: new Date().toISOString() },
       });
@@ -240,7 +244,12 @@ export const addAccount = async (
 
     if (existing) {
       try {
-        updateAccount(existing.id, account.credential);
+        if (account.credential) {
+          updateAccount(existing.id, account.credential);
+        }
+        if (account.user_data_dir) {
+          updateAccountUserDataDir(existing.id, account.user_data_dir);
+        }
         res.status(200).json({
           success: true,
           message: 'Account credential updated successfully',
@@ -402,62 +411,6 @@ export const deleteAccount = async (
       error: { code: 'INTERNAL_ERROR' },
       meta: { timestamp: new Date().toISOString() },
     });
-  }
-};
-
-// POST /v1/accounts/:provider/login
-export const login = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { provider: providerId } = req.params;
-    const { method } = req.body;
-
-    try {
-      const result = await loginWithProvider(providerId, {
-        method: method === 'google' ? 'google' : 'basic',
-      });
-
-      const accountResponse: any = {
-        provider_id: providerId,
-        email: result.email || '',
-        credential: result.cookies,
-        headers: result.headers,
-      };
-
-      // Include pending info for browser providers
-      if (result.pending) {
-        accountResponse.pending = result.pending;
-        accountResponse.tempSessionId = result.tempSessionId;
-      }
-
-      res.status(200).json({
-        success: true,
-        account: accountResponse,
-      });
-    } catch (providerError: any) {
-      logger.warn(`[Login] Provider error: ${providerError.message}`);
-
-      if (providerError.message.includes('not found')) {
-        res.status(404).json({
-          success: false,
-          message: 'Provider not found',
-        });
-      } else if (providerError.message.includes('not support')) {
-        res.status(400).json({
-          success: false,
-          message: providerError.message,
-        });
-      } else {
-        throw providerError;
-      }
-      return;
-    }
-  } catch (error: any) {
-    logger.error('[Login] Login failed with error:', error);
-    logger.error(`[Login] Error message: ${error.message}`);
-    logger.error(`[Login] Error stack: ${error.stack}`);
-    res
-      .status(500)
-      .json({ success: false, message: error.message || 'Login failed' });
   }
 };
 

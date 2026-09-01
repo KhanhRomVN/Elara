@@ -16,8 +16,14 @@
 import { ProxyHandler } from '../../services/proxy.service';
 import { proxyEvents } from '../../services/proxy.service';
 
+// ── Utils ──
+import { createLogger } from '../../utils/logger';
+
 // ── Constants ──
 import { QWEN_CLI_EVENTS } from './qwen-cli.constant';
+
+// ─── Constants ──────────────────────────────────────────────────────────
+const logger = createLogger('QwenCLIProxy');
 
 // ─── Proxy Handler ────────────────────────────────────────────────────
 
@@ -47,7 +53,9 @@ export const proxyHandler: ProxyHandler = {
               }),
             });
           }
-        } catch (e) {}
+        } catch (e) {
+          logger.error('[Proxy] Failed to parse Qwen CLI token response:', e);
+        }
       }
       if (url.includes('/api/v1/user') || url.includes('/api/v1/auths')) {
         try {
@@ -62,7 +70,9 @@ export const proxyHandler: ProxyHandler = {
           }
           const email = data.email || data.data?.email;
           if (email) proxyEvents.emit(QWEN_CLI_EVENTS.USER_INFO, { email });
-        } catch (e) {}
+        } catch (e) {
+          logger.error('[Proxy] Failed to parse Qwen CLI user info response:', e);
+        }
       }
     }
   },

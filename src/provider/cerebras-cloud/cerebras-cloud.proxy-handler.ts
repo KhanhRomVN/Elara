@@ -59,7 +59,7 @@ export const proxyHandler: ProxyHandler = {
           });
         }
       } catch (e) {
-        // ignore parse errors
+        logger.error('[Proxy] Failed to parse Cerebras Cloud session response:', e);
       }
     }
   },

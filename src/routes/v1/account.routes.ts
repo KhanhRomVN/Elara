@@ -9,7 +9,6 @@
  * - POST   /v1/accounts                : Thêm một tài khoản
  * - GET    /v1/accounts                : Lấy danh sách tài khoản
  * - DELETE /v1/accounts/:id            : Xóa tài khoản
- * - POST   /v1/accounts/login/:provider : Đăng nhập qua browser
  * - GET    /v1/accounts/:id/memory     : Lấy trạng thái memory
  * - PUT    /v1/accounts/:id/memory     : Cập nhật trạng thái memory
  * - GET    /v1/accounts/:id/browser/status : Trạng thái browser
@@ -27,7 +26,6 @@ import {
   addAccount,
   getAccounts,
   deleteAccount,
-  login,
   getAccountMemory,
   updateAccountMemory,
   getAccountBrowserStatus,
@@ -42,7 +40,6 @@ router.post('/import', importAccounts);
 router.post('/', addAccount);
 router.get('/', getAccounts);
 router.delete('/:id', deleteAccount);
-router.post('/login/:provider', login);
 router.get('/:id/memory', getAccountMemory);
 router.put('/:id/memory', updateAccountMemory);
 router.get('/:id/browser/status', getAccountBrowserStatus);

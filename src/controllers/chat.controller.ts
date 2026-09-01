@@ -16,13 +16,10 @@
 import { Request, Response } from 'express';
 
 // ── Services ──
-import { sendMessage as sendMessageService } from '../services/chat';
+import { sendMessage as sendMessageService } from '../services/chat.service';
 import { recordRequest, recordError } from '../services/metrics.service';
 import { getAllProviders } from '../services/provider.service';
-import {
-  getAccountById,
-  getProviderDefaultModel,
-} from '../services/account.service';
+import { getAccountById } from '../services/account.service';
 
 // ── Utils ──
 import { createLogger } from '../utils/logger';
@@ -114,16 +111,7 @@ export const sendMessage = async (
       return;
     }
 
-    // Resolve "auto" model - use provider's default model
-    let finalModel = modelId;
-    if (modelId === 'auto') {
-      const defaultModel = getProviderDefaultModel(account.provider_id);
-      if (defaultModel) {
-        finalModel = defaultModel;
-      }
-    }
-
-    const model = finalModel;
+    const model = modelId;
 
     // Validate credential before proceeding
     if (!account.credential || account.credential.trim() === '') {

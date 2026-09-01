@@ -177,6 +177,7 @@ export function getUsageHistory(
   offset: number = 0,
   accountId?: string,
 ) {
+  const now = new Date();
   let groupBy: string;
   const labels: string[] = [];
 

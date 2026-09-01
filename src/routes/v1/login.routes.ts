@@ -1,27 +1,25 @@
 /**
  * ------------------------------------------------------------------
- * Chat Routes
+ * Login Routes
  * ------------------------------------------------------------------
- * Routes cho API gửi tin nhắn chat.
+ * Routes cho API đăng nhập qua browser.
  *
- * Main routes:
- * - POST /v1/accounts/messages              : Gửi tin nhắn (accountId trong body)
- * - POST /v1/accounts/:accountId/messages   : Gửi tin nhắn (accountId trong params)
+ * Route chính:
+ * - POST   /v1/accounts/login/:provider : Đăng nhập qua browser
  * ------------------------------------------------------------------
  */
 
 // ─── Imports ────────────────────────────────────────────────────────────
 // ── External ──
-import express from 'express';
+import { Router } from 'express';
 
 // ── Controllers ──
-import { sendMessage } from '../../controllers/chat.controller';
+import { login } from '../../controllers/login.controller';
 
 // ─── Router ─────────────────────────────────────────────────────────────
 
-const router = express.Router();
+const router = Router();
 
-router.post('/accounts/messages', sendMessage);
-router.post('/accounts/:accountId/messages', sendMessage);
+router.post('/:provider', login);
 
 export default router;

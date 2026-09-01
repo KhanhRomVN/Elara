@@ -17,13 +17,12 @@ import cors from 'cors';
 
 // ── Middleware ──
 import { errorHandler } from './middleware/error-handler.middleware';
-import { requestLogger } from './middleware/request-logger.middleware';
 
 // ── Routes ──
 import v1Router from './routes/v1/index';
 
 // ── Controllers ──
-import { login } from './controllers/account.controller';
+import { login } from './controllers/login.controller';
 
 // ── Providers ──
 import { providerRegistry } from './provider/registry';
@@ -44,7 +43,6 @@ export const createApp = async () => {
   app.use(cors());
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-  app.use(requestLogger);
 
   // ─── Health Check ────────────────────────────────────────────────────
   app.get('/health', (req, res) => {

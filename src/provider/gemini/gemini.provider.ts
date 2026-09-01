@@ -24,7 +24,7 @@ import fetch from 'node-fetch';
 import { Provider, SendMessageOptions } from '../../types';
 
 // ── Services ──
-import { loginService } from '../../services/login/login.service';
+import { loginService } from '../../services/login.service';
 import { proxyEvents } from '../../services/proxy.service';
 
 // ── Utils ──
@@ -91,6 +91,9 @@ export class GeminiProvider implements Provider {
         if (emailMatch && emailMatch[1]) {
           return { email: emailMatch[1] };
         }
+        logger.warn('[Gemini] Get Profile response missing email in HTML');
+      } else {
+        logger.warn(`[Gemini] Get Profile returned status ${response.status}`);
       }
 
       if (cred.email) {
@@ -122,7 +125,7 @@ export class GeminiProvider implements Provider {
     proxyEvents.on(GEMINI_EVENTS.AUTH_USER, onAuthUser);
 
     return await loginService
-      .login({
+      .captureCredentialsViaCDP({
         providerId: 'gemini',
         loginUrl,
         partition: `gemini-${Date.now()}`,
@@ -155,8 +158,11 @@ export class GeminiProvider implements Provider {
                 const credStr = JSON.stringify({ cookie, sapisid });
                 const profile = await this.getProfile(credStr);
                 email = profile.email || undefined;
-              } catch {
-                // Profile fetch failed — proceed without email
+              } catch (e) {
+                logger.warn(
+                  '[Gemini] Login profile fetch failed, proceeding without email:',
+                  e,
+                );
               }
             }
 
@@ -181,6 +187,9 @@ export class GeminiProvider implements Provider {
               };
             }
 
+            logger.warn(
+              '[Gemini] Login validation failed: missing SID cookies',
+            );
             return { isValid: false };
           } finally {
             validating = false;
@@ -273,6 +282,7 @@ export class GeminiProvider implements Provider {
 
           const xsrfFromError = errorText.match(/"xsrf","([^"]+)"/)?.[1];
           if (xsrfFromError && attempt === 1) {
+            logger.warn('[Gemini] XSRF token missing, retrying with new token');
             currentCred = { ...currentCred, xsrfToken: xsrfFromError };
             continue;
           }
@@ -363,6 +373,9 @@ export class GeminiProvider implements Provider {
         email: parsed.email || '',
       };
     } catch {
+      logger.warn(
+        '[Gemini] Credential is not valid JSON, treating as raw cookie string',
+      );
       const sapisidMatch = credential.match(/SAPISID=([^;]+)/);
       return {
         cookie: credential,

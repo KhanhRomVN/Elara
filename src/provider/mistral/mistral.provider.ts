@@ -22,7 +22,7 @@ import fetch from 'node-fetch';
 import { Provider, SendMessageOptions } from '../../types';
 
 // ── Services ──
-import { loginService } from '../../services/login/login.service';
+import { loginService } from '../../services/login.service';
 
 // ── Utils ──
 import { createLogger } from '../../utils/logger';
@@ -49,7 +49,7 @@ export class MistralProvider implements Provider {
   // ─── Login ──────────────────────────────────────────────────────────
 
   async login() {
-    return await loginService.login({
+    return await loginService.captureCredentialsViaCDP({
       providerId: 'mistral',
       loginUrl: AUTH_LOGIN_URL,
       partition: `mistral-${Date.now()}`,
@@ -68,6 +68,9 @@ export class MistralProvider implements Provider {
               cookies: data.cookies,
             };
           }
+          logger.warn(
+            '[Mistral] Login validation failed: could not determine email',
+          );
         }
         return { isValid: false };
       },
@@ -92,12 +95,16 @@ export class MistralProvider implements Provider {
 
       if (response.status === 200) {
         const json = await response.json();
+        if (!json.email) {
+          logger.warn('[Mistral] Get Profile response missing email field');
+        }
         return {
           email: json.email || null,
           name: json.name || json.full_name,
           id: json.id,
         };
       }
+      logger.warn(`[Mistral] Get Profile returned status ${response.status}`);
       return { email: null };
     } catch (e) {
       logger.error('[Mistral] Get Profile Error:', e);
@@ -238,11 +245,16 @@ export class MistralProvider implements Provider {
                 }
               }
             }
-          } catch (e) {}
+          } catch (e) {
+            logger.warn('[Mistral] Failed to parse SSE line:', e);
+          }
         }
       });
       body.on('end', () => onDone());
-      body.on('error', onError);
+      body.on('error', (err: any) => {
+        logger.error('[Mistral] Stream body error:', err);
+        onError(err);
+      });
     } else {
       onDone();
     }

@@ -17,13 +17,12 @@
 // ─── Imports ────────────────────────────────────────────────────────────
 // ── External ──
 import { Router } from 'express';
-import fetch from 'node-fetch';
 
 // ── Types ──
 import { Provider, SendMessageOptions } from '../../types';
 
 // ── Services ──
-import { loginService } from '../../services/login/login.service';
+import { loginService } from '../../services/login.service';
 
 // ── Utils ──
 import { HttpClient } from '../../utils/http-client';
@@ -65,12 +64,16 @@ export class ClaudeProvider implements Provider {
       const response = await client.get(API_PATHS.PROFILE);
       if (response.ok) {
         const data = await response.json();
+        if (!data.email) {
+          logger.warn('[Claude] Get Profile response missing email field');
+        }
         return {
           email: data.email || null,
           name: data.name,
           id: data.id,
         };
       }
+      logger.warn(`[Claude] Get Profile returned status ${response.status}`);
       return { email: null };
     } catch (e) {
       logger.error('[Claude] Get Profile Error:', e);
@@ -85,7 +88,7 @@ export class ClaudeProvider implements Provider {
     const loginUrl =
       method === 'google' ? GOOGLE_OAUTH_LOGIN_URL : `${BASE_URL}/login`;
 
-    return await loginService.login({
+    return await loginService.captureCredentialsViaCDP({
       providerId: 'claude',
       loginUrl,
       partition: `claude-${Date.now()}`,
@@ -108,6 +111,9 @@ export class ClaudeProvider implements Provider {
           if (email) {
             return { isValid: true, cookies: token, email };
           }
+          logger.warn(
+            '[Claude] Login validation failed: could not determine email',
+          );
         }
         return { isValid: false };
       },
@@ -188,7 +194,7 @@ export class ClaudeProvider implements Provider {
                 return;
               }
             } catch (e) {
-              // Ignore parse errors
+              logger.warn('[Claude] Failed to parse SSE line:', e);
             }
           }
         }
@@ -196,6 +202,7 @@ export class ClaudeProvider implements Provider {
 
       onDone();
     } catch (err: any) {
+      logger.error('[Claude] Error in handleMessage:', err);
       onError(err);
     }
   }

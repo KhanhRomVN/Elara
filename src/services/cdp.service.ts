@@ -7,10 +7,8 @@
  *
  * Main functions:
  * - launchBrowser()   : Khởi động browser với debug port
- * - connect()         : Kết nối CDP tới browser
+ * - connect()         : Kết nối CDP tới browser (private)
  * - send()            : Gửi command qua CDP
- * - evaluate()        : Evaluate JavaScript trong page
- * - navigate()        : Điều hướng tới URL
  * - close()           : Đóng browser và WebSocket
  * - getResponseBody() : Lấy response body của request
  * ------------------------------------------------------------------
@@ -26,8 +24,8 @@ import WebSocket from 'ws';
 import { EventEmitter } from 'events';
 
 // ── Utils ──
-import { createLogger } from '../../utils/logger';
-import { findAvailablePort } from '../../utils/net';
+import { createLogger } from '../utils/logger';
+import { findAvailablePort } from '../utils/net';
 
 // ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('CDPService');
@@ -209,7 +207,11 @@ export class CDPService extends EventEmitter {
 
   // ─── Connect ─────────────────────────────────────────────────────────
 
-  async connect(port: number, retries = 5, delay = 1000): Promise<boolean> {
+  private async connect(
+    port: number,
+    retries = 5,
+    delay = 1000,
+  ): Promise<boolean> {
     try {
       const targetsResponse = await fetch(`http://127.0.0.1:${port}/json`);
       if (!targetsResponse.ok)
@@ -420,15 +422,6 @@ export class CDPService extends EventEmitter {
 
   // ─── Public Methods ──────────────────────────────────────────────────
 
-  async evaluate(expression: string): Promise<any> {
-    const result = await this.send('Runtime.evaluate', { expression });
-    return result.result?.value;
-  }
-
-  async navigate(url: string): Promise<void> {
-    await this.send('Page.navigate', { url });
-  }
-
   async close(): Promise<void> {
     if (this.browserProcess) {
       this.browserProcess.kill();
@@ -439,10 +432,6 @@ export class CDPService extends EventEmitter {
       this.ws = null;
     }
     this.isConnected = false;
-  }
-
-  isConnectedToBrowser(): boolean {
-    return this.isConnected && this.ws?.readyState === WebSocket.OPEN;
   }
 }
 

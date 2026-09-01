@@ -28,7 +28,7 @@ import fetch, { Response as NodeFetchResponse } from 'node-fetch';
 import { Provider, SendMessageOptions } from '../../types';
 
 // ── Services ──
-import { loginService } from '../../services/login/login.service';
+import { loginService } from '../../services/login.service';
 
 // ── Utils ──
 import { HttpClient } from '../../utils/http-client';
@@ -87,7 +87,9 @@ export class DeepSeekProvider implements Provider {
             id: json.data.id,
           };
         }
+        logger.warn('[DeepSeek] Get Profile response missing data field');
       }
+      logger.warn(`[DeepSeek] Get Profile returned status ${response.status}`);
       return { email: null };
     } catch (e) {
       logger.error('[DeepSeek] Get Profile Error:', e);
@@ -102,7 +104,7 @@ export class DeepSeekProvider implements Provider {
     const loginUrl =
       method === 'google' ? GOOGLE_OAUTH_LOGIN_URL : `${BASE_URL}/login`;
 
-    return await loginService.login({
+    return await loginService.captureCredentialsViaCDP({
       providerId: 'deepseek',
       loginUrl,
       partition: `deepseek-${Date.now()}`,
@@ -117,14 +119,18 @@ export class DeepSeekProvider implements Provider {
           const token = data.cookies;
           let email = data.email;
 
-          if (!email) {
+          // If email is masked (contains ***), fetch real email from profile
+          if (!email || email.includes('***') || email.includes('*')) {
             const profile = await this.getProfile(token);
-            email = profile.email || undefined;
+            email = profile.email || email; // Fallback to masked email if profile fetch fails
           }
 
           if (email) {
             return { isValid: true, cookies: token, email };
           }
+          logger.warn(
+            '[DeepSeek] Login validation failed: could not determine email',
+          );
         }
         return { isValid: false };
       },
@@ -530,7 +536,12 @@ export class DeepSeekProvider implements Provider {
           .find((m: any) => m.role && m.role.toUpperCase() === 'ASSISTANT');
         return lastAssistant?.message_id || null;
       }
-    } catch (e) {}
+      logger.warn(
+        `[DeepSeek] Failed to fetch history messages: HTTP ${res.status}`,
+      );
+    } catch (e) {
+      logger.warn('[DeepSeek] Failed to fetch last message ID:', e);
+    }
     return null;
   }
 

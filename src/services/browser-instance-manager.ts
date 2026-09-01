@@ -6,8 +6,8 @@
  * Tạo profile, khởi động browser với extension, và theo dõi trạng thái.
  *
  * Main functions:
- * - getBrowserStatus()           : Kiểm tra browser đang chạy
- * - startBrowserForAccount()     : Khởi động browser cho account
+ * - getBrowserStatus()                      : Kiểm tra browser đang chạy
+ * - startBrowserForAccount()                : Khởi động browser cho account
  * - browserInstanceManager.getProfilePath() : Lấy đường dẫn profile
  * - browserInstanceManager.createProfile()  : Tạo profile mới
  * ------------------------------------------------------------------

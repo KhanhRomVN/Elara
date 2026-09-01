@@ -85,6 +85,7 @@ export async function parseKimiSSE(
           const event = JSON.parse(frameStr);
           processKimiEvent(event);
         } catch (e) {
+          logger.warn('[Kimi] Failed to parse SSE frame:', e);
           if (onRaw) onRaw(frameStr);
         }
       }
@@ -101,6 +102,7 @@ export async function parseKimiSSE(
     });
 
     stream.on('error', (err) => {
+      logger.error('[Kimi] SSE stream error:', err);
       reject(err);
     });
 

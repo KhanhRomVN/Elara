@@ -92,7 +92,9 @@ export async function parseSSEStream(
         if (finishReason && onMetadata) {
           onMetadata({ finish_reason: finishReason });
         }
-      } catch (_e) {}
+      } catch (_e) {
+        logger.warn('[CerebrasCloud] Failed to parse SSE line:', _e);
+      }
     }
   }
 }

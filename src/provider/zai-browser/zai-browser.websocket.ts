@@ -68,6 +68,7 @@ export class ZaiBrowserWebSocketManager extends EventEmitter {
 
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
+        logger.error(`[WebSocket] Connection timeout after ${this.config.extensionReadyTimeout}ms`);
         reject(
           new Error(
             `Extension WebSocket connection timeout after ${this.config.extensionReadyTimeout}ms`,
@@ -206,7 +207,9 @@ export class ZaiBrowserWebSocketManager extends EventEmitter {
               pending.onContent(content);
             }
           }
-        } catch (e) {}
+        } catch (e) {
+          logger.warn('[WebSocket] Failed to parse stream chunk line:', e);
+        }
       }
     }
   }

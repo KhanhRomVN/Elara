@@ -193,6 +193,7 @@ export const insertAccountsBatch = (
     }
     db.prepare('COMMIT').run();
   } catch (err) {
+    logger.error('Error during batch insert, rolling back:', err);
     try {
       db.prepare('ROLLBACK').run();
     } catch (rollbackErr) {
@@ -266,6 +267,16 @@ export const updateAccountUsage = (
 export const findAllAccounts = (): AccountRow[] => {
   const db = getDb();
   return db.prepare('SELECT * FROM accounts').all() as AccountRow[];
+};
+
+export const findAccountsNeedingRefresh = (threshold: number): AccountRow[] => {
+  const db = getDb();
+  const cutoff = Date.now() - threshold;
+  return db
+    .prepare(
+      'SELECT * FROM accounts WHERE last_refreshed_at IS NOT NULL AND last_refreshed_at < ?',
+    )
+    .all(cutoff) as AccountRow[];
 };
 
 // ─── Delete ────────────────────────────────────────────────────────────

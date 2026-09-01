@@ -26,7 +26,7 @@ import fetch from 'node-fetch';
 import { Provider, SendMessageOptions } from '../../types';
 
 // ── Services ──
-import { loginService } from '../../services/login/login.service';
+import { loginService } from '../../services/login.service';
 import { proxyService } from '../../services/proxy.service';
 
 // ── Database ──
@@ -77,13 +77,19 @@ export class CodexCLIProvider implements Provider {
       });
       if (response.ok) {
         const data = await response.json();
+        if (!data.email) {
+          logger.warn('[CodexCLI] Get Profile response missing email field');
+        }
         return {
           email: data.email || null,
           userId: data.user_id,
           accountId: data.account_id,
         };
       }
-    } catch (e) {}
+      logger.warn(`[CodexCLI] Get Profile returned status ${response.status}`);
+    } catch (e) {
+      logger.error('[CodexCLI] Get Profile Error:', e);
+    }
     return { email: null };
   }
 
@@ -119,6 +125,12 @@ export class CodexCLIProvider implements Provider {
         terminal = t;
         break;
       } catch (e) {}
+    }
+
+    if (!terminal) {
+      logger.warn(
+        '[CodexCLI] No supported terminal emulator found, falling back to bash',
+      );
     }
 
     const proxyUrl = `http://127.0.0.1:${port}`;
@@ -176,7 +188,7 @@ export class CodexCLIProvider implements Provider {
             capturedUrl = urlMatch[0];
             clearInterval(checkInterval);
             loginService
-              .login({
+              .captureCredentialsViaCDP({
                 providerId: 'codex-cli',
                 loginUrl: capturedUrl,
                 partition: 'codex-cli',
@@ -196,7 +208,12 @@ export class CodexCLIProvider implements Provider {
                         if (profile && profile.email)
                           return { isValid: true, email: profile.email };
                       }
-                    } catch (e) {}
+                    } catch (e) {
+                      logger.warn(
+                        '[CodexCLI] Failed to parse captured tokens:',
+                        e,
+                      );
+                    }
                   }
                   return captured.cookies && captured.email
                     ? { isValid: true }
@@ -233,7 +250,12 @@ export class CodexCLIProvider implements Provider {
         refresh_token: refreshTokenStr,
       }),
     });
-    if (!response.ok) throw new Error('Failed to refresh Codex token');
+    if (!response.ok) {
+      logger.error(
+        `[CodexCLI] Token refresh failed with status ${response.status}`,
+      );
+      throw new Error('Failed to refresh Codex token');
+    }
     return await response.json();
   }
 
@@ -256,6 +278,9 @@ export class CodexCLIProvider implements Provider {
     try {
       tokens = JSON.parse(credential);
     } catch (e) {
+      logger.warn(
+        '[CodexCLI] Credential is not valid JSON, treating as raw access token',
+      );
       tokens = { accessToken: credential };
     }
 
@@ -269,7 +294,9 @@ export class CodexCLIProvider implements Provider {
         );
         chatgptAccountId =
           payload['https://api.openai.com/auth']?.chatgpt_account_id;
-      } catch (e) {}
+      } catch (e) {
+        logger.warn('[CodexCLI] Failed to decode JWT payload:', e);
+      }
 
       const bodyObj: any = {
         model: model || this.defaultModel,
@@ -312,7 +339,12 @@ export class CodexCLIProvider implements Provider {
           const compressed = await compress(Buffer.from(jsonBody));
           finalBody = compressed;
           headers['Content-Encoding'] = 'zstd';
-        } catch (e) {}
+        } catch (e) {
+          logger.warn(
+            '[CodexCLI] Failed to compress request body with zstd:',
+            e,
+          );
+        }
       }
 
       return await fetch(url, { method: 'POST', headers, body: finalBody });
@@ -331,7 +363,12 @@ export class CodexCLIProvider implements Provider {
               getDb()
                 .prepare('UPDATE accounts SET credential = ? WHERE id = ?')
                 .run(JSON.stringify(tokens), accountId);
-            } catch (e) {}
+            } catch (e) {
+              logger.error(
+                '[CodexCLI] Failed to persist refreshed token to DB:',
+                e,
+              );
+            }
           }
           response = await sendRequest(tokens.accessToken);
         } catch (e) {}
@@ -366,7 +403,9 @@ export class CodexCLIProvider implements Provider {
                     ? content
                     : JSON.stringify(content),
                 );
-            } catch (e) {}
+            } catch (e) {
+              logger.warn('[CodexCLI] Failed to parse SSE line:', e);
+            }
           }
         }
         onDone();
@@ -377,22 +416,20 @@ export class CodexCLIProvider implements Provider {
         onDone();
       }
     } catch (err: any) {
+      logger.error('[CodexCLI] Error in handleMessage:', err);
       onError(err);
     }
   }
 
   // ─── Continue Message ───────────────────────────────────────────────
-
   async continueMessage(options: SendMessageOptions): Promise<void> {
     return this.handleMessage(options);
   }
 
   // ─── Misc ────────────────────────────────────────────────────────────
-
   isModelSupported(model: string): boolean {
     const m = model.toLowerCase();
     return m.includes('codex') || m.startsWith('gpt-5');
   }
 }
-
 export default new CodexCLIProvider();

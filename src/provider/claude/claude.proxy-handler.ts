@@ -59,7 +59,7 @@ export const proxyHandler: ProxyHandler = {
           proxyEvents.emit(CLAUDE_EVENTS.LOGIN_EMAIL, { email: json.email });
         }
       } catch (e) {
-        // Not JSON, ignore
+        logger.warn('[Proxy] Failed to parse Claude auth request body:', e);
       }
     }
     callback(null, chunk);

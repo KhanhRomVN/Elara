@@ -25,7 +25,7 @@ import fetch from 'node-fetch';
 import { Provider, SendMessageOptions } from '../../types';
 
 // ── Services ──
-import { loginService } from '../../services/login/login.service';
+import { loginService } from '../../services/login.service';
 import { proxyEvents } from '../../services/proxy.service';
 
 // ── Repositories ──
@@ -88,7 +88,9 @@ export class KimiProvider implements Provider {
           userAgent: parsed.userAgent || USER_AGENT,
         };
       } catch {
-        // fall through
+        logger.warn(
+          '[Kimi] Credential is not valid JSON, falling through to raw token parsing',
+        );
       }
     }
 
@@ -280,8 +282,13 @@ export class KimiProvider implements Provider {
 
           return { email, name, id };
         }
+        logger.warn('[Kimi] Get Profile response missing user data');
+      } else {
+        logger.warn(`[Kimi] Get Profile returned status ${res.status}`);
       }
-    } catch (e) {}
+    } catch (e) {
+      logger.error('[Kimi] Get Profile Error:', e);
+    }
     return { email: null };
   }
 
@@ -298,7 +305,7 @@ export class KimiProvider implements Provider {
     proxyEvents.on(KIMI_EVENTS.HEADERS, onHeaders);
 
     try {
-      const res = await loginService.login({
+      const res = await loginService.captureCredentialsViaCDP({
         providerId: 'kimi',
         loginUrl: `${KIMI_BASE_URL}/`,
         partition: `kimi-${Date.now()}`,
@@ -328,6 +335,7 @@ export class KimiProvider implements Provider {
           }
 
           if (!token || !token.startsWith('eyJ')) {
+            logger.warn('[Kimi] Login validation failed: invalid token format');
             return { isValid: false };
           }
 
@@ -336,10 +344,16 @@ export class KimiProvider implements Provider {
 
           const profile = await this.getProfile(token, capturedHeaders);
           if (!profile.email && !profile.id) {
+            logger.warn(
+              '[Kimi] Login validation failed: could not fetch user profile',
+            );
             return { isValid: false };
           }
 
           if (!refreshToken) {
+            logger.warn(
+              '[Kimi] Login validation failed: missing refresh token',
+            );
             return { isValid: false };
           }
 

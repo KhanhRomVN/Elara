@@ -15,8 +15,11 @@
 
 // ─── Imports ────────────────────────────────────────────────────────────
 import * as crypto from 'crypto';
+import { createLogger } from '../../utils/logger';
 import type { ZAIAuthData, SignatureResult, ZAIUserAgentDetails } from './zai.types';
 import { BASE_URL, DEFAULT_USER_AGENT, SALT, FE_VERSION } from './zai.constant';
+
+const logger = createLogger('ZAIHelpers');
 
 // ─── Functions ──────────────────────────────────────────────────────────
 
@@ -46,6 +49,7 @@ export function getAuthDataFromCredential(credential: string): ZAIAuthData | nul
     }
     return { token: jwtToken, userId: '', cookies, userAgent };
   } catch (e) {
+    logger.warn('[Z.AI] Failed to parse credential:', e);
     return null;
   }
 }

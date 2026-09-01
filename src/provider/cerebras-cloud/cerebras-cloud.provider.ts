@@ -24,11 +24,10 @@ import fetch from 'node-fetch';
 import { Provider, SendMessageOptions } from '../../types';
 
 // ── Services ──
-import { loginService } from '../../services/login/login.service';
+import { loginService } from '../../services/login.service';
 
 // ── Utils ──
 import { createLogger } from '../../utils/logger';
-import { countTokens } from '../../utils/tokenizer';
 
 // ── Cerebras Imports ──
 import {
@@ -55,7 +54,7 @@ export class CerebrasCloudProvider implements Provider {
   // ─── Login ──────────────────────────────────────────────────────────
 
   async login() {
-    return await loginService.login({
+    return await loginService.captureCredentialsViaCDP({
       providerId: 'cerebras-cloud',
       loginUrl: `${BASE_URL}/`,
       partition: `cerebras-cloud-${Date.now()}`,
@@ -73,6 +72,9 @@ export class CerebrasCloudProvider implements Provider {
           data.cookies.includes('__Secure-authjs.callback-url');
 
         if (!hasSessionToken) {
+          logger.warn(
+            '[CerebrasCloud] Login validation failed: no session token found',
+          );
           return { isValid: false };
         }
 
@@ -110,6 +112,7 @@ export class CerebrasCloudProvider implements Provider {
             id: json.user.id,
           };
         }
+        logger.warn('[CerebrasCloud] Get Profile response missing user field');
       }
       return { email: null };
     } catch (e) {
@@ -159,6 +162,7 @@ export class CerebrasCloudProvider implements Provider {
       const modelsData = json.data || json.models || [];
 
       if (!Array.isArray(modelsData)) {
+        logger.warn('[CerebrasCloud] Models API returned invalid format');
         return this.getFallbackModels('Invalid API Format');
       }
 

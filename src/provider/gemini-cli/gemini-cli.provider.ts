@@ -27,7 +27,7 @@ import fetch from 'node-fetch';
 import { Provider, SendMessageOptions } from '../../types';
 
 // ── Services ──
-import { loginService } from '../../services/login/login.service';
+import { loginService } from '../../services/login.service';
 import { proxyService } from '../../services/proxy.service';
 
 // ── Database ──
@@ -100,6 +100,12 @@ export class GeminiCLIProvider implements Provider {
       } catch (e) {}
     }
 
+    if (!terminal) {
+      logger.warn(
+        '[GeminiCLI] No supported terminal emulator found, falling back to bash',
+      );
+    }
+
     const envStr = `export http_proxy=${proxyUrl} https_proxy=${proxyUrl} HTTP_PROXY=${proxyUrl} HTTPS_PROXY=${proxyUrl} all_proxy=${proxyUrl} ALL_PROXY=${proxyUrl} no_proxy='localhost,127.0.0.1' NO_PROXY='localhost,127.0.0.1' HOME=${tempHome} USERPROFILE=${tempHome} NODE_TLS_REJECT_UNAUTHORIZED=0 GOOGLE_GENAI_USE_GCA=true NO_BROWSER=true;`;
     const commandStr = `${envStr} gemini 2>&1 | tee ${logFile}`;
 
@@ -152,7 +158,7 @@ export class GeminiCLIProvider implements Provider {
             clearInterval(checkInterval);
 
             loginService
-              .login({
+              .captureCredentialsViaCDP({
                 providerId: 'gemini-cli',
                 loginUrl: capturedUrl,
                 partition: `gemini-cli-${Date.now()}`,
@@ -183,7 +189,12 @@ export class GeminiCLIProvider implements Provider {
                           email: email,
                         };
                       }
-                    } catch (e) {}
+                    } catch (e) {
+                      logger.warn(
+                        '[GeminiCLI] Failed to parse captured tokens:',
+                        e,
+                      );
+                    }
                   }
                   return { isValid: false };
                 },
@@ -191,7 +202,9 @@ export class GeminiCLIProvider implements Provider {
               .then((result) => {
                 try {
                   fs.rmSync(tempHome, { recursive: true, force: true });
-                } catch (e) {}
+                } catch (e) {
+                  logger.warn('[GeminiCLI] Failed to clean up temp home:', e);
+                }
                 resolve(result);
               })
               .catch(reject);
@@ -207,6 +220,7 @@ export class GeminiCLIProvider implements Provider {
       setTimeout(() => {
         if (!capturedUrl) {
           clearInterval(checkInterval);
+          logger.error('[GeminiCLI] Login timed out waiting for OAuth URL');
           reject(new Error('Timed out waiting for Gemini CLI login URL'));
         }
       }, 60000);
@@ -229,7 +243,12 @@ export class GeminiCLIProvider implements Provider {
         refresh_token: refreshTokenStr,
       }),
     });
-    if (!response.ok) throw new Error('Failed to refresh Gemini CLI token');
+    if (!response.ok) {
+      logger.error(
+        `[GeminiCLI] Token refresh failed with status ${response.status}`,
+      );
+      throw new Error('Failed to refresh Gemini CLI token');
+    }
     return await response.json();
   }
 
@@ -246,13 +265,21 @@ export class GeminiCLIProvider implements Provider {
       },
       body: JSON.stringify({ metadata: CLIENT_METADATA, mode: 1 }),
     });
-    if (!response.ok) return '';
+    if (!response.ok) {
+      logger.warn(
+        `[GeminiCLI] fetchProjectId returned status ${response.status}`,
+      );
+      return '';
+    }
     const data = await response.json();
     if (data.cloudaicompanionProject) {
       return typeof data.cloudaicompanionProject === 'string'
         ? data.cloudaicompanionProject.trim()
         : data.cloudaicompanionProject.id?.trim() || '';
     }
+    logger.warn(
+      '[GeminiCLI] fetchProjectId response missing cloudaicompanionProject',
+    );
     return '';
   }
 
@@ -274,13 +301,18 @@ export class GeminiCLIProvider implements Provider {
     try {
       tokens = JSON.parse(credential);
     } catch (e) {
+      logger.warn(
+        '[GeminiCLI] Credential is not valid JSON, treating as raw access token',
+      );
       tokens = { accessToken: credential };
     }
 
     if (!tokens.projectId && tokens.accessToken) {
       try {
         tokens.projectId = await this.fetchProjectId(tokens.accessToken);
-      } catch (e) {}
+      } catch (e) {
+        logger.warn('[GeminiCLI] Failed to fetch project ID:', e);
+      }
     }
 
     const url = CLOUDCODE_STREAM_GENERATE_URL;
@@ -331,10 +363,17 @@ export class GeminiCLIProvider implements Provider {
                 JSON.stringify(tokens),
                 accountId,
               );
-            } catch (dbError) {}
+            } catch (dbError) {
+              logger.error(
+                '[GeminiCLI] Failed to persist refreshed token to DB:',
+                dbError,
+              );
+            }
           }
           response = await sendRequest(tokens.accessToken, tokens.projectId);
-        } catch (refreshError) {}
+        } catch (refreshError) {
+          logger.error('[GeminiCLI] Token refresh failed:', refreshError);
+        }
       }
 
       if (!response.ok)
@@ -363,7 +402,9 @@ export class GeminiCLIProvider implements Provider {
               const content =
                 responseObj.candidates?.[0]?.content?.parts?.[0]?.text;
               if (content) onContent(content);
-            } catch (e) {}
+            } catch (e) {
+              logger.warn('[GeminiCLI] Failed to parse SSE line:', e);
+            }
           }
         }
         onDone();
@@ -376,6 +417,7 @@ export class GeminiCLIProvider implements Provider {
         onDone();
       }
     } catch (err: any) {
+      logger.error('[GeminiCLI] Error in handleMessage:', err);
       onError(err);
     }
   }
@@ -393,9 +435,13 @@ export class GeminiCLIProvider implements Provider {
     try {
       tokens = JSON.parse(credential);
     } catch (e) {
+      logger.warn('[GeminiCLI] getModels: credential is not valid JSON');
       tokens = { accessToken: credential };
     }
-    if (!tokens.accessToken) return [];
+    if (!tokens.accessToken) {
+      logger.warn('[GeminiCLI] getModels: no access token available');
+      return [];
+    }
     let projectId =
       tokens.projectId || (await this.fetchProjectId(tokens.accessToken));
     if (!projectId) projectId = DEFAULT_PROJECT_ID;
@@ -410,9 +456,17 @@ export class GeminiCLIProvider implements Provider {
       },
       body: JSON.stringify({ project: projectId }),
     });
-    if (!response.ok) return [];
+    if (!response.ok) {
+      logger.warn(
+        `[GeminiCLI] getModels: quota API returned status ${response.status}`,
+      );
+      return [];
+    }
     const data = await response.json();
-    if (!data.buckets) return [];
+    if (!data.buckets) {
+      logger.warn('[GeminiCLI] getModels: quota API response missing buckets');
+      return [];
+    }
     return data.buckets.map((bucket: any) => ({
       id: bucket.modelId,
       name: bucket.modelId,
