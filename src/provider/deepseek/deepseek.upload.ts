@@ -119,10 +119,12 @@ export async function uploadFile(
     if (result.code === 0 && result.data?.biz_data?.id) {
       const fileId = result.data.biz_data.id;
       let attempts = 0;
-      const maxAttempts = 30;
+      const maxAttempts = 40;
 
       while (attempts < maxAttempts) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        // First check after 100ms, then poll every 250ms for responsive file indexing
+        const delay = attempts === 0 ? 100 : 250;
+        await new Promise((resolve) => setTimeout(resolve, delay));
         try {
           const listRes = await client.get(
             `/api/v0/file/fetch_files?file_ids=${fileId}`,
@@ -137,6 +139,9 @@ export async function uploadFile(
                 targetFile.status === 'SUCCESS' ||
                 targetFile.status === 'READY'
               ) {
+                logger.info(
+                  `[DeepSeek Upload] File ready on attempt ${attempts + 1} (${attempts === 0 ? '100ms' : `${100 + attempts * 250}ms`}) | fileId=${fileId}`,
+                );
                 return {
                   id: fileId,
                   token_usage: targetFile.token_usage || 0,
@@ -159,7 +164,7 @@ export async function uploadFile(
               error: e,
               fileId,
               attempt: attempts + 1,
-            }
+            },
           );
         }
         attempts++;

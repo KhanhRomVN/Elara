@@ -14,6 +14,7 @@ import { DeepSeekHash, BASE_URL, solvePoW } from './deepseek.pow';
 import { proxyHandler } from './deepseek.proxy-handler';
 import { parseSSEStream } from './deepseek.sse-parser';
 import { uploadFile as uploadFileUtil } from './deepseek.upload';
+import { preparePromptAndAttachments } from '../../utils/prompt-uploader';
 
 const logger = createLogger('DeepSeekProvider');
 
@@ -323,58 +324,27 @@ export class DeepSeekProvider implements Provider {
         parentMessageId = await this.getLastMessageId(client, sessionId);
       }
 
-      const challengeClient = new HttpClient({
-        baseURL: 'https://chat.deepseek.com',
-        headers: {
-          ...baseHeaders,
-          Referer: `https://chat.deepseek.com/a/chat/s/${sessionId}`,
-        },
-      });
-
-      const challengeRes = await challengeClient.post(
-        '/api/v0/chat/create_pow_challenge',
-        { target_path: '/api/v0/chat/completion' },
-      );
-      let powResponseBase64 = '';
-      if (challengeRes.ok) {
-        try {
-          const rawText = await challengeRes.text();
-          const challengeJson = JSON.parse(rawText);
-          const challengeData: PoWChallenge =
-            challengeJson?.data?.biz_data?.challenge;
-          if (challengeData) {
-            const dsHash = await this.getDsHash();
-            const powAnswer = await solvePoW(dsHash, challengeData);
-            powResponseBase64 = Buffer.from(JSON.stringify(powAnswer)).toString(
-              'base64',
-            );
-          } else {
-            logger.warn(
-              `[DeepSeek] PoW challenge data missing from response | session=${sessionId} | body=${rawText.slice(0, 200)}`,
-            );
-          }
-        } catch (e) {
-          logger.warn(
-            `[DeepSeek] Failed to parse PoW challenge response | session=${sessionId} | error=${e}`,
-          );
-        }
-      } else {
-        const errText = await challengeRes.text().catch(() => '<unreadable>');
-        logger.warn(
-          `[DeepSeek] PoW challenge request failed | status=${challengeRes.status} | session=${sessionId} | body=${errText.slice(0, 200)}`,
-        );
-      }
-
       const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
       const randomPart = crypto.randomBytes(8).toString('hex');
       const clientStreamId = `${date}-${randomPart}`;
 
+      // Run Chat PoW challenge solving and large payload auto-upload in parallel to eliminate sequential lag
+      const [powResponseBase64, { promptText, refFileIds }] = await Promise.all([
+        this.solveChatPoW(baseHeaders, sessionId),
+        preparePromptAndAttachments({
+          providerId: 'deepseek',
+          messages,
+          refFileIds: options.ref_file_ids,
+          uploadFn: (file) => this.uploadFile(credential, file),
+        }),
+      ]);
+
       const requestPayload: ChatPayload = {
         chat_session_id: sessionId,
         parent_message_id: parentMessageId || null || undefined,
-        prompt: messages[messages.length - 1].content,
+        prompt: promptText,
         messages: [],
-        ref_file_ids: options.ref_file_ids || [],
+        ref_file_ids: refFileIds,
         thinking_enabled: options.thinking ?? model === 'deepseek-reasoner',
         search_enabled: options.search || false,
         client_stream_id: clientStreamId,
@@ -538,6 +508,53 @@ export class DeepSeekProvider implements Provider {
       });
       onError(err);
     }
+  }
+
+  // ===========================================================================
+  // POW SOLVER
+  // ===========================================================================
+
+  private async solveChatPoW(baseHeaders: any, sessionId: string): Promise<string> {
+    try {
+      const challengeClient = new HttpClient({
+        baseURL: 'https://chat.deepseek.com',
+        headers: {
+          ...baseHeaders,
+          Referer: `https://chat.deepseek.com/a/chat/s/${sessionId}`,
+        },
+      });
+
+      const challengeRes = await challengeClient.post(
+        '/api/v0/chat/create_pow_challenge',
+        { target_path: '/api/v0/chat/completion' },
+      );
+
+      if (challengeRes.ok) {
+        const rawText = await challengeRes.text();
+        const challengeJson = JSON.parse(rawText);
+        const challengeData: PoWChallenge =
+          challengeJson?.data?.biz_data?.challenge;
+        if (challengeData) {
+          const dsHash = await this.getDsHash();
+          const powAnswer = await solvePoW(dsHash, challengeData);
+          return Buffer.from(JSON.stringify(powAnswer)).toString('base64');
+        } else {
+          logger.warn(
+            `[DeepSeek] PoW challenge data missing from response | session=${sessionId} | body=${rawText.slice(0, 200)}`,
+          );
+        }
+      } else {
+        const errText = await challengeRes.text().catch(() => '<unreadable>');
+        logger.warn(
+          `[DeepSeek] PoW challenge request failed | status=${challengeRes.status} | session=${sessionId} | body=${errText.slice(0, 200)}`,
+        );
+      }
+    } catch (e) {
+      logger.warn(
+        `[DeepSeek] Failed to parse PoW challenge response | session=${sessionId} | error=${e}`,
+      );
+    }
+    return '';
   }
 
   // ===========================================================================
