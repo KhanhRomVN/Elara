@@ -1,12 +1,23 @@
+/**
+ * ------------------------------------------------------------------
+ * Cerebras Cloud SSE Parser
+ * ------------------------------------------------------------------
+ * Parse OpenAI-compatible SSE stream từ Cerebras API.
+ * Hỗ trợ cả delta.content (nội dung) và delta.reasoning (thinking).
+ *
+ * Main features:
+ * - parseSSEStream() : Parse stream và emit content, thinking, metadata
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('CerebrasSSE');
 
-// =============================================================================
-// SSE STREAM PARSER
-// Parse OpenAI-compatible SSE stream từ Cerebras API
-// Hỗ trợ cả delta.content (nội dung) và delta.reasoning (thinking)
-// =============================================================================
+// ─── Types ──────────────────────────────────────────────────────────────
 
 export interface ParseSSEOptions {
   onContent: (chunk: string) => void;
@@ -14,6 +25,8 @@ export interface ParseSSEOptions {
   onMetadata?: (meta: any) => void;
   onRaw?: (data: string) => void;
 }
+
+// ─── Functions ──────────────────────────────────────────────────────────
 
 export async function parseSSEStream(
   responseBody: NodeJS.ReadableStream,
@@ -36,7 +49,6 @@ export async function parseSSEStream(
       if (!trimmedLine) continue;
 
       if (trimmedLine === 'data: [DONE]') {
-        logger.debug('[CerebrasCloud] Stream complete [DONE]');
         return;
       }
 
@@ -81,10 +93,8 @@ export async function parseSSEStream(
           onMetadata({ finish_reason: finishReason });
         }
       } catch (_e) {
-        // Bỏ qua các dòng JSON không hợp lệ
+        logger.warn('[CerebrasCloud] Failed to parse SSE line:', _e);
       }
     }
   }
-
-  logger.debug('[CerebrasCloud] Stream ended naturally');
 }

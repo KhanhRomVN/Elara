@@ -1,12 +1,33 @@
-import { Request, Response } from 'express';
-import { createLogger } from '../utils/logger';
-import { providerRegistry } from '../provider/registry';
-import { isProviderEnabled } from '../services/provider.service';
-import { findAccountById } from '../repositories/account.repository';
+/**
+ * ------------------------------------------------------------------
+ * Upload Controller
+ * ------------------------------------------------------------------
+ * Xử lý request upload file lên provider AI (hỗ trợ file attachments
+ * cho các model hỗ trợ đa phương thức).
+ *
+ * Main functions:
+ * - uploadFile() : Upload file lên provider và trả về file_id
+ * ------------------------------------------------------------------
+ */
 
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
+import { Request, Response } from 'express';
+
+// ── Services ──
+import { isProviderEnabled } from '../services/provider.service';
+import { getAccountById } from '../services/account.service';
+import { uploadFileToProvider } from '../services/upload.service';
+
+// ── Utils ──
+import { createLogger } from '../utils/logger';
+
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('UploadController');
 
-export const uploadFileController = async (
+// ─── Controller ─────────────────────────────────────────────────────────
+
+export const uploadFile = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
@@ -19,7 +40,7 @@ export const uploadFileController = async (
       return;
     }
 
-    const account = findAccountById(accountId);
+    const account = getAccountById(accountId);
     if (!account) {
       res.status(404).json({ error: 'Account not found' });
       return;
@@ -31,33 +52,22 @@ export const uploadFileController = async (
       return;
     }
 
-    const provider = providerRegistry.getProvider(providerId);
-    if (!provider) {
-      res.status(400).json({ error: `Provider ${providerId} not supported` });
-      return;
-    }
-
-    if (!provider.uploadFile) {
-      res.status(400).json({ error: `Provider ${providerId} does not support file upload` });
-      return;
-    }
-
     try {
       if (account.credential === null) {
         res.status(400).json({ error: 'Account has no credential configured' });
         return;
       }
-      const result = await provider.uploadFile(account.credential, file);
+      
+      const result = await uploadFileToProvider(
+        providerId,
+        account.credential,
+        file,
+      );
 
-      const responseData: any = { filename: file.originalname };
-      if (typeof result === 'string') {
-        responseData.file_id = result;
-      } else if (result && result.id) {
-        responseData.file_id = result.id;
-        if (result.token_usage) responseData.token_usage = result.token_usage;
-      } else {
-        responseData.raw = result;
-      }
+      const responseData: any = { 
+        filename: file.originalname,
+        ...result,
+      };
 
       res.status(200).json({ success: true, data: responseData });
     } catch (err: any) {
@@ -65,7 +75,7 @@ export const uploadFileController = async (
       res.status(500).json({ error: `Upload failed: ${err.message}` });
     }
   } catch (error: any) {
-    logger.error('Error in uploadFileController', error);
+    logger.error('Error in uploadFile', error);
     res.status(500).json({ error: error.message });
   }
 };

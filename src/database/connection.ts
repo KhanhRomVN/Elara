@@ -1,14 +1,38 @@
+/**
+ * ------------------------------------------------------------------
+ * Database Connection
+ * ------------------------------------------------------------------
+ * Quản lý kết nối SQLite cho toàn bộ ứng dụng. Hỗ trợ tìm native binding
+ * cho better-sqlite3 trong môi trường binary (pkg) và npm package.
+ *
+ * Main functions:
+ * - initDatabase() : Khởi tạo kết nối database, tạo thư mục, chạy migrations
+ * - getDb()        : Lấy instance database đã khởi tạo
+ * - closeDatabase(): Đóng kết nối database
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import Database from 'better-sqlite3';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
+
+// ── Utils ──
 import { createLogger } from '../utils/logger';
 import { envInfo } from '../utils/env-info';
+
+// ── Database ──
 import { runMigrations } from './migrations';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('Database');
 
+// ─── Database Instance ────────────────────────────────────────────────
 let db: Database.Database | null = null;
+
+// ─── Functions ──────────────────────────────────────────────────────────
 
 export const initDatabase = (customPath?: string): void => {
   const isCjsBundle =

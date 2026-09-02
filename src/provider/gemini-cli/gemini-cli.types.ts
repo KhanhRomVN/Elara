@@ -1,4 +1,20 @@
-// Gemini CLI-specific types
+/**
+ * ------------------------------------------------------------------
+ * Gemini CLI Types
+ * ------------------------------------------------------------------
+ * Type definitions cho Gemini CLI API.
+ *
+ * Main exports:
+ * - GeminiCLITokens       : Access/refresh token structure
+ * - GeminiCLIConfig       : OAuth config
+ * - GeminiCLIMessage      : Message structure
+ * - GeminiCLIRequestBody  : Request payload cho chat completion
+ * - GeminiCLIStreamChunk  : Stream chunk structure
+ * - GeminiCLIModel        : Model info structure
+ * ------------------------------------------------------------------
+ */
+
+// ─── Types ──────────────────────────────────────────────────────────────
 
 export interface GeminiCLITokens {
   accessToken: string;

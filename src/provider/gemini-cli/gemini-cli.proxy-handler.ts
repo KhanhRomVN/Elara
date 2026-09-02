@@ -1,8 +1,32 @@
+/**
+ * ------------------------------------------------------------------
+ * Gemini CLI Proxy Handler
+ * ------------------------------------------------------------------
+ * Proxy handler để capture tokens, project ID, và user info từ Gemini CLI.
+ * Lắng nghe OAuth token response, project ID từ loadCodeAssist API,
+ * và user info từ Google userinfo API.
+ *
+ * Main features:
+ * - onRequest()       : Capture cookies chứa token
+ * - onResponseBody()  : Capture access token, project ID, email
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Services ──
 import { ProxyHandler } from '../../services/proxy.service';
 import { proxyEvents } from '../../services/proxy.service';
+
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
 
+// ── Constants ──
+import { GEMINI_CLI_EVENTS } from './gemini-cli.constant';
+
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('GeminiCLIProvider');
+
+// ─── Proxy Handler ────────────────────────────────────────────────────
 
 export const proxyHandler: ProxyHandler = {
   onRequest: (ctx: any, callback: () => void) => {
@@ -20,7 +44,7 @@ export const proxyHandler: ProxyHandler = {
         (reqCookies.includes('ACCESS_TOKEN') ||
           reqCookies.includes('REFRESH_TOKEN'))
       ) {
-        proxyEvents.emit('gemini-cli-tokens', reqCookies);
+        proxyEvents.emit(GEMINI_CLI_EVENTS.TOKENS, reqCookies);
       }
     }
     callback();
@@ -38,8 +62,10 @@ export const proxyHandler: ProxyHandler = {
       try {
         const json = JSON.parse(body);
         if (json.access_token)
-          proxyEvents.emit('gemini-cli-tokens', JSON.stringify(json));
-      } catch (e) {}
+          proxyEvents.emit(GEMINI_CLI_EVENTS.TOKENS, JSON.stringify(json));
+      } catch (e) {
+        logger.error('[Proxy] Failed to parse Gemini CLI token response:', e);
+      }
     }
 
     if (
@@ -54,9 +80,11 @@ export const proxyHandler: ProxyHandler = {
             typeof json.cloudaicompanionProject === 'string'
               ? json.cloudaicompanionProject
               : json.cloudaicompanionProject.id;
-          proxyEvents.emit('gemini-cli-user-info', { projectId });
+          proxyEvents.emit(GEMINI_CLI_EVENTS.USER_INFO, { projectId });
         }
-      } catch (e) {}
+      } catch (e) {
+        logger.error('[Proxy] Failed to parse Gemini CLI loadCodeAssist response:', e);
+      }
     }
 
     if (
@@ -67,11 +95,13 @@ export const proxyHandler: ProxyHandler = {
       try {
         const json = JSON.parse(body);
         if (json.email)
-          proxyEvents.emit('gemini-cli-user-info', {
+          proxyEvents.emit(GEMINI_CLI_EVENTS.USER_INFO, {
             email: json.email,
             name: json.name,
           });
-      } catch (e) {}
+      } catch (e) {
+        logger.error('[Proxy] Failed to parse Gemini CLI userinfo response:', e);
+      }
     }
   },
 };

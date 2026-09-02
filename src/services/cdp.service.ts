@@ -1,18 +1,42 @@
+/**
+ * ------------------------------------------------------------------
+ * CDP Service
+ * ------------------------------------------------------------------
+ * Service quản lý Chrome DevTools Protocol (CDP) connection.
+ * Hỗ trợ launch browser, connect WebSocket, và intercept network events.
+ *
+ * Main functions:
+ * - launchBrowser()   : Khởi động browser với debug port
+ * - connect()         : Kết nối CDP tới browser (private)
+ * - send()            : Gửi command qua CDP
+ * - close()           : Đóng browser và WebSocket
+ * - getResponseBody() : Lấy response body của request
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { spawn, execSync, ChildProcess } from 'child_process';
 import WebSocket from 'ws';
 import { EventEmitter } from 'events';
-import { ChildProcess, spawn, execSync } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
-import { createLogger } from '../../utils/logger';
-import { findAvailablePort } from '../../utils/net';
 
+// ── Utils ──
+import { createLogger } from '../utils/logger';
+import { findAvailablePort } from '../utils/net';
+
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('CDPService');
+
+// ─── Helpers ────────────────────────────────────────────────────────────
 
 function findBrowserExecutable(): string {
   if (process.platform === 'win32') {
     const progFiles = process.env['ProgramFiles'] || 'C:\\Program Files';
-    const progFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+    const progFilesX86 =
+      process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
     const localAppData =
       process.env['LocalAppData'] ||
       (process.env['USERPROFILE']
@@ -26,9 +50,27 @@ function findBrowserExecutable(): string {
       path.join(progFiles, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
       path.join(progFilesX86, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
       path.join(localAppData, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
-      path.join(progFiles, 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
-      path.join(progFilesX86, 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
-      path.join(localAppData, 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
+      path.join(
+        progFiles,
+        'BraveSoftware',
+        'Brave-Browser',
+        'Application',
+        'brave.exe',
+      ),
+      path.join(
+        progFilesX86,
+        'BraveSoftware',
+        'Brave-Browser',
+        'Application',
+        'brave.exe',
+      ),
+      path.join(
+        localAppData,
+        'BraveSoftware',
+        'Brave-Browser',
+        'Application',
+        'brave.exe',
+      ),
       path.join(progFiles, 'Chromium', 'Application', 'chrome.exe'),
       'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
       'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
@@ -38,7 +80,6 @@ function findBrowserExecutable(): string {
 
     for (const cand of candidates) {
       if (cand && fs.existsSync(cand)) {
-        logger.info(`[CDP] Found Windows browser executable: ${cand}`);
         return cand;
       }
     }
@@ -51,13 +92,11 @@ function findBrowserExecutable(): string {
     ];
     for (const cand of candidates) {
       if (fs.existsSync(cand)) {
-        logger.info(`[CDP] Found macOS browser executable: ${cand}`);
         return cand;
       }
     }
   }
 
-  // Fallback (Linux or if not found via paths)
   const browsers = [
     'google-chrome',
     'google-chrome-stable',
@@ -69,7 +108,6 @@ function findBrowserExecutable(): string {
   for (const b of browsers) {
     try {
       execSync(`which ${b}`, { stdio: 'ignore' });
-      logger.info(`[CDP] Found browser via which: ${b}`);
       return b;
     } catch {
       continue;
@@ -79,6 +117,8 @@ function findBrowserExecutable(): string {
   return '';
 }
 
+// ─── Types ──────────────────────────────────────────────────────────────
+
 interface CdpRequest {
   id: number;
   method: string;
@@ -86,20 +126,7 @@ interface CdpRequest {
   sessionId?: string;
 }
 
-interface NetworkRequest {
-  id: string;
-  url: string;
-  method: string;
-  headers: Record<string, string>;
-  postData?: string;
-}
-
-interface NetworkResponse {
-  id: string;
-  statusCode: number;
-  headers: Record<string, string>;
-  mimeType: string;
-}
+// ─── Class ──────────────────────────────────────────────────────────────
 
 export class CDPService extends EventEmitter {
   private ws: WebSocket | null = null;
@@ -119,10 +146,15 @@ export class CDPService extends EventEmitter {
     this.profileName = profileName;
   }
 
-  async launchBrowser(url: string, customUserDataDir?: string, extensionPath?: string): Promise<boolean> {
+  // ─── Launch ───────────────────────────────────────────────────────────
+
+  async launchBrowser(
+    url: string,
+    customUserDataDir?: string,
+    extensionPath?: string,
+  ): Promise<boolean> {
     const debugPort = await findAvailablePort(9222);
     this.debugPort = debugPort;
-    logger.info(`[CDP] Launching browser with debug port ${debugPort}`);
 
     const executable = findBrowserExecutable();
     if (!executable) {
@@ -130,15 +162,16 @@ export class CDPService extends EventEmitter {
       return false;
     }
 
-    // Use custom user data dir if provided, otherwise create temp one
     let userDataDir = customUserDataDir;
     if (!userDataDir) {
-      userDataDir = path.join(os.tmpdir(), `elara-cdp-${this.profileName}-${Date.now()}`);
+      userDataDir = path.join(
+        os.tmpdir(),
+        `elara-cdp-${this.profileName}-${Date.now()}`,
+      );
     }
 
     fs.mkdirSync(userDataDir, { recursive: true });
 
-    // Build browser arguments
     const args = [
       `--remote-debugging-port=${debugPort}`,
       '--no-first-run',
@@ -150,14 +183,11 @@ export class CDPService extends EventEmitter {
       '--ignore-certificate-errors',
     ];
 
-    // Add extension arguments if extensionPath is provided
     if (extensionPath) {
       args.push(`--disable-extensions-except=${extensionPath}`);
       args.push(`--load-extension=${extensionPath}`);
-      logger.info(`[CDP] Loading extension from: ${extensionPath}`);
     }
 
-    // Add URL at the end
     args.push(url);
 
     this.browserProcess = spawn(executable, args, {
@@ -165,30 +195,29 @@ export class CDPService extends EventEmitter {
       stdio: 'ignore',
     });
 
-    logger.info(`[CDP] Browser launched with PID: ${this.browserProcess.pid}`);
-
     this.browserProcess.on('exit', (code) => {
-      logger.info(`[CDP] Browser exited with code ${code}`);
       this.isConnected = false;
       this.ws = null;
       this.emit('browser-exit');
     });
 
-    // Wait for browser to start and connect CDP
     await new Promise((resolve) => setTimeout(resolve, 2000));
     return await this.connect(debugPort);
   }
 
-  async connect(port: number, retries = 5, delay = 1000): Promise<boolean> {
-    logger.info(`[CDP] Connecting to localhost:${port}...`);
+  // ─── Connect ─────────────────────────────────────────────────────────
 
+  private async connect(
+    port: number,
+    retries = 5,
+    delay = 1000,
+  ): Promise<boolean> {
     try {
       const targetsResponse = await fetch(`http://127.0.0.1:${port}/json`);
       if (!targetsResponse.ok)
         throw new Error(`HTTP ${targetsResponse.status}`);
 
       const targets = (await targetsResponse.json()) as any[];
-      logger.info(`[CDP] Found ${targets.length} debuggable targets`);
 
       let pageTarget = targets.find(
         (t: any) =>
@@ -200,9 +229,6 @@ export class CDPService extends EventEmitter {
       }
 
       if (!pageTarget) {
-        logger.info(
-          '[CDP] No page target found, connecting to browser and creating target',
-        );
         const versionResponse = await fetch(
           `http://127.0.0.1:${port}/json/version`,
         );
@@ -215,11 +241,9 @@ export class CDPService extends EventEmitter {
       }
 
       const wsUrl = pageTarget.webSocketDebuggerUrl;
-      logger.info(`[CDP] Connecting to page: ${pageTarget.url}`);
       return await this.connectToPage(wsUrl);
     } catch (error) {
       if (retries > 0) {
-        logger.info(`[CDP] Connection failed, retrying in ${delay}ms...`);
         await new Promise((r) => setTimeout(r, delay));
         return this.connect(port, retries - 1, delay);
       }
@@ -233,7 +257,6 @@ export class CDPService extends EventEmitter {
       this.ws = new WebSocket(wsUrl);
 
       this.ws.on('open', async () => {
-        logger.info('[CDP] Connected to page WebSocket');
         this.isConnected = true;
         try {
           await this.send('Network.enable', {
@@ -242,7 +265,6 @@ export class CDPService extends EventEmitter {
             maxPostDataSize: 5000000,
           });
           await this.send('Runtime.enable');
-          logger.info('[CDP] Network and Runtime domains enabled');
         } catch (e: any) {
           logger.error('[CDP] Failed to initialize domains:', e?.message || e);
         }
@@ -259,7 +281,6 @@ export class CDPService extends EventEmitter {
       });
 
       this.ws.on('close', () => {
-        logger.info('[CDP] Disconnected');
         this.isConnected = false;
         this.ws = null;
       });
@@ -273,7 +294,6 @@ export class CDPService extends EventEmitter {
       const browserWs = new WebSocket(browserWsUrl);
 
       browserWs.on('open', () => {
-        logger.info('[CDP] Connected to browser WebSocket, creating target...');
         const createTargetMsg = JSON.stringify({
           id: 1,
           method: 'Target.createTarget',
@@ -286,7 +306,6 @@ export class CDPService extends EventEmitter {
         try {
           const msg = JSON.parse(data.toString());
           if (msg.id === 1 && msg.result?.targetId) {
-            logger.info(`[CDP] Created target: ${msg.result.targetId}`);
             const attachMsg = JSON.stringify({
               id: 2,
               method: 'Target.attachToTarget',
@@ -297,7 +316,6 @@ export class CDPService extends EventEmitter {
             this.sessionId = msg.result.sessionId;
             this.ws = browserWs;
             this.isConnected = true;
-            logger.info('[CDP] Attached to target, enabling Network domain');
             const enableMsg = JSON.stringify({
               id: 3,
               method: 'Network.enable',
@@ -317,13 +335,14 @@ export class CDPService extends EventEmitter {
       });
 
       browserWs.on('close', () => {
-        logger.info('[CDP] Browser WebSocket closed');
         this.isConnected = false;
         if (this.ws === browserWs) this.ws = null;
         resolve(false);
       });
     });
   }
+
+  // ─── Send Command ────────────────────────────────────────────────────
 
   private send(method: string, params: any = {}): Promise<any> {
     return new Promise((resolve, reject) => {
@@ -341,6 +360,8 @@ export class CDPService extends EventEmitter {
       this.ws.send(JSON.stringify(request));
     });
   }
+
+  // ─── Message Handler ─────────────────────────────────────────────────
 
   private handleMessage(message: string) {
     try {
@@ -372,7 +393,7 @@ export class CDPService extends EventEmitter {
           method: params.request.method,
           headers: params.request.headers,
           postData: params.request.postData,
-        } as NetworkRequest);
+        });
         break;
       case 'Network.responseReceived':
         this.emit('response', {
@@ -380,7 +401,7 @@ export class CDPService extends EventEmitter {
           statusCode: params.response.status,
           headers: params.response.headers,
           mimeType: params.response.mimeType,
-        } as NetworkResponse);
+        });
         break;
       case 'Network.loadingFinished':
         this.getResponseBody(params.requestId);
@@ -396,22 +417,10 @@ export class CDPService extends EventEmitter {
         body: result.body,
         isBinary: result.base64Encoded,
       });
-    } catch (e: any) {
-      // Ignore - body may not be available
-      if (!e.message?.includes('No resource')) {
-        logger.debug(`[CDP] Failed to get body for ${requestId}:`, e.message);
-      }
-    }
+    } catch (e: any) {}
   }
 
-  async evaluate(expression: string): Promise<any> {
-    const result = await this.send('Runtime.evaluate', { expression });
-    return result.result?.value;
-  }
-
-  async navigate(url: string): Promise<void> {
-    await this.send('Page.navigate', { url });
-  }
+  // ─── Public Methods ──────────────────────────────────────────────────
 
   async close(): Promise<void> {
     if (this.browserProcess) {
@@ -423,16 +432,6 @@ export class CDPService extends EventEmitter {
       this.ws = null;
     }
     this.isConnected = false;
-  }
-
-  getUserDataDir(): string | null {
-    // This would need to be stored during launchBrowser
-    // For now, return null
-    return null;
-  }
-
-  isConnectedToBrowser(): boolean {
-    return this.isConnected && this.ws?.readyState === WebSocket.OPEN;
   }
 }
 

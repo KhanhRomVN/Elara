@@ -1,4 +1,24 @@
+/**
+ * ------------------------------------------------------------------
+ * Model Repository
+ * ------------------------------------------------------------------
+ * Repository layer cho bảng models. Quản lý thông tin model
+ * của các provider.
+ *
+ * Main functions:
+ * - findAllModels()          : Lấy tất cả models
+ * - findModelsByProvider()   : Lấy models theo provider
+ * - upsertModel()            : Thêm mới hoặc cập nhật model
+ * - updateModelSuccessRate() : Cập nhật success rate
+ * - deleteModelsByProvider() : Xóa models theo provider
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Database ──
 import { getDb } from '../database';
+
+// ─── Types ──────────────────────────────────────────────────────────────
 
 export interface ModelRow {
   id?: number;
@@ -14,6 +34,8 @@ export interface ModelRow {
   description?: string | null;
 }
 
+// ─── Queries ────────────────────────────────────────────────────────────
+
 export const findAllModels = (): ModelRow[] => {
   const db = getDb();
   return db.prepare('SELECT * FROM models').all() as ModelRow[];
@@ -25,6 +47,8 @@ export const findModelsByProvider = (providerId: string): ModelRow[] => {
     .prepare('SELECT * FROM models WHERE provider_id = ?')
     .all(providerId) as ModelRow[];
 };
+
+// ─── Upserts ────────────────────────────────────────────────────────────
 
 export const upsertModel = (
   providerId: string,
@@ -65,6 +89,8 @@ export const upsertModel = (
   );
 };
 
+// ─── Updates ────────────────────────────────────────────────────────────
+
 export const updateModelSuccessRate = (
   providerId: string,
   modelId: string,
@@ -75,6 +101,8 @@ export const updateModelSuccessRate = (
     `UPDATE models SET success_rate = ? WHERE provider_id = ? AND model_id = ?`,
   ).run(successRate, providerId, modelId);
 };
+
+// ─── Deletes ──���─────────────────────────────────────────────────────────
 
 export const deleteModelsByProvider = (providerId: string): void => {
   const db = getDb();

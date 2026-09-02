@@ -1,7 +1,35 @@
+/**
+ * ------------------------------------------------------------------
+ * Account Repository
+ * ------------------------------------------------------------------
+ * Repository layer cho bảng accounts. Cung cấp các hàm CRUD
+ * và truy vấn cho tài khoản provider.
+ *
+ * Main functions:
+ * - findAccountById()                : Tìm account theo id
+ * - findAccountByEmailAndProvider()  : Tìm account theo email và provider
+ * - listAccounts()                   : Lấy danh sách account với pagination
+ * - insertAccount()                  : Thêm mới account
+ * - insertAccountsBatch()            : Thêm batch accounts
+ * - updateAccountCredential()        : Cập nhật credential
+ * - updateAccountMemory()            : Cập nhật trạng thái memory
+ * - deleteAccount()                  : Xóa account
+ * - findBrowserAccountsByProvider()  : Tìm browser accounts
+ * - updateAccountLastUsed()          : Cập nhật last_used_at
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Database ──
 import { getDb } from '../database';
+
+// ── Utils ──
 import { createLogger } from '../utils/logger';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('AccountRepository');
+
+// ─── Types ──────────────────────────────────────────────────────────────
 
 export interface AccountRow {
   id: string;
@@ -14,6 +42,17 @@ export interface AccountRow {
   is_memory_enabled?: number;
   user_data_dir?: string | null;
 }
+
+export interface ListAccountsOptions {
+  page: number;
+  limit: number;
+  email?: string;
+  provider_id?: string;
+  sort_by?: string;
+  order?: 'ASC' | 'DESC';
+}
+
+// ─── Queries ────────────────────────────────────────────────────────────
 
 export const findAccountById = (id: string): AccountRow | null => {
   const db = getDb();
@@ -55,15 +94,6 @@ export const findFirstAccountByProvider = (providerId: string): AccountRow | nul
       .get(providerId.toLowerCase()) as AccountRow) ?? null
   );
 };
-
-export interface ListAccountsOptions {
-  page: number;
-  limit: number;
-  email?: string;
-  provider_id?: string;
-  sort_by?: string;
-  order?: 'ASC' | 'DESC';
-}
 
 export const listAccounts = (
   options: ListAccountsOptions,
@@ -107,6 +137,8 @@ export const listAccounts = (
   return { rows, total: countResult.total };
 };
 
+// ─── Inserts ────────────────────────────────────────────────────────────
+
 export const insertAccount = (account: {
   id: string;
   provider_id: string;
@@ -134,6 +166,7 @@ export const insertAccount = (account: {
     account.user_data_dir || null,
   );
 };
+
 export const insertAccountsBatch = (
   accounts: Array<{
     id: string;
@@ -160,6 +193,7 @@ export const insertAccountsBatch = (
     }
     db.prepare('COMMIT').run();
   } catch (err) {
+    logger.error('Error during batch insert, rolling back:', err);
     try {
       db.prepare('ROLLBACK').run();
     } catch (rollbackErr) {
@@ -168,6 +202,8 @@ export const insertAccountsBatch = (
     throw err;
   }
 };
+
+// ─── Updates ────────────────────────────────────────────────────────────
 
 export const updateAccountCredential = (
   id: string,
@@ -202,11 +238,6 @@ export const updateAccountCredentialAndRefresh = (
   ).run(credential, lastRefreshedAt, id);
 };
 
-export const deleteAccount = (id: string): void => {
-  const db = getDb();
-  db.prepare('DELETE FROM accounts WHERE id = ?').run(id);
-};
-
 export const updateAccountMemory = (id: string, isMemoryEnabled: boolean): void => {
   const db = getDb();
   db.prepare('UPDATE accounts SET is_memory_enabled = ? WHERE id = ?').run(
@@ -215,14 +246,51 @@ export const updateAccountMemory = (id: string, isMemoryEnabled: boolean): void 
   );
 };
 
+export const updateAccountLastUsed = (id: string): void => {
+  const db = getDb();
+  db.prepare('UPDATE accounts SET last_refreshed_at = ? WHERE id = ?').run(Date.now(), id);
+};
+
+export const updateAccountUsage = (
+  id: string,
+  usage: string,
+  resetPeriod: string,
+): void => {
+  const db = getDb();
+  db.prepare('UPDATE accounts SET usage = ?, reset_period = ? WHERE id = ?').run(
+    usage,
+    resetPeriod,
+    id,
+  );
+};
+
+export const findAllAccounts = (): AccountRow[] => {
+  const db = getDb();
+  return db.prepare('SELECT * FROM accounts').all() as AccountRow[];
+};
+
+export const findAccountsNeedingRefresh = (threshold: number): AccountRow[] => {
+  const db = getDb();
+  const cutoff = Date.now() - threshold;
+  return db
+    .prepare(
+      'SELECT * FROM accounts WHERE last_refreshed_at IS NOT NULL AND last_refreshed_at < ?',
+    )
+    .all(cutoff) as AccountRow[];
+};
+
+// ─── Delete ────────────────────────────────────────────────────────────
+
+export const deleteAccount = (id: string): void => {
+  const db = getDb();
+  db.prepare('DELETE FROM accounts WHERE id = ?').run(id);
+};
+
+// ─── Browser Accounts ──────────────────────────────────────────────────
+
 export const findBrowserAccountsByProvider = (providerId: string): AccountRow[] => {
   const db = getDb();
   return db
     .prepare('SELECT * FROM accounts WHERE provider_id = ? AND user_data_dir IS NOT NULL ORDER BY last_refreshed_at DESC')
     .all(providerId.toLowerCase()) as AccountRow[];
-};
-
-export const updateAccountLastUsed = (id: string): void => {
-  const db = getDb();
-  db.prepare('UPDATE accounts SET last_refreshed_at = ? WHERE id = ?').run(Date.now(), id);
 };

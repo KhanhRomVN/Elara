@@ -1,16 +1,32 @@
 /**
+ * ------------------------------------------------------------------
  * Stats Service
+ * ------------------------------------------------------------------
+ * Service thống kê - wrapper của metrics.service.
+ * Cung cấp các hàm thống kê cho stats controller.
  *
- * Thin wrapper around metrics.service that exposes stats-oriented functions
- * for the stats controller. `conversation_id` is accepted for API compatibility
- * but is not stored (the column was dropped from the metrics table).
+ * Main functions:
+ * - getModelStatsByPeriod()      : Thống kê theo model
+ * - getAccountStatsByPeriod()    : Thống kê theo account
+ * - getUsageHistory()            : Lịch sử usage theo period
+ * - recordSuccess()              : Ghi nhận thành công (có conversation_id)
+ * ------------------------------------------------------------------
  */
-export {
-  getModelStatsByPeriod,
+
+// ─── Imports ────────────────────────────────────────────────────────────
+import {
+  getModelStatsByPeriod as _getModelStatsByPeriod,
+  getAccountStatsByPeriod as _getAccountStatsByPeriod,
+  getUsageHistory as _getUsageHistory,
+  recordSuccess as _recordSuccess,
 } from './metrics.service';
 
-// Re-export with additional accountId parameter
-import { getAccountStatsByPeriod as _getAccountStatsByPeriod, getUsageHistory as _getUsageHistory } from './metrics.service';
+// ─── Re-exports ────────────────────────────────────────────────────────
+
+export { getModelStatsByPeriod } from './metrics.service';
+
+// ─── Wrappers ──────────────────────────────────────────────────────────
+
 export const getAccountStatsByPeriod = (
   period: 'day' | 'week' | 'month' | 'year',
   offset: number,
@@ -23,12 +39,6 @@ export const getUsageHistory = (
   accountId?: string,
 ) => _getUsageHistory(period, offset, accountId);
 
-import { recordSuccess as _recordSuccess } from './metrics.service';
-
-/**
- * Records a successful request with token usage.
- * The `conversation_id` parameter is accepted for compatibility but not persisted.
- */
 export async function recordSuccess(
   accountId: string,
   providerId: string,

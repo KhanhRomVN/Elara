@@ -1,6 +1,21 @@
-// =============================================================================
-// TYPES & INTERFACES — Cerebras Cloud
-// =============================================================================
+/**
+ * ------------------------------------------------------------------
+ * Cerebras Cloud Types
+ * ------------------------------------------------------------------
+ * Type definitions và constants cho Cerebras Cloud API.
+ *
+ * Main exports:
+ * - CerebrasMessage        : Message structure
+ * - CerebrasCompletionPayload : Chat completion request payload
+ * - CerebrasUserInfo       : User profile info
+ * - CerebrasUsageData      : Rate limiting usage data
+ * - RATE_LIMITS            : Giới hạn rate per minute/hour/day
+ * - WINDOW_MS              : Cửa sổ thời gian cho rate limiting
+ * - BASE_URL, API_BASE_URL : API endpoints
+ * ------------------------------------------------------------------
+ */
+
+// ─── Types ──────────────────────────────────────────────────────────────
 
 export interface CerebrasMessage {
   role: string;
@@ -36,24 +51,11 @@ export interface CerebrasUsageData {
   };
 }
 
-export const RATE_LIMITS = {
-  requests: {
-    perMinute: 5,
-    perHour: 150,
-    perDay: 2400,
-  },
-  tokens: {
-    perMinute: 30_000,
-    perHour: 1_000_000,
-    perDay: 1_000_000,
-  },
-} as const;
+// ─── Constants (re-export) ─────────────────────────────────────────────
 
-export const WINDOW_MS = {
-  minute: 60_000,
-  hour: 3_600_000,
-  day: 86_400_000,
-} as const;
-
-export const BASE_URL = 'https://cloud.cerebras.ai';
-export const API_BASE_URL = 'https://api.cerebras.ai';
+export {
+  RATE_LIMITS,
+  WINDOW_MS,
+  BASE_URL,
+  API_BASE_URL,
+} from './cerebras-cloud.constant';

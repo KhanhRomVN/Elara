@@ -1,8 +1,29 @@
+/**
+ * ------------------------------------------------------------------
+ * Mistral Proxy Handler
+ * ------------------------------------------------------------------
+ * Proxy handler để capture cookies từ Mistral.
+ *
+ * Main features:
+ * - onRequest() : Capture cookies từ auth.mistral.ai và console.mistral.ai
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Services ──
 import { ProxyHandler } from '../../services/proxy.service';
 import { proxyEvents } from '../../services/proxy.service';
+
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
 
+// ── Constants ──
+import { MISTRAL_EVENTS } from './mistral.constant';
+
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('MistralProvider');
+
+// ─── Proxy Handler ────────────────────────────────────────────────────
 
 export const proxyHandler: ProxyHandler = {
   onRequest: (ctx: any, callback: () => void) => {
@@ -14,8 +35,7 @@ export const proxyHandler: ProxyHandler = {
     ) {
       const reqCookies = ctx.clientToProxyRequest.headers.cookie;
       if (reqCookies && reqCookies.length > 0) {
-        logger.debug('[Proxy] Captured Mistral cookies');
-        proxyEvents.emit('mistral-cookies', reqCookies);
+        proxyEvents.emit(MISTRAL_EVENTS.COOKIES, reqCookies);
       }
     }
     callback();

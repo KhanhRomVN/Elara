@@ -1,15 +1,34 @@
+/**
+ * ------------------------------------------------------------------
+ * Send Message Controller
+ * ------------------------------------------------------------------
+ * Xử lý request gửi tin nhắn tới model AI qua provider tương ứng.
+ * Hỗ trợ cả streaming và non-streaming, tích hợp search, token counting,
+ * và ghi nhận metrics.
+ *
+ * Main functions:
+ * - sendMessage() : Gửi tin nhắn và xử lý response (stream/non-stream)
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { Request, Response } from 'express';
-import { sendMessage } from '../services/chat';
-import { createLogger } from '../utils/logger';
+
+// ── Services ──
+import { sendMessage as sendMessageService } from '../services/chat.service';
 import { recordRequest, recordError } from '../services/metrics.service';
 import { getAllProviders } from '../services/provider.service';
-import { providerRegistry } from '../provider/registry';
+import { getAccountById } from '../services/account.service';
+
+// ── Utils ──
+import { createLogger } from '../utils/logger';
 import { countMessagesTokens, countTokens } from '../utils/tokenizer';
 
-import { findAccountById } from '../repositories/account.repository';
-
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('SendMessageController');
 
+// ─── Helper Functions ─────────────────────────────────────────────────
 const unescapeHtml = (str: string): string => {
   return str
     .replace(/</g, '<')
@@ -20,8 +39,10 @@ const unescapeHtml = (str: string): string => {
     .replace(/&apos;/g, "'");
 };
 
-// POST /v1/accounts/:accountId/messages
-export const sendMessageController = async (
+// ─── Controller ─────────────────────────────────────────────────────────
+
+// ─── POST /v1/accounts/:accountId/messages ──────────────────────────
+export const sendMessage = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
@@ -47,7 +68,6 @@ export const sendMessageController = async (
         if (!parent_message_id) {
           // Auto-generate UUID v4 fallback conversationId for multi-turn tool executions to prevent session disconnect
           const fallbackConvId = crypto.randomUUID();
-          logger.info(`[Chat] Auto-assigned fallback conversationId: ${fallbackConvId}`);
           req.body.conversationId = fallbackConvId;
         }
       }
@@ -67,7 +87,7 @@ export const sendMessageController = async (
       return;
     }
 
-    const account = findAccountById(accountId);
+    const account = getAccountById(accountId);
 
     if (!account) {
       res.status(404).json({
@@ -91,23 +111,7 @@ export const sendMessageController = async (
       return;
     }
 
-    // Resolve "auto" model - use provider's default model
-    let finalModel = modelId;
-    if (modelId === 'auto') {
-      const provider = providerRegistry.getProvider(account.provider_id);
-      if (provider?.defaultModel) {
-        finalModel = provider.defaultModel;
-        logger.info(
-          `"auto" model resolved to ${finalModel} for provider ${account.provider_id}`,
-        );
-      } else {
-        logger.warn(
-          `"auto" model requested but no default model for ${account.provider_id}`,
-        );
-      }
-    }
-
-    const model = finalModel;
+    const model = modelId;
 
     // Validate credential before proceeding
     if (!account.credential || account.credential.trim() === '') {
@@ -192,7 +196,7 @@ export const sendMessageController = async (
         }, 300000);
       }
 
-      await sendMessage({
+      await sendMessageService({
         credential: account.credential,
         provider_id: account.provider_id,
         accountId: account.id,
@@ -249,14 +253,14 @@ export const sendMessageController = async (
             : '';
 
           // Calculate tokens
-          const inputToken = messages ? countMessagesTokens(messages) : 0;
-          const outputToken = finalOutputMessage
-            ? countTokens(finalOutputMessage)
-            : 0;
+          // const inputToken = messages ? countMessagesTokens(messages) : 0;
+          // const outputToken = finalOutputMessage
+          //   ? countTokens(finalOutputMessage)
+          //   : 0;
 
-          logger.info(
-            `[Transaction Complete] provider_id=${account.provider_id} model_id=${model} account_id=${account.id} conversation_id=${conversationId || 'none'} input_token=${inputToken} output_token=${outputToken}`,
-          );
+          // logger.info(
+          //   `[Transaction Complete] provider_id=${account.provider_id} model_id=${model} account_id=${account.id} conversation_id=${conversationId || 'none'} input_token=${inputToken} output_token=${outputToken}`,
+          // );
 
           if (stream !== false) {
             if (!accumulatedResponse || accumulatedResponse.trim() === '') {
@@ -354,7 +358,7 @@ export const sendMessageController = async (
       }
     }
   } catch (error) {
-    logger.error('Error in sendMessageController', error);
+    logger.error('Error in sendMessage', error);
     if (!res.headersSent) {
       res.status(500).json({ error: 'Internal server error' });
     }

@@ -1,28 +1,54 @@
-import path from 'path';
-import fs from 'fs';
+/**
+ * ------------------------------------------------------------------
+ * Certificate Manager
+ * ------------------------------------------------------------------
+ * Quản lý SSL certificates cho proxy server.
+ * Tự động tạo self-signed certificate bằng OpenSSL hoặc node-forge.
+ *
+ * Main functions:
+ * - ensureCertificates()    : Đảm bảo certificates tồn tại
+ * - getCertificatePath()    : Lấy đường dẫn certificate
+ * - getKeyPath()            : Lấy đường dẫn private key
+ * - getCertificateDir()     : Lấy thư mục chứa certificates
+ * - exportCertificate()     : Export certificate PEM
+ * - deleteCertificates()    : Xóa certificates
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import os from 'os';
+
+// ── Utils ──
 import { createLogger } from './logger';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('cert-manager');
 const execAsync = promisify(exec);
+
+// ─── Types ──────────────────────────────────────────────────────────────
 
 export interface CertificatePair {
   cert: string;
   key: string;
 }
 
+// ─── Helpers ────────────────────────────────────────────────────────────
+
 const getUserDataPath = () => {
   try {
-    // Try to get electron app path if available
     const { app } = require('electron');
     return app.getPath('userData');
   } catch (e) {
-    // Fallback for standalone mode
     return path.join(os.homedir(), '.elara');
   }
 };
+
+// ─── Class ──────────────────────────────────────────────────────────────
 
 export class CertificateManager {
   private certDir: string;
@@ -36,11 +62,12 @@ export class CertificateManager {
     this.keyPath = path.join(this.certDir, 'server.key');
     this.caPath = path.join(this.certDir, 'ca.crt');
 
-    // Ensure cert directory exists
     if (!fs.existsSync(this.certDir)) {
       fs.mkdirSync(this.certDir, { recursive: true });
     }
   }
+
+  // ─── Ensure Certificates ────────────────────────────────────────────
 
   async ensureCertificates(): Promise<CertificatePair> {
     if (await this.certificatesExist()) {
@@ -61,27 +88,25 @@ export class CertificateManager {
     };
   }
 
+  // ─── Generate Certificates ──────────────────────────────────────────
+
   private async generateCertificates(): Promise<CertificatePair> {
     try {
-      // Generate private key
       await execAsync(`openssl genrsa -out "${this.keyPath}" 2048`, {
         cwd: this.certDir,
       });
 
-      // Generate certificate signing request
       const csrPath = path.join(this.certDir, 'server.csr');
       await execAsync(
         `openssl req -new -key "${this.keyPath}" -out "${csrPath}" -subj "/C=US/ST=Local/L=Local/O=Elara/CN=localhost"`,
         { cwd: this.certDir },
       );
 
-      // Generate self-signed certificate (valid for 10 years)
       await execAsync(
         `openssl x509 -req -days 3650 -in "${csrPath}" -signkey "${this.keyPath}" -out "${this.certPath}" -extensions v3_req`,
         { cwd: this.certDir },
       );
 
-      // Clean up CSR
       fs.unlinkSync(csrPath);
 
       return {
@@ -90,8 +115,6 @@ export class CertificateManager {
       };
     } catch (error) {
       logger.error('Failed to generate certificates:', error);
-
-      // Fallback: Create simple self-signed cert using Node.js if OpenSSL fails
       return this.generateCertificatesWithNodeForge();
     }
   }
@@ -100,10 +123,8 @@ export class CertificateManager {
     try {
       const forge = require('node-forge');
 
-      // Generate key pair
       const keys = forge.pki.rsa.generateKeyPair(2048);
 
-      // Create certificate
       const cert = forge.pki.createCertificate();
       cert.publicKey = keys.publicKey;
       cert.serialNumber = '01';
@@ -124,7 +145,6 @@ export class CertificateManager {
       cert.setSubject(attrs);
       cert.setIssuer(attrs);
 
-      // Add extensions for localhost
       cert.setExtensions([
         {
           name: 'basicConstraints',
@@ -141,26 +161,17 @@ export class CertificateManager {
         {
           name: 'subjectAltName',
           altNames: [
-            {
-              type: 2, // DNS
-              value: 'localhost',
-            },
-            {
-              type: 7, // IP
-              ip: '127.0.0.1',
-            },
+            { type: 2, value: 'localhost' },
+            { type: 7, ip: '127.0.0.1' },
           ],
         },
       ]);
 
-      // Sign certificate
       cert.sign(keys.privateKey, forge.md.sha256.create());
 
-      // Convert to PEM format
       const certPem = forge.pki.certificateToPem(cert);
       const keyPem = forge.pki.privateKeyToPem(keys.privateKey);
 
-      // Save to files
       fs.writeFileSync(this.certPath, certPem);
       fs.writeFileSync(this.keyPath, keyPem);
 
@@ -174,6 +185,8 @@ export class CertificateManager {
     }
   }
 
+  // ─── Getters ─────────────────────────────────────────────────────────
+
   getCertificatePath(): string {
     return this.certPath;
   }
@@ -186,12 +199,16 @@ export class CertificateManager {
     return this.certDir;
   }
 
+  // ─── Export ──────────────────────────────────────────────────────────
+
   exportCertificate(): string {
     if (fs.existsSync(this.certPath)) {
       return fs.readFileSync(this.certPath, 'utf-8');
     }
     throw new Error('Certificate not found');
   }
+
+  // ─── Delete ──────────────────────────────────────────────────────────
 
   deleteCertificates(): void {
     try {
@@ -203,7 +220,8 @@ export class CertificateManager {
   }
 }
 
-// Singleton instance
+// ─── Singleton ──────────────────────────────────────────────────────────
+
 let certManager: CertificateManager | null = null;
 
 export const getCertificateManager = (): CertificateManager => {

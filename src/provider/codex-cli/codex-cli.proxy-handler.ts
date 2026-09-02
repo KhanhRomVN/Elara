@@ -1,5 +1,31 @@
+/**
+ * ------------------------------------------------------------------
+ * Codex CLI Proxy Handler
+ * ------------------------------------------------------------------
+ * Proxy handler để capture tokens và user info từ Codex CLI.
+ * Lắng nghe access token từ OAuth token endpoint và email từ usage API.
+ *
+ * Main features:
+ * - onResponseBody() : Capture access/refresh token từ auth.openai.com
+ * - onResponseBody() : Capture user email từ chatgpt.com/backend-api
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Services ──
 import { ProxyHandler } from '../../services/proxy.service';
 import { proxyEvents } from '../../services/proxy.service';
+
+// ── Utils ──
+import { createLogger } from '../../utils/logger';
+
+// ── Constants ──
+import { CODEX_CLI_EVENTS } from './codex-cli.constant';
+
+// ─── Constants ──────────────────────────────────────────────────────────
+const logger = createLogger('CodexCLIProxy');
+
+// ─── Proxy Handler ────────────────────────────────────────────────────
 
 export const proxyHandler: ProxyHandler = {
   onResponseBody: (ctx: any, body: string) => {
@@ -14,7 +40,7 @@ export const proxyHandler: ProxyHandler = {
       try {
         const json = JSON.parse(body);
         if (json.access_token) {
-          proxyEvents.emit('codex-cli-tokens', {
+          proxyEvents.emit(CODEX_CLI_EVENTS.TOKENS, {
             cookies: JSON.stringify({
               accessToken: json.access_token,
               refreshToken: json.refresh_token || '',
@@ -22,7 +48,9 @@ export const proxyHandler: ProxyHandler = {
             }),
           });
         }
-      } catch (e) {}
+      } catch (e) {
+        logger.error('[Proxy] Failed to parse Codex CLI token response:', e);
+      }
     }
 
     if (
@@ -32,8 +60,10 @@ export const proxyHandler: ProxyHandler = {
     ) {
       try {
         const json = JSON.parse(body);
-        if (json.email) proxyEvents.emit('codex-cli-user-info', json);
-      } catch (e) {}
+        if (json.email) proxyEvents.emit(CODEX_CLI_EVENTS.USER_INFO, json);
+      } catch (e) {
+        logger.error('[Proxy] Failed to parse Codex CLI usage response:', e);
+      }
     }
   },
 };

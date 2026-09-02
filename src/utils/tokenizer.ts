@@ -1,9 +1,26 @@
+/**
+ * ------------------------------------------------------------------
+ * Tokenizer
+ * ------------------------------------------------------------------
+ * Token counting sử dụng tiktoken (cl100k_base encoding).
+ * Hỗ trợ đếm token cho string và message array.
+ *
+ * Main functions:
+ * - countTokens()         : Đếm token trong string
+ * - countMessagesTokens() : Đếm token trong array messages
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { getEncoding, TiktokenEncoding } from 'js-tiktoken';
+
+// ── Utils ──
 import { createLogger } from './logger';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('Tokenizer');
 
-// Use cl100k_base as the default encoding (used by GPT-4, GPT-3.5-Turbo, and many others)
 const ENCODING_NAME: TiktokenEncoding = 'cl100k_base';
 let encoding: any = null;
 
@@ -13,13 +30,11 @@ try {
   logger.error(`Failed to initialize tiktoken (${ENCODING_NAME})`, error);
 }
 
-/**
- * Counts the number of tokens in a string using tiktoken.
- */
+// ─── Functions ──────────────────────────────────────────────────────────
+
 export function countTokens(text: string): number {
   if (!text) return 0;
   if (!encoding) {
-    // Fallback if tiktoken fails to initialize
     return Math.ceil(text.length / 4);
   }
 
@@ -31,9 +46,6 @@ export function countTokens(text: string): number {
   }
 }
 
-/**
- * Counts the total number of tokens in an array of messages.
- */
 export function countMessagesTokens(messages: any[]): number {
   let totalTokens = 0;
 
@@ -41,14 +53,8 @@ export function countMessagesTokens(messages: any[]): number {
     if (message.content) {
       totalTokens += countTokens(message.content);
     }
-    // Optional: Add constant overhead per message if needed (usually ~3-4 tokens)
     totalTokens += 4;
   }
 
   return totalTokens;
 }
-
-// Note: js-tiktoken does not require explicit free() as it's pure JS
-process.on('SIGINT', () => {
-  // encoding cleanup if needed
-});

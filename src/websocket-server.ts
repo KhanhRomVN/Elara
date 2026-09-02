@@ -1,15 +1,42 @@
+/**
+ * ------------------------------------------------------------------
+ * WebSocket Server
+ * ------------------------------------------------------------------
+ * WebSocket server cho Z.AI Browser extension communication.
+ * Hỗ trợ content và background connections, session management,
+ * và request queuing.
+ *
+ * Main features:
+ * - start()               : Khởi động WebSocket server
+ * - stop()                : Dừng WebSocket server
+ * - sendPrompt()          : Gửi prompt qua WebSocket
+ * - registerRequestHandler(): Đăng ký handler cho request
+ * - resetPage()           : Reset page trong browser
+ * - isConnected()         : Kiểm tra session đã kết nối
+ * - getAnyConnectedContentSession(): Lấy session đang connected
+ * - updateSessionId()     : Cập nhật session ID
+ * - setAccountId()        : Gửi account ID tới extension
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { WebSocketServer, WebSocket } from 'ws';
-import { createLogger } from './utils/logger';
 import { EventEmitter } from 'events';
 
+// ── Utils ──
+import { createLogger } from './utils/logger';
+
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('WebSocketServer');
+
+// ─── Types ──────────────────────────────────────────────────────────────
 
 interface ConnectionPair {
   contentWs: WebSocket | null;
   backgroundWs: WebSocket | null;
   pendingRequests: Map<string, PendingRequest>;
   currentRequestId: string | null;
-  /** Serializes concurrent sendPrompt calls so only one request runs at a time per session */
   requestLock: Promise<void>;
 }
 
@@ -21,6 +48,8 @@ interface PendingRequest {
   onUsage?: (usage: any) => void;
 }
 
+// ─── Class ──────────────────────────────────────────────────────────────
+
 export class ExtensionWebSocketServer extends EventEmitter {
   private wss: WebSocketServer | null = null;
   private connections = new Map<string, ConnectionPair>();
@@ -30,6 +59,8 @@ export class ExtensionWebSocketServer extends EventEmitter {
     super();
     this.port = port;
   }
+
+  // ─── Start ───────────────────────────────────────────────────────────
 
   start(): void {
     if (this.wss) {
@@ -44,7 +75,6 @@ export class ExtensionWebSocketServer extends EventEmitter {
       const client = url.searchParams.get('client');
       let sessionId = url.searchParams.get('sessionId') || 'default';
 
-      // Get or create connection pair for this session
       if (!this.connections.has(sessionId)) {
         this.connections.set(sessionId, {
           contentWs: null,
@@ -86,7 +116,6 @@ export class ExtensionWebSocketServer extends EventEmitter {
       } else {
         connection.contentWs = ws;
 
-        // Send initial session info
         ws.send(
           JSON.stringify({
             action: 'session_info',
@@ -120,16 +149,19 @@ export class ExtensionWebSocketServer extends EventEmitter {
     });
   }
 
+  // ─── Cleanup ─────────────────────────────────────────────────────────
+
   private cleanupSession(sessionId: string): void {
     const connection = this.connections.get(sessionId);
     if (!connection) return;
 
-    // Only remove if both connections are gone
     if (!connection.contentWs && !connection.backgroundWs) {
       this.connections.delete(sessionId);
       this.emit('session_closed', sessionId);
     }
   }
+
+  // ─── Session Management ─────────────────────────────────────────────
 
   updateSessionId(oldSessionId: string, newSessionId: string): void {
     if (oldSessionId === newSessionId) return;
@@ -163,6 +195,8 @@ export class ExtensionWebSocketServer extends EventEmitter {
       }),
     );
   }
+
+  // ─── Message Handler ─────────────────────────────────────────────────
 
   private handleMessage(sessionId: string, rawStr: string): void {
     const connection = this.connections.get(sessionId);
@@ -211,7 +245,6 @@ export class ExtensionWebSocketServer extends EventEmitter {
 
   private parseStreamChunk(chunkStr: string, pending: PendingRequest): void {
     const lines = chunkStr.split('\n');
-    let currentPhase: string | null = null;
 
     for (const line of lines) {
       if (line.startsWith('data: ')) {
@@ -241,6 +274,8 @@ export class ExtensionWebSocketServer extends EventEmitter {
     }
   }
 
+  // ─── Send Prompt ────────────────────────────────────────────────────
+
   async sendPrompt(
     sessionId: string,
     prompt: string,
@@ -260,19 +295,14 @@ export class ExtensionWebSocketServer extends EventEmitter {
 
     const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
-    // Serialize concurrent requests for the same session via a Promise chain.
-    // Each new sendPrompt waits for the previous one's response to complete before
-    // sending to the browser — preventing two chats from interleaving in one session.
     const previousLock = connection.requestLock;
     let resolveLock!: () => void;
     connection.requestLock = new Promise<void>((resolve) => {
       resolveLock = resolve;
     });
 
-    // Wait for the previous request to finish before sending this one
     await previousLock;
 
-    // Re-validate connection after waiting (it may have dropped while queued)
     if (
       !connection.contentWs ||
       connection.contentWs.readyState !== WebSocket.OPEN
@@ -294,17 +324,12 @@ export class ExtensionWebSocketServer extends EventEmitter {
     });
 
     connection.contentWs.send(message);
-    logger.debug(
-      `[WebSocketServer] Sent prompt to session ${sessionId}: ${prompt.substring(0, 100)}...`,
-    );
-
-    // The lock is released when the pending request calls onDone or onError.
-    // We wrap registerRequestHandler to hook into those callbacks.
-    // Store resolveLock so registerRequestHandler can access it.
     (connection as any).__pendingResolveLock = resolveLock;
 
     return requestId;
   }
+
+  // ─── Register Handler ──────────────────────────────────────────────
 
   registerRequestHandler(
     sessionId: string,
@@ -314,9 +339,8 @@ export class ExtensionWebSocketServer extends EventEmitter {
     const connection = this.connections.get(sessionId);
     if (!connection) return;
 
-    // Wrap onDone / onError to release the per-session request lock so the
-    // next queued request can proceed.
-    const resolveLock: (() => void) | undefined = (connection as any).__pendingResolveLock;
+    const resolveLock: (() => void) | undefined = (connection as any)
+      .__pendingResolveLock;
     if (resolveLock) {
       delete (connection as any).__pendingResolveLock;
     }
@@ -338,6 +362,8 @@ export class ExtensionWebSocketServer extends EventEmitter {
     });
   }
 
+  // ─── Reset Page ─────────────────────────────────────────────────────
+
   async resetPage(sessionId: string): Promise<void> {
     const connection = this.connections.get(sessionId);
     if (
@@ -349,6 +375,8 @@ export class ExtensionWebSocketServer extends EventEmitter {
     }
     connection.contentWs.send(JSON.stringify({ action: 'reset_page' }));
   }
+
+  // ─── Status ─────────────────────────────────────────────────────────
 
   isConnected(sessionId: string): boolean {
     const connection = this.connections.get(sessionId);
@@ -369,14 +397,13 @@ export class ExtensionWebSocketServer extends EventEmitter {
         connection.contentWs &&
         connection.contentWs.readyState === WebSocket.OPEN
       ) {
-        logger.debug(
-          `[WebSocketServer] Found active content session: ${sessionId}`,
-        );
         return sessionId;
       }
     }
     return null;
   }
+
+  // ─── Stop ───────────────────────────────────────────────────────────
 
   stop(): void {
     if (this.wss) {
@@ -387,7 +414,8 @@ export class ExtensionWebSocketServer extends EventEmitter {
   }
 }
 
-// Singleton instance
+// ─── Singleton ─────────────────────────────────────────────────────────
+
 let wsServerInstance: ExtensionWebSocketServer | null = null;
 
 export const getWebSocketServer = (port?: number): ExtensionWebSocketServer => {

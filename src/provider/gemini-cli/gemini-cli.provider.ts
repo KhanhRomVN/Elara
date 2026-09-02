@@ -1,20 +1,56 @@
-import { Provider, SendMessageOptions } from '../../types';
-import fetch from 'node-fetch';
-import * as path from 'path';
-import * as os from 'os';
+/**
+ * ------------------------------------------------------------------
+ * Gemini CLI Provider
+ * ------------------------------------------------------------------
+ * Provider implementation cho Gemini CLI (Google Cloud Gemini).
+ * Hỗ trợ login qua terminal OAuth flow, refresh token,
+ * và chat completion với streaming response.
+ *
+ * Main features:
+ * - login()          : Đăng nhập qua terminal OAuth
+ * - refreshToken()   : Refresh access token
+ * - fetchProjectId() : Lấy project ID từ API
+ * - handleMessage()  : Gửi tin nhắn với streaming response
+ * - getModels()      : Lấy danh sách models từ quota API
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { spawn, execSync } from 'child_process';
-import { createLogger } from '../../utils/logger';
+import fetch from 'node-fetch';
+
+// ── Types ──
+import { Provider, SendMessageOptions } from '../../types';
+
+// ── Services ──
+import { loginService } from '../../services/login.service';
 import { proxyService } from '../../services/proxy.service';
-import { loginService } from '../../services/login/login.service';
+
+// ── Database ──
 import { getDb } from '../../database';
+
+// ── Utils ──
+import { createLogger } from '../../utils/logger';
+
+// ── Gemini CLI Imports ──
 import { proxyHandler } from './gemini-cli.proxy-handler';
+import {
+  GEMINI_CLI_EVENTS,
+  CLOUDCODE_LOAD_CODE_ASSIST_URL,
+  CLOUDCODE_STREAM_GENERATE_URL,
+  CLOUDCODE_RETRIEVE_QUOTA_URL,
+  USER_AGENT,
+  X_GOOG_API_CLIENT,
+  CLIENT_METADATA,
+  DEFAULT_PROJECT_ID,
+} from './gemini-cli.constant';
 
-export { proxyHandler };
-
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('GeminiCLIProvider');
-
-const CLIENT_METADATA = { ideType: 9, platform: 3, pluginType: 2 };
 
 export const GEMINI_CONFIG = {
   clientId: process.env.GEMINI_CLIENT_ID || '',
@@ -28,13 +64,16 @@ export const GEMINI_CONFIG = {
   ],
 };
 
+// ─── Provider Class ────────────────────────────────────────────────────
+
 export class GeminiCLIProvider implements Provider {
   name = 'gemini-cli';
   proxyHandler = proxyHandler;
   defaultModel = 'gemini-1.5-pro';
 
+  // ─── Login ──────────────────────────────────────────────────────────
+
   async login() {
-    logger.info('Starting Gemini CLI login with terminal...');
     const tempHome = path.join(os.tmpdir(), `gemini-login-fresh-${Date.now()}`);
     fs.mkdirSync(tempHome, { recursive: true });
 
@@ -44,8 +83,13 @@ export class GeminiCLIProvider implements Provider {
     const logFile = path.join(tempHome, 'gemini-cli.log');
 
     const terminals = [
-      'gnome-terminal', 'konsole', 'xfce4-terminal', 'kitty',
-      'alacritty', 'xterm', 'x-terminal-emulator',
+      'gnome-terminal',
+      'konsole',
+      'xfce4-terminal',
+      'kitty',
+      'alacritty',
+      'xterm',
+      'x-terminal-emulator',
     ];
     let terminal = '';
     for (const t of terminals) {
@@ -54,6 +98,12 @@ export class GeminiCLIProvider implements Provider {
         terminal = t;
         break;
       } catch (e) {}
+    }
+
+    if (!terminal) {
+      logger.warn(
+        '[GeminiCLI] No supported terminal emulator found, falling back to bash',
+      );
     }
 
     const envStr = `export http_proxy=${proxyUrl} https_proxy=${proxyUrl} HTTP_PROXY=${proxyUrl} HTTPS_PROXY=${proxyUrl} all_proxy=${proxyUrl} ALL_PROXY=${proxyUrl} no_proxy='localhost,127.0.0.1' NO_PROXY='localhost,127.0.0.1' HOME=${tempHome} USERPROFILE=${tempHome} NODE_TLS_REJECT_UNAUTHORIZED=0 GOOGLE_GENAI_USE_GCA=true NO_BROWSER=true;`;
@@ -73,16 +123,25 @@ export class GeminiCLIProvider implements Provider {
     if (terminal === 'gnome-terminal') {
       terminalSpawn = spawn(
         terminal,
-        ['--', 'bash', '-c', `${commandStr}; echo ''; echo 'Press enter to close...'; read`],
+        [
+          '--',
+          'bash',
+          '-c',
+          `${commandStr}; echo ''; echo 'Press enter to close...'; read`,
+        ],
         { detached: true, env, stdio: 'ignore' },
       );
     } else if (terminal) {
       terminalSpawn = spawn(terminal, ['-e', `bash -c "${commandStr}; read"`], {
-        detached: true, env, stdio: 'ignore',
+        detached: true,
+        env,
+        stdio: 'ignore',
       });
     } else {
       terminalSpawn = spawn('bash', ['-c', commandStr], {
-        env, detached: true, stdio: 'ignore',
+        env,
+        detached: true,
+        stdio: 'ignore',
       });
     }
 
@@ -99,12 +158,15 @@ export class GeminiCLIProvider implements Provider {
             clearInterval(checkInterval);
 
             loginService
-              .login({
+              .captureCredentialsViaCDP({
                 providerId: 'gemini-cli',
                 loginUrl: capturedUrl,
                 partition: `gemini-cli-${Date.now()}`,
                 skipProxy: true,
-                extraEvents: ['gemini-cli-tokens', 'gemini-cli-user-info'],
+                extraEvents: [
+                  GEMINI_CLI_EVENTS.TOKENS,
+                  GEMINI_CLI_EVENTS.USER_INFO,
+                ],
                 validate: async (captured) => {
                   if (captured.cookies || captured.headers) {
                     try {
@@ -127,7 +189,12 @@ export class GeminiCLIProvider implements Provider {
                           email: email,
                         };
                       }
-                    } catch (e) {}
+                    } catch (e) {
+                      logger.warn(
+                        '[GeminiCLI] Failed to parse captured tokens:',
+                        e,
+                      );
+                    }
                   }
                   return { isValid: false };
                 },
@@ -135,7 +202,9 @@ export class GeminiCLIProvider implements Provider {
               .then((result) => {
                 try {
                   fs.rmSync(tempHome, { recursive: true, force: true });
-                } catch (e) {}
+                } catch (e) {
+                  logger.warn('[GeminiCLI] Failed to clean up temp home:', e);
+                }
                 resolve(result);
               })
               .catch(reject);
@@ -151,11 +220,14 @@ export class GeminiCLIProvider implements Provider {
       setTimeout(() => {
         if (!capturedUrl) {
           clearInterval(checkInterval);
+          logger.error('[GeminiCLI] Login timed out waiting for OAuth URL');
           reject(new Error('Timed out waiting for Gemini CLI login URL'));
         }
       }, 60000);
     });
   }
+
+  // ─── Refresh Token ──────────────────────────────────────────────────
 
   async refreshToken(refreshTokenStr: string) {
     const response = await fetch(GEMINI_CONFIG.tokenUrl, {
@@ -171,63 +243,86 @@ export class GeminiCLIProvider implements Provider {
         refresh_token: refreshTokenStr,
       }),
     });
-    if (!response.ok) throw new Error('Failed to refresh Gemini CLI token');
+    if (!response.ok) {
+      logger.error(
+        `[GeminiCLI] Token refresh failed with status ${response.status}`,
+      );
+      throw new Error('Failed to refresh Gemini CLI token');
+    }
     return await response.json();
   }
 
+  // ─── Fetch Project ID ──────────────────────────────────────────────
+
   async fetchProjectId(accessToken: string): Promise<string> {
-    const response = await fetch(
-      'https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-          'User-Agent':
-            'GeminiCLI/0.29.7/gemini-3-pro-preview (linux; x64) google-api-nodejs-client/9.15.1',
-          'X-Goog-Api-Client': 'gl-node/22.21.1',
-        },
-        body: JSON.stringify({ metadata: CLIENT_METADATA, mode: 1 }),
+    const response = await fetch(CLOUDCODE_LOAD_CODE_ASSIST_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'User-Agent': USER_AGENT,
+        'X-Goog-Api-Client': X_GOOG_API_CLIENT,
       },
-    );
-    if (!response.ok) return '';
+      body: JSON.stringify({ metadata: CLIENT_METADATA, mode: 1 }),
+    });
+    if (!response.ok) {
+      logger.warn(
+        `[GeminiCLI] fetchProjectId returned status ${response.status}`,
+      );
+      return '';
+    }
     const data = await response.json();
     if (data.cloudaicompanionProject) {
       return typeof data.cloudaicompanionProject === 'string'
         ? data.cloudaicompanionProject.trim()
         : data.cloudaicompanionProject.id?.trim() || '';
     }
+    logger.warn(
+      '[GeminiCLI] fetchProjectId response missing cloudaicompanionProject',
+    );
     return '';
   }
 
+  // ─── Handle Message ─────────────────────────────────────────────────
+
   async handleMessage(options: SendMessageOptions): Promise<void> {
     const {
-      credential, messages, model, stream,
-      onContent, onDone, onError, accountId,
+      credential,
+      messages,
+      model,
+      stream,
+      onContent,
+      onDone,
+      onError,
+      accountId,
     } = options;
 
     let tokens: any;
     try {
       tokens = JSON.parse(credential);
     } catch (e) {
+      logger.warn(
+        '[GeminiCLI] Credential is not valid JSON, treating as raw access token',
+      );
       tokens = { accessToken: credential };
     }
 
     if (!tokens.projectId && tokens.accessToken) {
       try {
         tokens.projectId = await this.fetchProjectId(tokens.accessToken);
-      } catch (e) {}
+      } catch (e) {
+        logger.warn('[GeminiCLI] Failed to fetch project ID:', e);
+      }
     }
 
-    const url =
-      'https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse';
+    const url = CLOUDCODE_STREAM_GENERATE_URL;
 
     const sendRequest = async (token: string, projectId?: string) => {
       const sessionId = Math.random().toString(36).substring(2, 15);
       const userPromptId = `${sessionId}########1`;
       const body: any = {
         model: model || this.defaultModel,
-        project: projectId || 'reference-courage-zzsgc',
+        project: projectId || DEFAULT_PROJECT_ID,
         user_prompt_id: userPromptId,
         request: {
           contents: messages.map((m) => ({
@@ -242,9 +337,8 @@ export class GeminiCLIProvider implements Provider {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
-          'User-Agent':
-            'GeminiCLI/0.29.7/gemini-3-pro-preview (linux; x64) google-api-nodejs-client/9.15.1',
-          'X-Goog-Api-Client': 'gl-node/22.21.1',
+          'User-Agent': USER_AGENT,
+          'X-Goog-Api-Client': X_GOOG_API_CLIENT,
         },
         body: JSON.stringify(body),
       });
@@ -266,16 +360,26 @@ export class GeminiCLIProvider implements Provider {
             try {
               const db = getDb();
               db.prepare('UPDATE accounts SET credential = ? WHERE id = ?').run(
-                JSON.stringify(tokens), accountId,
+                JSON.stringify(tokens),
+                accountId,
               );
-            } catch (dbError) {}
+            } catch (dbError) {
+              logger.error(
+                '[GeminiCLI] Failed to persist refreshed token to DB:',
+                dbError,
+              );
+            }
           }
           response = await sendRequest(tokens.accessToken, tokens.projectId);
-        } catch (refreshError) {}
+        } catch (refreshError) {
+          logger.error('[GeminiCLI] Token refresh failed:', refreshError);
+        }
       }
 
       if (!response.ok)
-        throw new Error(`Gemini CLI API Error ${response.status}: ${await response.text()}`);
+        throw new Error(
+          `Gemini CLI API Error ${response.status}: ${await response.text()}`,
+        );
 
       if (stream !== false) {
         if (!response.body) throw new Error('No response body');
@@ -288,61 +392,88 @@ export class GeminiCLIProvider implements Provider {
             const trimmed = line.trim();
             if (!trimmed || !trimmed.startsWith('data: ')) continue;
             const jsonStr = trimmed.slice(6).trim();
-            if (jsonStr === '[DONE]') { onDone(); return; }
+            if (jsonStr === '[DONE]') {
+              onDone();
+              return;
+            }
             try {
               const json = JSON.parse(jsonStr);
               const responseObj = json.response || json;
-              const content = responseObj.candidates?.[0]?.content?.parts?.[0]?.text;
+              const content =
+                responseObj.candidates?.[0]?.content?.parts?.[0]?.text;
               if (content) onContent(content);
-            } catch (e) {}
+            } catch (e) {
+              logger.warn('[GeminiCLI] Failed to parse SSE line:', e);
+            }
           }
         }
         onDone();
       } else {
         const json = await response.json();
         const responseObj = json.response || json;
-        const content = responseObj.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const content =
+          responseObj.candidates?.[0]?.content?.parts?.[0]?.text || '';
         onContent(content);
         onDone();
       }
     } catch (err: any) {
+      logger.error('[GeminiCLI] Error in handleMessage:', err);
       onError(err);
     }
   }
+
+  // ─── Continue Message ───────────────────────────────────────────────
+
+  async continueMessage(options: SendMessageOptions): Promise<void> {
+    return this.handleMessage(options);
+  }
+
+  // ─── Get Models ─────────────────────────────────────────────────────
 
   async getModels(credential: string): Promise<any[]> {
     let tokens: any;
     try {
       tokens = JSON.parse(credential);
     } catch (e) {
+      logger.warn('[GeminiCLI] getModels: credential is not valid JSON');
       tokens = { accessToken: credential };
     }
-    if (!tokens.accessToken) return [];
-    let projectId = tokens.projectId || (await this.fetchProjectId(tokens.accessToken));
-    if (!projectId) projectId = 'reference-courage-zzsgc';
+    if (!tokens.accessToken) {
+      logger.warn('[GeminiCLI] getModels: no access token available');
+      return [];
+    }
+    let projectId =
+      tokens.projectId || (await this.fetchProjectId(tokens.accessToken));
+    if (!projectId) projectId = DEFAULT_PROJECT_ID;
 
-    const response = await fetch(
-      'https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${tokens.accessToken}`,
-          'Content-Type': 'application/json',
-          'User-Agent':
-            'GeminiCLI/0.29.7/gemini-3-pro-preview (linux; x64) google-api-nodejs-client/9.15.1',
-          'X-Goog-Api-Client': 'gl-node/22.21.1',
-        },
-        body: JSON.stringify({ project: projectId }),
+    const response = await fetch(CLOUDCODE_RETRIEVE_QUOTA_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${tokens.accessToken}`,
+        'Content-Type': 'application/json',
+        'User-Agent': USER_AGENT,
+        'X-Goog-Api-Client': X_GOOG_API_CLIENT,
       },
-    );
-    if (!response.ok) return [];
+      body: JSON.stringify({ project: projectId }),
+    });
+    if (!response.ok) {
+      logger.warn(
+        `[GeminiCLI] getModels: quota API returned status ${response.status}`,
+      );
+      return [];
+    }
     const data = await response.json();
-    if (!data.buckets) return [];
+    if (!data.buckets) {
+      logger.warn('[GeminiCLI] getModels: quota API response missing buckets');
+      return [];
+    }
     return data.buckets.map((bucket: any) => ({
       id: bucket.modelId,
       name: bucket.modelId,
     }));
   }
+
+  // ─── Model Support ──────────────────────────────────────────────────
 
   isModelSupported(model: string): boolean {
     const m = model.toLowerCase();

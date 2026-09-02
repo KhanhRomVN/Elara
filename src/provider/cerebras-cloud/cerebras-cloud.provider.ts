@@ -1,38 +1,65 @@
+/**
+ * ------------------------------------------------------------------
+ * Cerebras Cloud Provider
+ * ------------------------------------------------------------------
+ * Provider implementation cho Cerebras Cloud API.
+ * Hỗ trợ login qua browser, chat completion, rate limiting,
+ * và tự động lấy danh sách models.
+ *
+ * Main features:
+ * - login()          : Đăng nhập qua browser và lấy credential
+ * - handleMessage()  : Gửi tin nhắn với streaming response
+ * - getModels()      : Lấy danh sách models từ API
+ * - getProfile()     : Lấy thông tin user profile
+ * - rate limiting    : Tự động giới hạn request/token theo account
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { Router } from 'express';
 import fetch from 'node-fetch';
+
+// ── Types ──
 import { Provider, SendMessageOptions } from '../../types';
-import { loginService } from '../../services/login/login.service';
+
+// ── Services ──
+import { loginService } from '../../services/login.service';
+
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
-import { countTokens } from '../../utils/tokenizer';
-import { BASE_URL, API_BASE_URL, CerebrasCompletionPayload, CerebrasUserInfo } from './cerebras-cloud.types';
+
+// ── Cerebras Imports ──
+import {
+  BASE_URL,
+  API_BASE_URL,
+  CerebrasCompletionPayload,
+  CerebrasUserInfo,
+} from './cerebras-cloud.types';
+import { CEREBRAS_EVENTS, USER_AGENT } from './cerebras-cloud.constant';
 import { proxyHandler } from './cerebras-cloud.proxy-handler';
 import { parseSSEStream } from './cerebras-cloud.sse-parser';
 import { usageTracker } from './cerebras-cloud.rate-limiter';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('CerebrasCloudProvider');
 
-// =============================================================================
-// PROVIDER CLASS
-// =============================================================================
+// ─── Provider Class ────────────────────────────────────────────────────
 
 export class CerebrasCloudProvider implements Provider {
   name = 'cerebras-cloud';
   proxyHandler = proxyHandler;
   defaultModel = 'llama-3.3-70b';
 
-  // ---------------------------------------------------------------------------
-  // LOGIN
-  // ---------------------------------------------------------------------------
+  // ─── Login ──────────────────────────────────────────────────────────
 
   async login() {
-    logger.info('Starting Cerebras Cloud login...');
-
-    return await loginService.login({
+    return await loginService.captureCredentialsViaCDP({
       providerId: 'cerebras-cloud',
       loginUrl: `${BASE_URL}/`,
       partition: `cerebras-cloud-${Date.now()}`,
-      cookieEvent: 'cerebras-cookies',
-      infoEvent: 'cerebras-user-info',
+      cookieEvent: CEREBRAS_EVENTS.COOKIES,
+      infoEvent: CEREBRAS_EVENTS.USER_INFO,
       validate: async (data: {
         cookies: string;
         headers?: any;
@@ -45,15 +72,15 @@ export class CerebrasCloudProvider implements Provider {
           data.cookies.includes('__Secure-authjs.callback-url');
 
         if (!hasSessionToken) {
+          logger.warn(
+            '[CerebrasCloud] Login validation failed: no session token found',
+          );
           return { isValid: false };
         }
 
         let email = data.email;
 
         if (!email) {
-          logger.info(
-            '[CerebrasCloud] Email not captured directly, fetching profile...',
-          );
           const profile = await this.getProfile(data.cookies);
           email = profile.email || undefined;
         }
@@ -67,9 +94,7 @@ export class CerebrasCloudProvider implements Provider {
     });
   }
 
-  // ---------------------------------------------------------------------------
-  // GET PROFILE
-  // ---------------------------------------------------------------------------
+  // ─── Get Profile ────────────────────────────────────────────────────
 
   async getProfile(credential: string): Promise<CerebrasUserInfo> {
     try {
@@ -79,7 +104,7 @@ export class CerebrasCloudProvider implements Provider {
       });
 
       if (response.ok) {
-        const json = await response.json() as any;
+        const json = (await response.json()) as any;
         if (json?.user) {
           return {
             email: json.user.email || null,
@@ -87,6 +112,7 @@ export class CerebrasCloudProvider implements Provider {
             id: json.user.id,
           };
         }
+        logger.warn('[CerebrasCloud] Get Profile response missing user field');
       }
       return { email: null };
     } catch (e) {
@@ -95,18 +121,14 @@ export class CerebrasCloudProvider implements Provider {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // GET MODELS
-  // ---------------------------------------------------------------------------
+  // ─── Get Models ─────────────────────────────────────────────────────
 
   async getModels(credential: string): Promise<any[]> {
-    logger.info('Fetching Cerebras Cloud models...');
     try {
       const apiKey = this.extractApiKey(credential);
 
       const headers: Record<string, string> = {
-        'User-Agent':
-          'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+        'User-Agent': USER_AGENT,
         Accept: 'application/json',
         'Content-Type': 'application/json',
         Origin: BASE_URL,
@@ -136,10 +158,11 @@ export class CerebrasCloudProvider implements Provider {
         return this.getFallbackModels(`API Error ${response.status}`);
       }
 
-      const json = await response.json() as any;
+      const json = (await response.json()) as any;
       const modelsData = json.data || json.models || [];
 
       if (!Array.isArray(modelsData)) {
+        logger.warn('[CerebrasCloud] Models API returned invalid format');
         return this.getFallbackModels('Invalid API Format');
       }
 
@@ -201,9 +224,7 @@ export class CerebrasCloudProvider implements Provider {
     return models;
   }
 
-  // ---------------------------------------------------------------------------
-  // HANDLE MESSAGE
-  // ---------------------------------------------------------------------------
+  // ─── Handle Message ─────────────────────────────────────────────────
 
   async handleMessage(options: SendMessageOptions): Promise<void> {
     const {
@@ -250,10 +271,6 @@ export class CerebrasCloudProvider implements Provider {
     };
 
     try {
-      logger.info(
-        `[CerebrasCloud] Sending message to model: ${selectedModel}`,
-      );
-
       const headers = this.buildApiHeaders(credential, apiKey);
 
       const response = await fetch(`${API_BASE_URL}/v1/chat/completions`, {
@@ -290,9 +307,6 @@ export class CerebrasCloudProvider implements Provider {
 
       if (totalTokensUsed > 0) {
         usageTracker.recordTokens(accountId, totalTokensUsed);
-        logger.debug(
-          `[CerebrasCloud] Recorded ${totalTokensUsed} tokens for account ${accountId}`,
-        );
       }
 
       onDone();
@@ -302,17 +316,13 @@ export class CerebrasCloudProvider implements Provider {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // CONTINUE MESSAGE
-  // ---------------------------------------------------------------------------
+  // ─── Continue Message ───────────────────────────────────────────────
 
   async continueMessage(options: SendMessageOptions): Promise<void> {
     return this.handleMessage(options);
   }
 
-  // ---------------------------------------------------------------------------
-  // HELPERS
-  // ---------------------------------------------------------------------------
+  // ─── Helpers ────────────────────────────────────────────────────────
 
   private extractApiKey(credential: string): string | null {
     if (credential.trim().startsWith('csk-')) {
@@ -333,8 +343,7 @@ export class CerebrasCloudProvider implements Provider {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       Accept: 'application/json',
-      'User-Agent':
-        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+      'User-Agent': USER_AGENT,
       Origin: BASE_URL,
       Referer: `${BASE_URL}/`,
       'sec-ch-ua':
@@ -371,8 +380,7 @@ export class CerebrasCloudProvider implements Provider {
     return {
       'Content-Type': 'application/json',
       Accept: '*/*',
-      'User-Agent':
-        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+      'User-Agent': USER_AGENT,
       Origin: refererBase,
       Referer: `${refererBase}/`,
       'sec-ch-ua':
@@ -387,19 +395,26 @@ export class CerebrasCloudProvider implements Provider {
     };
   }
 
-  // ---------------------------------------------------------------------------
-  // ROUTES & MISC
-  // ---------------------------------------------------------------------------
+  // ─── Routes & Misc ──────────────────────────────────────────────────
 
   registerRoutes(router: Router) {
     router.get('/usage', (req, res) => {
       const accountId = req.query.accountId as string;
       if (!accountId) {
-        res.status(400).json({ success: false, message: 'accountId is required' });
+        res
+          .status(400)
+          .json({ success: false, message: 'accountId is required' });
         return;
       }
       const summary = usageTracker.getUsageSummary(accountId);
-      res.json({ success: true, data: { accountId, usage: summary, limits: { requests: 5, tokens: 30000 } } });
+      res.json({
+        success: true,
+        data: {
+          accountId,
+          usage: summary,
+          limits: { requests: 5, tokens: 30000 },
+        },
+      });
     });
   }
 

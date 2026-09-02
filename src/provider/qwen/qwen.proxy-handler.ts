@@ -1,8 +1,32 @@
+/**
+ * ------------------------------------------------------------------
+ * Qwen Proxy Handler
+ * ------------------------------------------------------------------
+ * Proxy handler để capture token, headers, và email từ Qwen.
+ * Lắng nghe bx-ua, x-csrf-token, và token từ API response.
+ *
+ * Main features:
+ * - onRequest()       : Capture bx-ua, csrf token, bx-umidtoken
+ * - onRequestData()   : Capture email từ signin request
+ * - onResponseBody()  : Capture token và email từ signin response
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Services ──
 import { ProxyHandler } from '../../services/proxy.service';
 import { proxyEvents } from '../../services/proxy.service';
+
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
 
+// ── Constants ──
+import { QWEN_EVENTS } from './qwen.constant';
+
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('QwenProvider');
+
+// ─── Proxy Handler ────────────────────────────────────────────────────
 
 export const proxyHandler: ProxyHandler = {
   onRequest: (ctx: any, callback: () => void) => {
@@ -11,7 +35,7 @@ export const proxyHandler: ProxyHandler = {
     if (host && host.includes('chat.qwen.ai')) {
       const reqCookies = ctx.clientToProxyRequest.headers.cookie;
       if (reqCookies && reqCookies.includes('csrfToken')) {
-        proxyEvents.emit('qwen-cookies', reqCookies);
+        proxyEvents.emit(QWEN_EVENTS.COOKIES, reqCookies);
       }
 
       const bxUa = ctx.clientToProxyRequest.headers['bx-ua'];
@@ -25,7 +49,7 @@ export const proxyHandler: ProxyHandler = {
         if (xCsrfToken) headers['x-csrf-token'] = xCsrfToken;
         if (userAgent) headers['User-Agent'] = userAgent;
         if (bxUmidToken) headers['bx-umidtoken'] = bxUmidToken;
-        proxyEvents.emit('qwen-headers', headers);
+        proxyEvents.emit(QWEN_EVENTS.HEADERS, headers);
       }
     }
     callback();
@@ -48,9 +72,8 @@ export const proxyHandler: ProxyHandler = {
       try {
         const json = JSON.parse(bodyStr);
         if (json.email) {
-          logger.info(`[Proxy] Captured Qwen Login Email (JSON): ${json.email}`);
           (ctx as any).capturedQwenEmail = json.email;
-          proxyEvents.emit('qwen-login-email', { email: json.email });
+          proxyEvents.emit(QWEN_EVENTS.LOGIN_EMAIL, { email: json.email });
         }
       } catch (e) {
         const emailMatch = bodyStr.match(
@@ -59,9 +82,8 @@ export const proxyHandler: ProxyHandler = {
         if (emailMatch && emailMatch[0]) {
           const email = `${emailMatch[1]}@${emailMatch[2]}`.replace(/\\/g, '');
           if (!email.includes('***')) {
-            logger.info(`[Proxy] Captured Qwen Login Email (Regex): ${email}`);
             (ctx as any).capturedQwenEmail = email;
-            proxyEvents.emit('qwen-login-email', { email });
+            proxyEvents.emit(QWEN_EVENTS.LOGIN_EMAIL, { email });
           }
         }
       }
@@ -89,21 +111,15 @@ export const proxyHandler: ProxyHandler = {
             email = capturedEmail;
           }
           if (email && !email.includes('***')) {
-            logger.info(
-              `[Proxy] Captured Qwen Login Email from Signin Response: ${email}`,
-            );
-            proxyEvents.emit('qwen-login-email', { email });
+            proxyEvents.emit(QWEN_EVENTS.LOGIN_EMAIL, { email });
           }
 
           if (userData.token) {
-            logger.info(
-              '[Proxy] Captured Qwen Login Token from Signin Response',
-            );
             const eventPayload: any = { cookies: userData.token };
             if (email && !email.includes('***')) {
               eventPayload.email = email;
             }
-            proxyEvents.emit('qwen-login-token', eventPayload);
+            proxyEvents.emit(QWEN_EVENTS.LOGIN_TOKEN, eventPayload);
             delete (ctx as any).capturedQwenEmail;
           }
         }
@@ -122,7 +138,6 @@ export const proxyHandler: ProxyHandler = {
         const userData = json.data ?? json;
 
         if (userData && userData.token) {
-          logger.info('[Proxy] Captured Qwen Token from Auth Session Response');
           const capturedEmail = (ctx as any).capturedQwenEmail;
           let email = capturedEmail || userData.email;
           if (email && email.includes('***') && capturedEmail) {
@@ -131,22 +146,16 @@ export const proxyHandler: ProxyHandler = {
 
           const eventPayload: any = { cookies: userData.token };
           if (email && !email.includes('***')) {
-            logger.info(
-              `[Proxy] Captured Qwen Email from Auth Session Response: ${email}`,
-            );
             eventPayload.email = email;
-            proxyEvents.emit('qwen-login-email', { email });
+            proxyEvents.emit(QWEN_EVENTS.LOGIN_EMAIL, { email });
           }
-          proxyEvents.emit('qwen-login-token', eventPayload);
+          proxyEvents.emit(QWEN_EVENTS.LOGIN_TOKEN, eventPayload);
         } else if (
           userData &&
           userData.email &&
           !userData.email.includes('***')
         ) {
-          logger.info(
-            `[Proxy] Captured Qwen Email (no token) from Auth Response: ${userData.email}`,
-          );
-          proxyEvents.emit('qwen-login-email', { email: userData.email });
+          proxyEvents.emit(QWEN_EVENTS.LOGIN_EMAIL, { email: userData.email });
         }
       } catch (e) {
         logger.error('[Proxy] Failed to parse Qwen Auth Session Response:', e);

@@ -1,4 +1,21 @@
+/**
+ * ------------------------------------------------------------------
+ * Logger
+ * ------------------------------------------------------------------
+ * Logger đơn giản với màu sắc và context.
+ * In log với level, caller location, và metadata.
+ *
+ * Main exports:
+ * - Logger        : Class logger với các level (info, error, warn, debug)
+ * - createLogger() : Factory function tạo logger với context
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import path from 'path';
+
+// ─── Constants ──────────────────────────────────────────────────────────
 
 const COLORS = {
   reset: '\x1b[0m',
@@ -16,6 +33,8 @@ const LEVEL_COLOR: Record<string, string> = {
   INFO: COLORS.green,
   DEBUG: COLORS.blue,
 };
+
+// ─── Helpers ────────────────────────────────────────────────────────────
 
 function getCallerFile(): string {
   const obj: any = {};
@@ -36,6 +55,8 @@ function formatMeta(args: any[]): string {
     return String(a);
   }).join(' ');
 }
+
+// ─── Class ──────────────────────────────────────────────────────────────
 
 export class Logger {
   constructor(private context: string) {}

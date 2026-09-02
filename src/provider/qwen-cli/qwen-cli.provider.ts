@@ -1,18 +1,50 @@
-import { Provider, SendMessageOptions } from '../../types';
-import fetch from 'node-fetch';
-import * as path from 'path';
+/**
+ * ------------------------------------------------------------------
+ * Qwen CLI Provider
+ * ------------------------------------------------------------------
+ * Provider implementation cho Qwen CLI (Qwen Code CLI).
+ * Hỗ trợ login qua terminal OAuth flow, refresh token,
+ * và chat completion với streaming response.
+ *
+ * Main features:
+ * - login()          : Đăng nhập qua terminal OAuth
+ * - refreshToken()   : Refresh access token
+ * - handleMessage()  : Gửi tin nhắn với streaming response
+ * - getProfile()     : Lấy thông tin user profile
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import * as fs from 'fs';
 import * as os from 'os';
+import * as path from 'path';
 import { spawn, execSync } from 'child_process';
-import { createLogger } from '../../utils/logger';
-import { loginService } from '../../services/login/login.service';
+import fetch from 'node-fetch';
+
+// ── Types ──
+import { Provider, SendMessageOptions } from '../../types';
+
+// ── Services ──
+import { loginService } from '../../services/login.service';
 import { proxyService } from '../../services/proxy.service';
 import { proxyEvents } from '../../services/proxy.service';
+
+// ── Database ──
 import { getDb } from '../../database';
+
+// ── Utils ──
+import { createLogger } from '../../utils/logger';
+
+// ── Qwen CLI Imports ──
 import { proxyHandler } from './qwen-cli.proxy-handler';
+import {
+  QWEN_CLI_EVENTS,
+  USER_INFO_URL,
+  CHAT_COMPLETIONS_URL,
+} from './qwen-cli.constant';
 
-export { proxyHandler };
-
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('QwenCLIProvider');
 
 export const QWEN_CONFIG = {
@@ -23,26 +55,37 @@ export const QWEN_CONFIG = {
   codeChallengeMethod: 'S256',
 };
 
+// ─── Provider Class ────────────────────────────────────────────────────
+
 export class QwenCoderCLIProvider implements Provider {
   name = 'qwen-cli';
   proxyHandler = proxyHandler;
   defaultModel = 'coder-model';
 
+  // ─── Login ──────────────────────────────────────────────────────────
+
   async login() {
-    logger.info('Starting Qwen CLI login with real CLI module and terminal...');
     const tempHome = path.join(os.tmpdir(), `qwen-login-fresh`);
     if (fs.existsSync(tempHome))
       fs.rmSync(tempHome, { recursive: true, force: true });
     fs.mkdirSync(tempHome, { recursive: true });
 
-    const cliPath = path.resolve(__dirname, '../../../../../temp/qwen-cli/cli.js');
+    const cliPath = path.resolve(
+      __dirname,
+      '../../../../../temp/qwen-cli/cli.js',
+    );
     await proxyService.start();
     const { port } = proxyService.getServerInfo();
     const logFile = path.join(tempHome, 'qwen-cli.log');
 
     const terminals = [
-      'gnome-terminal', 'konsole', 'xfce4-terminal', 'kitty',
-      'alacritty', 'xterm', 'x-terminal-emulator',
+      'gnome-terminal',
+      'konsole',
+      'xfce4-terminal',
+      'kitty',
+      'alacritty',
+      'xterm',
+      'x-terminal-emulator',
     ];
     let terminal = '';
     for (const t of terminals) {
@@ -51,6 +94,12 @@ export class QwenCoderCLIProvider implements Provider {
         terminal = t;
         break;
       } catch (e) {}
+    }
+
+    if (!terminal) {
+      logger.warn(
+        '[QwenCLI] No supported terminal emulator found, falling back to direct node spawn',
+      );
     }
 
     const nodePath = process.execPath;
@@ -70,16 +119,25 @@ export class QwenCoderCLIProvider implements Provider {
     if (terminal === 'gnome-terminal') {
       terminalSpawn = spawn(
         terminal,
-        ['--', 'bash', '-c', `${commandStr}; echo ''; echo 'Press enter to close...'; read`],
+        [
+          '--',
+          'bash',
+          '-c',
+          `${commandStr}; echo ''; echo 'Press enter to close...'; read`,
+        ],
         { detached: true, env, stdio: 'ignore' },
       );
     } else if (terminal) {
       terminalSpawn = spawn(terminal, ['-e', `bash -c "${commandStr}; read"`], {
-        detached: true, env, stdio: 'ignore',
+        detached: true,
+        env,
+        stdio: 'ignore',
       });
     } else {
       terminalSpawn = spawn(nodePath, [cliPath, 'chat', '--empty'], {
-        env, detached: true, stdio: 'ignore',
+        env,
+        detached: true,
+        stdio: 'ignore',
       });
     }
 
@@ -95,19 +153,27 @@ export class QwenCoderCLIProvider implements Provider {
             capturedUrl = urlMatch[0];
             clearInterval(checkInterval);
             loginService
-              .login({
+              .captureCredentialsViaCDP({
                 providerId: 'qwen-cli',
                 loginUrl: capturedUrl,
                 partition: 'qwen-cli',
                 skipProxy: true,
-                extraEvents: ['qwen-cli-tokens', 'qwen-cli-user-info'],
+                extraEvents: [
+                  QWEN_CLI_EVENTS.TOKENS,
+                  QWEN_CLI_EVENTS.USER_INFO,
+                ],
                 validate: async (captured) => {
-                  if (captured.cookies && captured.email) return { isValid: true };
+                  if (captured.cookies && captured.email)
+                    return { isValid: true };
                   return { isValid: false };
                 },
               })
               .then((result) => {
-                try { fs.rmSync(tempHome, { recursive: true, force: true }); } catch (e) {}
+                try {
+                  fs.rmSync(tempHome, { recursive: true, force: true });
+                } catch (e) {
+                  logger.warn('[QwenCLI] Failed to clean up temp home:', e);
+                }
                 resolve(result);
               })
               .catch(reject);
@@ -118,15 +184,18 @@ export class QwenCoderCLIProvider implements Provider {
       setTimeout(() => {
         if (!capturedUrl) {
           clearInterval(checkInterval);
+          logger.error('[QwenCLI] Login timed out waiting for OAuth URL');
           reject(new Error('Timed out'));
         }
       }, 60000);
     });
   }
 
+  // ─── Profile ────────────────────────────────────────────────────────
+
   async getProfile(accessToken: string) {
     try {
-      const response = await fetch('https://chat.qwen.ai/api/v1/user/info', {
+      const response = await fetch(USER_INFO_URL, {
         headers: {
           'User-Agent': `QwenCode/0.10.6 (${process.platform}; ${process.arch})`,
           'x-dashscope-authtype': 'qwen-oauth',
@@ -135,11 +204,19 @@ export class QwenCoderCLIProvider implements Provider {
       });
       if (response.ok) {
         const data = await response.json();
+        if (!data.email && !data.username) {
+          logger.warn('[QwenCLI] Get Profile response missing email/username');
+        }
         return { email: data.email || data.username || null };
       }
-    } catch (e) {}
+      logger.warn(`[QwenCLI] Get Profile returned status ${response.status}`);
+    } catch (e) {
+      logger.error('[QwenCLI] Get Profile Error:', e);
+    }
     return { email: null };
   }
+
+  // ─── Refresh Token ──────────────────────────────────────────────────
 
   async refreshToken(refreshTokenStr: string) {
     const response = await fetch(QWEN_CONFIG.tokenUrl, {
@@ -154,7 +231,12 @@ export class QwenCoderCLIProvider implements Provider {
         refresh_token: refreshTokenStr,
       }),
     });
-    if (!response.ok) throw new Error('Failed to refresh Qwen token');
+    if (!response.ok) {
+      logger.error(
+        `[QwenCLI] Token refresh failed with status ${response.status}`,
+      );
+      throw new Error('Failed to refresh Qwen token');
+    }
     const json = await response.json();
     let data = json;
     if (
@@ -162,25 +244,40 @@ export class QwenCoderCLIProvider implements Provider {
       typeof json.response === 'string' &&
       json.response.startsWith('{')
     ) {
-      try { data = JSON.parse(json.response); } catch (e) {}
+      try {
+        data = JSON.parse(json.response);
+      } catch (e) {
+        logger.warn('[QwenCLI] Failed to parse nested token response:', e);
+      }
     }
     return data;
   }
 
+  // ─── Handle Message ─────────────────────────────────────────────────
+
   async handleMessage(options: SendMessageOptions): Promise<void> {
     const {
-      credential, messages, model, stream,
-      onContent, onDone, onError, accountId,
+      credential,
+      messages,
+      model,
+      stream,
+      onContent,
+      onDone,
+      onError,
+      accountId,
     } = options;
 
     let tokens: any;
     try {
       tokens = JSON.parse(credential);
     } catch (e) {
+      logger.warn(
+        '[QwenCLI] Credential is not valid JSON, treating as raw access token',
+      );
       tokens = { accessToken: credential };
     }
 
-    const url = 'https://portal.qwen.ai/v1/chat/completions';
+    const url = CHAT_COMPLETIONS_URL;
 
     const sendRequest = async (token: string) => {
       return await fetch(url, {
@@ -198,7 +295,8 @@ export class QwenCoderCLIProvider implements Provider {
             content: [{ type: 'text', text: m.content }],
           })),
           stream: stream !== false,
-          stream_options: stream !== false ? { include_usage: true } : undefined,
+          stream_options:
+            stream !== false ? { include_usage: true } : undefined,
         }),
       });
     };
@@ -221,15 +319,24 @@ export class QwenCoderCLIProvider implements Provider {
                 expiresIn: newTokens.expires_in || 21600,
               });
               db.prepare('UPDATE accounts SET credential = ? WHERE id = ?').run(
-                newCredential, accountId,
+                newCredential,
+                accountId,
               );
-            } catch (e) {}
+            } catch (e) {
+              logger.error(
+                '[QwenCLI] Failed to persist refreshed token to DB:',
+                e,
+              );
+            }
           }
           response = await sendRequest(tokens.accessToken);
-        } catch (e) {}
+        } catch (e) {
+          logger.error('[QwenCLI] Token refresh failed:', e);
+        }
       }
 
-      if (!response.ok) throw new Error(`Qwen CLI API Error ${response.status}`);
+      if (!response.ok)
+        throw new Error(`Qwen CLI API Error ${response.status}`);
 
       if (stream !== false) {
         if (!response.body) throw new Error('No response body');
@@ -242,12 +349,17 @@ export class QwenCoderCLIProvider implements Provider {
             const trimmed = line.trim();
             if (!trimmed || !trimmed.startsWith('data: ')) continue;
             const jsonStr = trimmed.slice(6).trim();
-            if (jsonStr === '[DONE]') { onDone(); return; }
+            if (jsonStr === '[DONE]') {
+              onDone();
+              return;
+            }
             try {
               const json = JSON.parse(jsonStr);
               if (json.choices?.[0]?.delta?.content)
                 onContent(json.choices[0].delta.content);
-            } catch (e) {}
+            } catch (e) {
+              logger.warn('[QwenCLI] Failed to parse SSE line:', e);
+            }
           }
         }
         onDone();
@@ -257,9 +369,18 @@ export class QwenCoderCLIProvider implements Provider {
         onDone();
       }
     } catch (err: any) {
+      logger.error('[QwenCLI] Error in handleMessage:', err);
       onError(err);
     }
   }
+
+  // ─── Continue Message ───────────────────────────────────────────────
+
+  async continueMessage(options: SendMessageOptions): Promise<void> {
+    return this.handleMessage(options);
+  }
+
+  // ─── Model Support ──────────────────────────────────────────────────
 
   isModelSupported(model: string): boolean {
     const m = model.toLowerCase();

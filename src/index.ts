@@ -1,17 +1,39 @@
-#!/usr/bin/env node
-import './env';
+/**
+ * ------------------------------------------------------------------
+ * Entry Point
+ * ------------------------------------------------------------------
+ * Điểm khởi chạy của backend server.
+ * Khởi tạo database, start server, và các background services.
+ *
+ * Main functions:
+ * - startBackend() : Khởi động toàn bộ backend
+ * - main()         : Main function với dbPath option
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import * as dns from 'dns';
 
-if (dns.setDefaultResultOrder) {
-  dns.setDefaultResultOrder('ipv4first');
-}
+// ── Env ──
+import './env';
 
+// ── Server ──
 import { startServer } from './server';
-import { createLogger } from './utils/logger';
+
+// ── Database ──
 import { initDatabase } from './database';
+
+// ── WebSocket ──
 import { startWebSocketServer } from './websocket-server';
 
+// ── Utils ──
+import { createLogger } from './utils/logger';
+
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('Startup');
+
+// ─── Main ──────────────────────────────────────────────────────────────
 
 const main = async (options?: { dbPath?: string }) => {
   try {
@@ -25,15 +47,8 @@ const main = async (options?: { dbPath?: string }) => {
   const result = await startServer();
 
   if (result.success) {
-    logger.info(
-      `Server started on port ${result.port}${result.https ? ' (HTTPS)' : ''}`,
-    );
-    // Start WebSocket server for Z.AI Browser extension
     startWebSocketServer();
-    logger.info('WebSocket server started on port 8899');
-    const {
-      accountRefreshService,
-    } = require('./services/account-refresh.service');
+    const { accountRefreshService } = require('./services/account.service');
     accountRefreshService.start();
   } else {
     logger.error(`Failed to start server: ${result.error}`);
@@ -42,7 +57,6 @@ const main = async (options?: { dbPath?: string }) => {
   }
 
   const shutdown = () => {
-    logger.info('Shutting down...');
     if (require.main === module) process.exit(0);
   };
 
@@ -52,7 +66,14 @@ const main = async (options?: { dbPath?: string }) => {
 
 export const startBackend = main;
 
+// ─── CLI Entry ─────────────────────────────────────────────────────────
+
 if (require.main === module) {
+  // Force IPv4 first to avoid DNS resolution issues
+  if (dns.setDefaultResultOrder) {
+    dns.setDefaultResultOrder('ipv4first');
+  }
+
   const args = process.argv.slice(2);
   let dbPath: string | undefined;
 

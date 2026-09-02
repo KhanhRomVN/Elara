@@ -1,44 +1,47 @@
+/**
+ * ------------------------------------------------------------------
+ * Account Routes
+ * ------------------------------------------------------------------
+ * Routes cho API quản lý tài khoản provider.
+ *
+ * Main routes:
+ * - POST   /v1/accounts/import         : Import danh sách tài khoản
+ * - POST   /v1/accounts                : Thêm một tài khoản
+ * - GET    /v1/accounts                : Lấy danh sách tài khoản
+ * - DELETE /v1/accounts/:id            : Xóa tài khoản
+ * - GET    /v1/accounts/:id/memory     : Lấy trạng thái memory
+ * - PUT    /v1/accounts/:id/memory     : Cập nhật trạng thái memory
+ * - GET    /v1/accounts/:id/browser/status : Trạng thái browser
+ * - POST   /v1/accounts/:id/browser/start : Khởi động browser
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { Router } from 'express';
+
+// ── Controllers ──
 import {
   importAccounts,
   addAccount,
   getAccounts,
   deleteAccount,
-  login,
-  switchAccount,
   getAccountMemory,
-  updateAccountMemoryController,
+  updateAccountMemory,
   getAccountBrowserStatus,
   startAccountBrowser,
 } from '../../controllers/account.controller';
 
+// ─── Router ─────────────────────────────────────────────────────────────
+
 const router = Router();
 
-// Nhập hàng loạt tài khoản (phát hiện trùng lặp)
 router.post('/import', importAccounts);
-
-// Thêm hoặc cập nhật credential của một tài khoản
 router.post('/', addAccount);
-
-// Lấy danh sách tài khoản (phân trang, lọc, sắp xếp)
 router.get('/', getAccounts);
-
-// Xóa tài khoản
 router.delete('/:id', deleteAccount);
-
-// Đăng nhập qua trình duyệt (Chrome + MITM proxy)
-router.post('/login/:provider', login);
-
-// POST Chuyển đổi tài khoản đang hoạt động
-router.post('/:id/switch', switchAccount);
-
-// GET Lấy trạng thái memory của account
 router.get('/:id/memory', getAccountMemory);
-
-// PUT Cập nhật trạng thái memory của account
-router.put('/:id/memory', updateAccountMemoryController);
-
-// Browser session management for browser-based providers
+router.put('/:id/memory', updateAccountMemory);
 router.get('/:id/browser/status', getAccountBrowserStatus);
 router.post('/:id/browser/start', startAccountBrowser);
 

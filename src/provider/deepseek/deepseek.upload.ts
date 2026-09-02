@@ -1,18 +1,36 @@
+/**
+ * ------------------------------------------------------------------
+ * DeepSeek File Upload
+ * ------------------------------------------------------------------
+ * Upload file lên DeepSeek API. Hỗ trợ giải PoW challenge,
+ * multipart/form-data upload, và polling để chờ file được xử lý.
+ *
+ * Main functions:
+ * - deepseekUploadFile() : Upload file và trả về file_id + token_usage
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import * as crypto from 'crypto';
 import fetch from 'node-fetch';
+
+// ── Utils ──
 import { HttpClient } from '../../utils/http-client';
 import { createLogger } from '../../utils/logger';
-import { DeepSeekHash, BASE_URL, solvePoW } from './deepseek.pow';
 
+// ── DeepSeek Imports ──
+import { DeepSeekHash, solvePoW } from './deepseek.pow';
+import { BASE_URL } from './deepseek.constant';
+
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('DeepSeekUpload');
 
-// =============================================================================
-// UPLOAD HELPERS
-// =============================================================================
+// ─── Helpers ────────────────────────────────────────────────────────────
 
-function createClient(credential: string): HttpClient {
+function createUploadClient(credential: string): HttpClient {
   return new HttpClient({
-    baseURL: 'https://chat.deepseek.com',
+    baseURL: BASE_URL,
     headers: {
       Cookie: `DS-AUTH-TOKEN=${credential}`,
       Authorization: credential,
@@ -22,11 +40,9 @@ function createClient(credential: string): HttpClient {
   });
 }
 
-// =============================================================================
-// FILE UPLOAD
-// =============================================================================
+// ─── Main Function ─────────────────────────────────────────────────────
 
-export async function uploadFile(
+export async function deepseekUploadFile(
   credential: string,
   file: any,
   getDsHash: () => Promise<DeepSeekHash>,
@@ -36,11 +52,11 @@ export async function uploadFile(
     Authorization: credential,
     'User-Agent':
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-    Origin: 'https://chat.deepseek.com',
-    Referer: 'https://chat.deepseek.com/',
+    Origin: BASE_URL,
+    Referer: `${BASE_URL}/`,
   };
 
-  const client = createClient(credential);
+  const client = createUploadClient(credential);
 
   try {
     const challengeRes = await client.post(
@@ -55,7 +71,6 @@ export async function uploadFile(
         const challengeData = challengeJson?.data?.biz_data?.challenge;
 
         if (challengeData) {
-          logger.info('[DeepSeek Upload] Solving PoW...');
           const dsHash = await getDsHash();
           const powAnswer = await solvePoW(dsHash, challengeData);
           powResponseBase64 = Buffer.from(JSON.stringify(powAnswer)).toString(
@@ -64,12 +79,10 @@ export async function uploadFile(
         }
       } catch (e) {
         logger.error(
-          '[DeepSeek Upload] Failed to parse PoW challenge response, continuing without PoW token',
+          '[DeepSeek Upload] Failed to parse PoW challenge response',
           {
             error: e,
-            challengeResStatus: challengeRes.status,
-            challengeResText: await challengeRes.text().catch(() => '<unreadable>'),
-          }
+          },
         );
       }
     }
@@ -99,14 +112,11 @@ export async function uploadFile(
       headers['X-Ds-Pow-Response'] = powResponseBase64;
     }
 
-    const uploadRes = await fetch(
-      'https://chat.deepseek.com/api/v0/file/upload_file',
-      {
-        method: 'POST',
-        headers,
-        body: payloadBuffer,
-      },
-    );
+    const uploadRes = await fetch(`${BASE_URL}/api/v0/file/upload_file`, {
+      method: 'POST',
+      headers,
+      body: payloadBuffer,
+    });
 
     if (!uploadRes.ok) {
       const errorText = await uploadRes.text();
@@ -151,9 +161,7 @@ export async function uploadFile(
                 targetFile.status === 'FAIL' ||
                 targetFile.status === 'ERROR'
               ) {
-                throw new Error(
-                  `File processing failed: ${targetFile.status}`,
-                );
+                throw new Error(`File processing failed: ${targetFile.status}`);
               }
             }
           }

@@ -1,12 +1,45 @@
+/**
+ * ------------------------------------------------------------------
+ * Proxy Service
+ * ------------------------------------------------------------------
+ * Service quản lý proxy server (http-mitm-proxy) để intercept và
+ * capture cookies/tokens từ các provider. Hỗ trợ SSL interception,
+ * decompression, và event-based handlers.
+ *
+ * Main functions:
+ * - start()          : Khởi động proxy server
+ * - stop()           : Dừng proxy server
+ * - registerHandler(): Đăng ký handler để xử lý request/response
+ * - getConfig()      : Lấy cấu hình proxy
+ * - updateConfig()   : Cập nhật cấu hình
+ * - getServerInfo()  : Lấy thông tin server
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import * as zlib from 'zlib';
 import { EventEmitter } from 'events';
+
+// ── Utils ──
 import { createLogger } from '../utils/logger';
 import { getCertificateManager } from '../utils/cert-manager';
-import * as zlib from 'zlib';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('ProxyService');
+
+const DEFAULT_CONFIG: ProxyConfig = {
+  enabled: false,
+  port: 22122,
+  interceptSSL: true,
+};
+
+const CONFIG_FILE = path.join(os.homedir(), '.elara', 'proxy-config.json');
+
+// ─── Types ──────────────────────────────────────────────────────────────
 
 export interface ProxyConfig {
   enabled: boolean;
@@ -21,13 +54,7 @@ export interface ProxyHandler {
   onResponseBody?: (ctx: any, body: string) => void;
 }
 
-const DEFAULT_CONFIG: ProxyConfig = {
-  enabled: false,
-  port: 22122,
-  interceptSSL: true,
-};
-
-const CONFIG_FILE = path.join(os.homedir(), '.elara', 'proxy-config.json');
+// ─── Config Helpers ────────────────────────────────────────────────────
 
 function loadProxyConfig(): ProxyConfig {
   try {
@@ -54,6 +81,8 @@ function saveProxyConfig(config: ProxyConfig): void {
   }
 }
 
+// ─── Class ──────────────────────────────────────────────────────────────
+
 export class ProxyService {
   private isRunning = false;
   private proxy: any = null;
@@ -72,7 +101,6 @@ export class ProxyService {
     if (this.isRunning) return;
 
     try {
-      // Lazy load http-mitm-proxy to handle missing dependency gracefully
       let MitmProxyModule;
       try {
         MitmProxyModule = require('http-mitm-proxy');
@@ -136,7 +164,6 @@ export class ProxyService {
           }
         }
 
-        // Body Handling with decompression
         const encoding = ctx.serverToProxyResponse.headers['content-encoding'];
         const contentType =
           ctx.serverToProxyResponse.headers['content-type'] || '';
@@ -248,6 +275,8 @@ export class ProxyService {
     };
   }
 }
+
+// ─── Export ─────────────────────────────────────────────────────────────
 
 export const proxyEvents = new EventEmitter();
 export const proxyService = new ProxyService();

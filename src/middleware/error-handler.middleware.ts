@@ -1,7 +1,28 @@
+/**
+ * ------------------------------------------------------------------
+ * Error Handler Middleware
+ * ------------------------------------------------------------------
+ * Middleware xử lý lỗi tập trung cho toàn bộ ứng dụng Express.
+ * Phân biệt lỗi AppError (lỗi business logic) và lỗi hệ thống,
+ * trả về response chuẩn với status code và metadata.
+ *
+ * Main features:
+ * - Xử lý AppError với status code tương ứng
+ * - Xử lý lỗi network (ETIMEDOUT, ECONNRESET, ECONNREFUSED) → 503
+ * - Log lỗi chi tiết
+ * - Hiển thị stack trace khi không ở production
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { Request, Response, NextFunction } from 'express';
+
+// ── Utils ──
 import { AppError } from '../utils/api-error';
 import { createLogger } from '../utils/logger';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const HTTP_STATUS = {
   OK: 200,
   CREATED: 201,
@@ -14,6 +35,8 @@ const HTTP_STATUS = {
 } as const;
 
 const logger = createLogger('ErrorHandler');
+
+// ─── Middleware ────────────────────────────────────────────────────────
 
 export const errorHandler = (
   err: Error | AppError,

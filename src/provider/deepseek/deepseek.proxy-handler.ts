@@ -1,12 +1,33 @@
+/**
+ * ------------------------------------------------------------------
+ * DeepSeek Proxy Handler
+ * ------------------------------------------------------------------
+ * Proxy handler để capture cookies, token, và user info từ DeepSeek.
+ * Lắng nghe Authorization header, login email, login token,
+ * và user info từ API.
+ *
+ * Main features:
+ * - onRequest()       : Capture Authorization header
+ * - onRequestData()   : Capture login email từ request body
+ * - onResponseBody()  : Capture login token và user info từ response
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Services ──
 import { ProxyHandler } from '../../services/proxy.service';
 import { proxyEvents } from '../../services/proxy.service';
+
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
 
+// ── Constants ──
+import { DEEPSEEK_EVENTS } from './deepseek.constant';
+
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('DeepSeekProxy');
 
-// =============================================================================
-// PROXY HANDLER
-// =============================================================================
+// ─── Proxy Handler ────────────────────────────────────────────────────
 
 export const proxyHandler: ProxyHandler = {
   onRequest: (ctx: any, callback: () => void) => {
@@ -14,14 +35,10 @@ export const proxyHandler: ProxyHandler = {
     const url = ctx.clientToProxyRequest.url;
 
     if (host && host.includes('chat.deepseek.com')) {
-      logger.debug(`[Proxy] DeepSeek Request: ${url}`);
       const auth = ctx.clientToProxyRequest.headers['authorization'];
 
       if (auth) {
-        logger.debug(
-          '[Proxy] Intercepting DeepSeek request with Authorization header',
-        );
-        proxyEvents.emit('deepseek-auth-header', auth);
+        proxyEvents.emit(DEEPSEEK_EVENTS.AUTH_HEADER, auth);
       }
     }
     callback();
@@ -54,11 +71,8 @@ export const proxyHandler: ProxyHandler = {
         }
 
         if (foundEmail) {
-          logger.info(
-            `[Proxy] Captured DeepSeek Login Email (JSON): ${foundEmail}`,
-          );
           (ctx as any).capturedUnmaskedEmail = foundEmail;
-          proxyEvents.emit('deepseek-login-email', { email: foundEmail });
+          proxyEvents.emit(DEEPSEEK_EVENTS.LOGIN_EMAIL, { email: foundEmail });
         }
       } catch (e) {
         const emailMatch = bodyStr.match(
@@ -67,11 +81,8 @@ export const proxyHandler: ProxyHandler = {
         if (emailMatch && emailMatch[0]) {
           const email = `${emailMatch[1]}@${emailMatch[2]}`.replace(/\\/g, '');
           if (!email.includes('***')) {
-            logger.info(
-              `[Proxy] Captured DeepSeek Login Email (Regex): ${email}`,
-            );
             (ctx as any).capturedUnmaskedEmail = email;
-            proxyEvents.emit('deepseek-login-email', { email });
+            proxyEvents.emit(DEEPSEEK_EVENTS.LOGIN_EMAIL, { email });
           }
         }
       }
@@ -102,7 +113,6 @@ export const proxyHandler: ProxyHandler = {
         }
 
         if (userData && userData.token) {
-          logger.info(`[Proxy] Captured DeepSeek Login Token`);
           const eventPayload: any = { cookies: userData.token };
           const capturedEmail = (ctx as any).capturedUnmaskedEmail;
           let bestEmail = capturedEmail || userData.email;
@@ -112,11 +122,12 @@ export const proxyHandler: ProxyHandler = {
           }
 
           if (bestEmail) {
-            logger.info(`[Proxy] Using DeepSeek Login Email: ${bestEmail}`);
             eventPayload.email = bestEmail;
-            proxyEvents.emit('deepseek-login-email', { email: bestEmail });
+            proxyEvents.emit(DEEPSEEK_EVENTS.LOGIN_EMAIL, {
+              email: bestEmail,
+            });
           }
-          proxyEvents.emit('deepseek-login-token', eventPayload);
+          proxyEvents.emit(DEEPSEEK_EVENTS.LOGIN_TOKEN, eventPayload);
           delete (ctx as any).capturedUnmaskedEmail;
         }
       } catch (e) {
@@ -135,11 +146,10 @@ export const proxyHandler: ProxyHandler = {
     ) {
       const emailMatch = body.match(/"oPEP7c":"([^"]+)"/);
       if (emailMatch && emailMatch[1] && !emailMatch[1].includes('***')) {
-        logger.info(
-          `[Proxy] Found Google Email for DeepSeek: ${emailMatch[1]}`,
-        );
         (ctx as any).capturedUnmaskedEmail = emailMatch[1];
-        proxyEvents.emit('deepseek-google-email', { email: emailMatch[1] });
+        proxyEvents.emit(DEEPSEEK_EVENTS.GOOGLE_EMAIL, {
+          email: emailMatch[1],
+        });
       }
     }
 
@@ -151,13 +161,10 @@ export const proxyHandler: ProxyHandler = {
       try {
         const userInfo = JSON.parse(body);
         if (userInfo.code === 0 && userInfo.data) {
-          proxyEvents.emit('deepseek-user-info', userInfo.data);
+          proxyEvents.emit(DEEPSEEK_EVENTS.USER_INFO, userInfo.data);
           const bizData = userInfo.data?.biz_data;
           if (bizData) {
             if (bizData.token) {
-              logger.info(
-                '[Proxy] Captured DeepSeek Login Token from User Info',
-              );
               const eventPayload: any = { cookies: bizData.token };
               const capturedEmail = (ctx as any).capturedUnmaskedEmail;
               let bestEmail = capturedEmail || bizData.email;
@@ -167,10 +174,10 @@ export const proxyHandler: ProxyHandler = {
               if (bestEmail) {
                 eventPayload.email = bestEmail;
               }
-              proxyEvents.emit('deepseek-login-token', eventPayload);
+              proxyEvents.emit(DEEPSEEK_EVENTS.LOGIN_TOKEN, eventPayload);
             }
             if (bizData.email) {
-              proxyEvents.emit('deepseek-login-email', {
+              proxyEvents.emit(DEEPSEEK_EVENTS.LOGIN_EMAIL, {
                 email: bizData.email,
               });
             }

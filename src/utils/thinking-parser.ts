@@ -1,3 +1,23 @@
+/**
+ * ------------------------------------------------------------------
+ * Streaming Thinking Parser
+ * ------------------------------------------------------------------
+ * Parser streaming để tách nội dung trong thẻ <thinking> và <think>
+ * khỏi nội dung chính. Hỗ trợ streaming chunk và xử lý partial tags.
+ *
+ * Main functions:
+ * - feed()  : Nhập chunk mới vào parser
+ * - flush() : Flush buffer còn lại
+ *
+ * Usage:
+ *   const parser = new StreamingThinkingParser(onContent, onThinking);
+ *   parser.feed(chunk);
+ *   parser.flush();
+ * ------------------------------------------------------------------
+ */
+
+// ─── Class ──────────────────────────────────────────────────────────────
+
 export class StreamingThinkingParser {
   private inThinking = false;
   private currentCloseTag = '';
@@ -19,12 +39,13 @@ export class StreamingThinkingParser {
     this.onThinking = onThinking;
   }
 
+  // ─── Feed ─────────────────────────────────────────────────────────────
+
   feed(chunk: string) {
     this.buffer += chunk;
 
     while (this.buffer.length > 0) {
       if (!this.inThinking) {
-        // Find if any open tag exists in buffer
         let earliestPos = -1;
         let matchedOpenTag = '';
 
@@ -37,7 +58,6 @@ export class StreamingThinkingParser {
         }
 
         if (earliestPos === -1) {
-          // Check for partial tag at end of buffer
           let possiblePartial = false;
           for (const tag of this.openTags) {
             for (let i = 1; i < tag.length; i++) {
@@ -59,7 +79,6 @@ export class StreamingThinkingParser {
           }
           break;
         } else {
-          // Emit text before the tag
           const beforeTag = this.buffer.slice(0, earliestPos);
           if (beforeTag) {
             this.onContent(beforeTag);
@@ -69,10 +88,8 @@ export class StreamingThinkingParser {
           this.buffer = this.buffer.slice(earliestPos + matchedOpenTag.length);
         }
       } else {
-        // Look for currentCloseTag
         const endPos = this.buffer.indexOf(this.currentCloseTag);
         if (endPos === -1) {
-          // Check for partial close tag at end of buffer
           let possiblePartial = false;
           for (let i = 1; i < this.currentCloseTag.length; i++) {
             if (this.buffer.endsWith(this.currentCloseTag.slice(0, i))) {
@@ -107,6 +124,8 @@ export class StreamingThinkingParser {
       }
     }
   }
+
+  // ─── Flush ────────────────────────────────────────────────────────────
 
   flush() {
     if (this.buffer) {

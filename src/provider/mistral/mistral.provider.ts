@@ -1,31 +1,59 @@
-import { Provider, SendMessageOptions } from '../../types';
+/**
+ * ------------------------------------------------------------------
+ * Mistral Provider
+ * ------------------------------------------------------------------
+ * Provider implementation cho Mistral AI API.
+ * Hỗ trợ login qua browser và chat completion với streaming.
+ *
+ * Main features:
+ * - login()          : Đăng nhập qua browser
+ * - handleMessage()  : Gửi tin nhắn với streaming response
+ * - getProfile()     : Lấy thông tin user profile
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { Router } from 'express';
-import fetch from 'node-fetch';
-import * as https from 'https';
 import * as crypto from 'crypto';
+import fetch from 'node-fetch';
+
+// ── Types ──
+import { Provider, SendMessageOptions } from '../../types';
+
+// ── Services ──
+import { loginService } from '../../services/login.service';
+
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
-import { loginService } from '../../services/login/login.service';
+
+// ── Mistral Imports ──
 import { proxyHandler } from './mistral.proxy-handler';
+import {
+  BASE_URL,
+  CHAT_BASE_URL,
+  AUTH_LOGIN_URL,
+  MISTRAL_EVENTS,
+} from './mistral.constant';
 
-export { proxyHandler };
-
-export const BASE_URL = 'https://console.mistral.ai';
-
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('MistralProvider');
+
+// ─── Provider Class ────────────────────────────────────────────────────
 
 export class MistralProvider implements Provider {
   name = 'Mistral';
   proxyHandler = proxyHandler;
   defaultModel = 'mistral-large-latest';
 
-  async login() {
-    logger.info('Starting Mistral login...');
+  // ─── Login ──────────────────────────────────────────────────────────
 
-    return await loginService.login({
+  async login() {
+    return await loginService.captureCredentialsViaCDP({
       providerId: 'mistral',
-      loginUrl: 'https://auth.mistral.ai/ui/login',
+      loginUrl: AUTH_LOGIN_URL,
       partition: `mistral-${Date.now()}`,
-      cookieEvent: 'mistral-cookies',
+      cookieEvent: MISTRAL_EVENTS.COOKIES,
       validate: async (data: {
         cookies: string;
         headers?: any;
@@ -34,26 +62,28 @@ export class MistralProvider implements Provider {
         if (data.cookies && data.cookies.length > 0) {
           const profile = await this.getProfile(data.cookies);
           if (profile.email) {
-            logger.info(
-              `[Mistral] Validation success for email: ${profile.email}`,
-            );
             return {
               isValid: true,
               email: profile.email,
               cookies: data.cookies,
             };
           }
+          logger.warn(
+            '[Mistral] Login validation failed: could not determine email',
+          );
         }
         return { isValid: false };
       },
     });
   }
 
+  // ─── Profile ────────────────────────────────────────────────────────
+
   async getProfile(
     credential: string,
   ): Promise<{ email: string | null; name?: string; id?: string }> {
     try {
-      const response = await fetch('https://console.mistral.ai/api/users/me', {
+      const response = await fetch(`${BASE_URL}/api/users/me`, {
         method: 'GET',
         headers: {
           Cookie: credential,
@@ -65,18 +95,24 @@ export class MistralProvider implements Provider {
 
       if (response.status === 200) {
         const json = await response.json();
+        if (!json.email) {
+          logger.warn('[Mistral] Get Profile response missing email field');
+        }
         return {
           email: json.email || null,
           name: json.name || json.full_name,
           id: json.id,
         };
       }
+      logger.warn(`[Mistral] Get Profile returned status ${response.status}`);
       return { email: null };
     } catch (e) {
       logger.error('[Mistral] Get Profile Error:', e);
       return { email: null };
     }
   }
+
+  // ─── Handle Message ─────────────────────────────────────────────────
 
   async handleMessage(options: SendMessageOptions): Promise<void> {
     const {
@@ -120,6 +156,14 @@ export class MistralProvider implements Provider {
     }
   }
 
+  // ─── Continue Message ───────────────────────────────────────────────
+
+  async continueMessage(options: SendMessageOptions): Promise<void> {
+    return this.handleMessage(options);
+  }
+
+  // ─── Stream Helper ──────────────────────────────────────────────────
+
   private async streamMistral(
     credential: string,
     chatId: string,
@@ -157,15 +201,15 @@ export class MistralProvider implements Provider {
       payload.integrations = [];
     }
 
-    const response = await fetch('https://chat.mistral.ai/api/chat', {
+    const response = await fetch(`${CHAT_BASE_URL}/api/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         Cookie: credential,
-        Origin: 'https://chat.mistral.ai',
-        Referer: `https://chat.mistral.ai/chat/${chatId}`,
+        Origin: CHAT_BASE_URL,
+        Referer: `${CHAT_BASE_URL}/chat/${chatId}`,
       },
       body: JSON.stringify(payload),
     });
@@ -201,17 +245,26 @@ export class MistralProvider implements Provider {
                 }
               }
             }
-          } catch (e) {}
+          } catch (e) {
+            logger.warn('[Mistral] Failed to parse SSE line:', e);
+          }
         }
       });
       body.on('end', () => onDone());
-      body.on('error', onError);
+      body.on('error', (err: any) => {
+        logger.error('[Mistral] Stream body error:', err);
+        onError(err);
+      });
     } else {
       onDone();
     }
   }
 
+  // ─── Routes ─────────────────────────────────────────────────────────
+
   registerRoutes() {}
+
+  // ─── Model Support ──────────────────────────────────────────────────
 
   isModelSupported(model: string): boolean {
     return model.toLowerCase().includes('mistral');

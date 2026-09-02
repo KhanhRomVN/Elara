@@ -1,8 +1,25 @@
+/**
+ * ------------------------------------------------------------------
+ * Cookie Jar
+ * ------------------------------------------------------------------
+ * Wrapper cho tough-cookie để quản lý cookies trong các request.
+ *
+ * Main functions:
+ * - setCookie()      : Thêm cookie từ Set-Cookie header
+ * - getCookieString(): Lấy cookies dạng string cho Cookie header
+ * - getCookies()     : Lấy danh sách cookies
+ * - clear()          : Xóa tất cả cookies
+ * - toJSON()         : Serialize cookies thành JSON
+ * - fromJSON()       : Deserialize từ JSON
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { Cookie, CookieJar as ToughCookieJar } from 'tough-cookie';
 
-/**
- * Simple cookie jar for managing cookies across requests
- */
+// ─── Class ──────────────────────────────────────────────────────────────
+
 export class CookieJar {
   private jar: ToughCookieJar;
 
@@ -10,58 +27,46 @@ export class CookieJar {
     this.jar = new ToughCookieJar();
   }
 
-  /**
-   * Set a cookie from Set-Cookie header
-   */
+  // ─── Set Cookie ──────────────────────────────────────────────────────
+
   setCookie(cookieStr: string, url: string): void {
     try {
       this.jar.setCookieSync(cookieStr, url);
     } catch (error) {
-
+      // Ignore invalid cookies
     }
   }
 
-  /**
-   * Get cookies as a string for Cookie header
-   */
+  // ─── Get Cookies ─────────────────────────────────────────────────────
+
   getCookieString(url: string): string {
     try {
       return this.jar.getCookieStringSync(url);
     } catch (error) {
-
       return '';
     }
   }
 
-  /**
-   * Get all cookies for a URL
-   */
   getCookies(url: string): Cookie[] {
     try {
       return this.jar.getCookiesSync(url);
     } catch (error) {
-
       return [];
     }
   }
 
-  /**
-   * Clear all cookies
-   */
+  // ─── Clear ───────────────────────────────────────────────────────────
+
   clear(): void {
     this.jar.removeAllCookiesSync();
   }
 
-  /**
-   * Serialize cookies to JSON
-   */
+  // ─── Serialization ──────────────────────────────────────────────────
+
   toJSON(): any {
     return this.jar.toJSON();
   }
 
-  /**
-   * Load cookies from JSON
-   */
   static fromJSON(json: any): CookieJar {
     const jar = new CookieJar();
     jar.jar = ToughCookieJar.fromJSON(json);

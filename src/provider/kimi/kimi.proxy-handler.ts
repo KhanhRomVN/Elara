@@ -1,13 +1,43 @@
+/**
+ * ------------------------------------------------------------------
+ * Kimi Proxy Handler
+ * ------------------------------------------------------------------
+ * Proxy handler để capture token, refresh token, và user info từ Kimi.
+ * Lắng nghe JWT token từ Authorization header, cookie, và API response.
+ *
+ * Main features:
+ * - onRequest()       : Capture token từ header/cookie, extract email từ JWT
+ * - onResponseBody()  : Capture token từ API response body
+ * - onResponse()      : Capture Google OAuth redirect
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Services ──
 import { ProxyHandler, proxyEvents } from '../../services/proxy.service';
+
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
 
+// ── Constants ──
+import { KIMI_EVENTS } from './kimi.constant';
+
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('KimiProxyHandler');
 
-function extractInfoFromJwt(token: string): { email?: string; name?: string; sub?: string } {
+// ─── Helpers ────────────────────────────────────────────────────────────
+
+function extractInfoFromJwt(token: string): {
+  email?: string;
+  name?: string;
+  sub?: string;
+} {
   try {
     const parts = token.split('.');
     if (parts.length >= 2) {
-      const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+      const payload = JSON.parse(
+        Buffer.from(parts[1], 'base64url').toString('utf8'),
+      );
       return {
         email: payload.email,
         name: payload.name || payload.nickname,
@@ -15,10 +45,12 @@ function extractInfoFromJwt(token: string): { email?: string; name?: string; sub
       };
     }
   } catch {
-    // ignore
+    logger.warn('[Proxy] Failed to extract JWT info');
   }
   return {};
 }
+
+// ─── Proxy Handler ────────────────────────────────────────────────────
 
 export const kimiProxyHandler: ProxyHandler = {
   onRequest: (ctx: any, callback: () => void) => {
@@ -49,7 +81,8 @@ export const kimiProxyHandler: ProxyHandler = {
 
       if (!capturedToken && cookie.includes('token=')) {
         const match = cookie.match(/token=([^;]+)/);
-        if (match && match[1] && match[1].startsWith('eyJ')) capturedToken = match[1];
+        if (match && match[1] && match[1].startsWith('eyJ'))
+          capturedToken = match[1];
       }
 
       if (cookie.includes('kimi-refresh=')) {
@@ -72,14 +105,18 @@ export const kimiProxyHandler: ProxyHandler = {
       if (userAgent) headerPayload['User-Agent'] = String(userAgent);
       if (cookie) headerPayload['Cookie'] = String(cookie);
 
-      proxyEvents.emit('kimi-headers', headerPayload);
+      proxyEvents.emit(KIMI_EVENTS.HEADERS, headerPayload);
 
       if (capturedToken && capturedToken.startsWith('eyJ')) {
-        logger.info('[KimiProxy] Captured Kimi Bearer JWT Token from request header');
         const jwtInfo = extractInfoFromJwt(capturedToken);
-        const email = jwtInfo.email || jwtInfo.name || (jwtInfo.sub ? `Kimi_${jwtInfo.sub.slice(0, 8)}` : 'kimi_user@kimi.ai');
+        const email =
+          jwtInfo.email ||
+          jwtInfo.name ||
+          (jwtInfo.sub
+            ? `Kimi_${jwtInfo.sub.slice(0, 8)}`
+            : 'kimi_user@kimi.ai');
 
-        proxyEvents.emit('kimi-login-email', { email });
+        proxyEvents.emit(KIMI_EVENTS.LOGIN_EMAIL, { email });
 
         const tokenPayload: any = {
           token: capturedToken,
@@ -91,19 +128,17 @@ export const kimiProxyHandler: ProxyHandler = {
           tokenPayload.refreshToken = capturedRefreshToken;
           tokenPayload.cookies = `kimi-auth=${capturedToken}; refresh_token=${capturedRefreshToken}`;
         }
-        proxyEvents.emit('kimi-login-token', tokenPayload);
+        proxyEvents.emit(KIMI_EVENTS.LOGIN_TOKEN, tokenPayload);
       }
     }
 
-    // Check for Google OAuth callback in URL
     if (url.includes('google-callback') && url.includes('id_token=')) {
       const match = url.match(/id_token=([^&]+)/);
       if (match && match[1]) {
-        logger.info('[KimiProxy] Captured Google id_token from OAuth callback URL');
         const idToken = decodeURIComponent(match[1]);
         const jwtInfo = extractInfoFromJwt(idToken);
         if (jwtInfo.email) {
-          proxyEvents.emit('kimi-login-email', { email: jwtInfo.email });
+          proxyEvents.emit(KIMI_EVENTS.LOGIN_EMAIL, { email: jwtInfo.email });
         }
       }
     }
@@ -120,7 +155,6 @@ export const kimiProxyHandler: ProxyHandler = {
   },
 
   onResponse: (ctx: any, callback: () => void) => {
-    // Intercept redirects (e.g. Google OAuth 302 redirect with id_token or token)
     const location = ctx.serverToProxyResponse?.headers?.location || '';
     if (location && location.includes('id_token=')) {
       const match = location.match(/id_token=([^&#]+)/);
@@ -128,8 +162,7 @@ export const kimiProxyHandler: ProxyHandler = {
         const idToken = decodeURIComponent(match[1]);
         const jwtInfo = extractInfoFromJwt(idToken);
         if (jwtInfo.email) {
-          logger.info(`[KimiProxy] Captured email from OAuth redirect: ${jwtInfo.email}`);
-          proxyEvents.emit('kimi-login-email', { email: jwtInfo.email });
+          proxyEvents.emit(KIMI_EVENTS.LOGIN_EMAIL, { email: jwtInfo.email });
         }
       }
     }
@@ -149,7 +182,6 @@ export const kimiProxyHandler: ProxyHandler = {
       try {
         const json = JSON.parse(body);
 
-        // Check for token in body
         const token =
           json.accessToken ||
           json.access_token ||
@@ -164,7 +196,6 @@ export const kimiProxyHandler: ProxyHandler = {
           json.data?.refresh_token ||
           json.refreshToken;
         if (token && typeof token === 'string' && token.startsWith('eyJ')) {
-          logger.info('[KimiProxy] Captured Kimi Token from API response');
           const jwtInfo = extractInfoFromJwt(token);
           const email =
             json.user?.email ||
@@ -176,7 +207,7 @@ export const kimiProxyHandler: ProxyHandler = {
             jwtInfo.name ||
             'kimi_user@kimi.ai';
 
-          proxyEvents.emit('kimi-login-email', { email });
+          proxyEvents.emit(KIMI_EVENTS.LOGIN_EMAIL, { email });
           const tokenPayload: any = {
             token,
             cookies: `kimi-auth=${token}${refreshToken ? `; refresh_token=${refreshToken}` : ''}`,
@@ -185,23 +216,22 @@ export const kimiProxyHandler: ProxyHandler = {
           if (refreshToken) {
             tokenPayload.refreshToken = refreshToken;
           }
-          proxyEvents.emit('kimi-login-token', tokenPayload);
+          proxyEvents.emit(KIMI_EVENTS.LOGIN_TOKEN, tokenPayload);
         }
 
-        // Check for User Info from GetCurrentUser
-        if (json.user && (json.user.nickname || json.user.name || json.user.email)) {
+        if (
+          json.user &&
+          (json.user.nickname || json.user.name || json.user.email)
+        ) {
           const name = json.user.nickname || json.user.name || json.user.email;
-          logger.info(`[KimiProxy] Captured Kimi User Profile: ${name}`);
-          proxyEvents.emit('kimi-login-email', { email: name });
+          proxyEvents.emit(KIMI_EVENTS.LOGIN_EMAIL, { email: name });
         }
 
-        // Check for ListThirdAccounts response
         if (json.email && json.thirdParty) {
-          logger.info(`[KimiProxy] Captured Kimi Third-Party Account: ${json.nickname || json.email}`);
-          proxyEvents.emit('kimi-login-email', { email: json.email });
+          proxyEvents.emit(KIMI_EVENTS.LOGIN_EMAIL, { email: json.email });
         }
       } catch {
-        // Not JSON
+        logger.warn('[Proxy] Kimi response body is not JSON');
       }
     }
   },

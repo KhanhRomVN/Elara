@@ -1,4 +1,18 @@
-// HuggingChat-specific types
+/**
+ * ------------------------------------------------------------------
+ * HuggingChat Types
+ * ------------------------------------------------------------------
+ * Type definitions cho HuggingChat API.
+ *
+ * Main exports:
+ * - HuggingChatConversation : Conversation structure
+ * - HuggingChatMessage      : Message structure
+ * - HuggingChatStreamToken  : Stream token structure
+ * - HuggingChatModel        : Model info structure
+ * ------------------------------------------------------------------
+ */
+
+// ─── Types ──────────────────────────────────────────────────────────────
 
 export interface HuggingChatConversation {
   conversationId?: string;

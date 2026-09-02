@@ -1,6 +1,30 @@
+/**
+ * ------------------------------------------------------------------
+ * Proxy Routes
+ * ------------------------------------------------------------------
+ * Routes cho API quản lý proxy server và certificate.
+ *
+ * Main routes:
+ * - GET    /v1/proxy/config                : Lấy cấu hình proxy
+ * - POST   /v1/proxy/config                : Cập nhật cấu hình proxy
+ * - GET    /v1/proxy/server-info           : Lấy thông tin server
+ * - GET    /v1/proxy/certificate-info      : Lấy thông tin certificate
+ * - GET    /v1/proxy/export-certificate    : Export certificate
+ * - POST   /v1/proxy/regenerate-certificates : Regenerate certificates
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { Router } from 'express';
+
+// ── Services ──
 import { proxyService } from '../../services/proxy.service';
+
+// ── Utils ──
 import { getCertificateManager } from '../../utils/cert-manager';
+
+// ─── Router ─────────────────────────────────────────────────────────────
 
 const router = Router();
 

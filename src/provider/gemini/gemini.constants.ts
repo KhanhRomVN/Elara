@@ -1,10 +1,21 @@
-// =============================================================================
-// CONSTANTS — Gemini
-// =============================================================================
+/**
+ * ------------------------------------------------------------------
+ * Gemini Constants
+ * ------------------------------------------------------------------
+ * Constants cho Gemini Web API.
+ *
+ * Main exports:
+ * - BASE_URL       : Base URL cho Gemini
+ * - GEMINI_BL      : Build label (bl parameter)
+ * - MODEL_MAP      : Mapping từ model name sang mode và think level
+ * ------------------------------------------------------------------
+ */
+
+// ─── Constants ──────────────────────────────────────────────────────────
 
 export const BASE_URL = 'https://gemini.google.com';
 
-// Gemini Web build label (bl parameter) — may need periodic update
+// Gemini Web build label — may need periodic update
 export const GEMINI_BL = 'boq_assistant-bard-web-server_20260525.09_p0';
 
 // Model mapping: MODE_CATEGORY enum from Gemini frontend JS source
@@ -36,3 +47,14 @@ export const MODEL_MAP: Record<
   },
   'gemini-flash-lite': { mode: 6, think: 4, desc: 'Lightweight fast model' },
 };
+
+export const USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36';
+
+export const GEMINI_EVENTS = {
+  COOKIES: 'gemini-cookies',
+  EMAIL: 'gemini-email',
+  SAPISID: 'gemini-sapisid',
+  AUTH_USER: 'gemini-auth-user',
+  XSRF: 'gemini-xsrf',
+} as const;

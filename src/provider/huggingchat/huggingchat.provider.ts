@@ -1,45 +1,75 @@
-import { Provider, SendMessageOptions } from '../../types';
+/**
+ * ------------------------------------------------------------------
+ * HuggingChat Provider
+ * ------------------------------------------------------------------
+ * Provider implementation cho HuggingChat (Hugging Face).
+ * Hỗ trợ login qua browser, chat completion với streaming,
+ * thinking mode, và lấy danh sách models từ API.
+ *
+ * Main features:
+ * - login()          : Đăng nhập qua browser và capture cookies
+ * - handleMessage()  : Gửi tin nhắn với streaming response
+ * - getModels()      : Lấy danh sách models từ API
+ * - getProfile()     : Lấy thông tin user profile
+ * - Thinking mode    : Hỗ trợ <think> tags trong response
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { Router } from 'express';
-import fetch from 'node-fetch';
-import { HttpClient } from '../../utils/http-client';
 import * as crypto from 'crypto';
+import fetch from 'node-fetch';
+
+// ── Types ──
+import { Provider, SendMessageOptions } from '../../types';
+
+// ── Services ──
+import { loginService } from '../../services/login.service';
+import { proxyEvents } from '../../services/proxy.service';
+
+// ── Utils ──
+import { HttpClient } from '../../utils/http-client';
 import { createLogger } from '../../utils/logger';
 import { countTokens, countMessagesTokens } from '../../utils/tokenizer';
-import { loginService } from '../../services/login/login.service';
-import { proxyEvents } from '../../services/proxy.service';
+
+// ── HuggingChat Imports ──
 import { proxyHandler } from './huggingchat.proxy-handler';
+import {
+  BASE_URL,
+  HUGGINGCHAT_EVENTS,
+  USER_AGENT,
+} from './huggingchat.constant';
 
-export { proxyHandler };
-
-const BASE_URL = 'https://huggingface.co';
-
+// ─── Constants ─────────────────────────────────────────��────────────────
 const logger = createLogger('HuggingChatProvider');
+
+// ─── Provider Class ────────────────────────────────────────────────────
 
 export class HuggingChatProvider implements Provider {
   name = 'HuggingChat';
   proxyHandler = proxyHandler;
   defaultModel = 'omni';
 
-  async login() {
-    logger.info('Starting HuggingChat login...');
+  // ─── Login ──────────────────────────────────────────────────────────
 
+  async login() {
     let capturedEmail = '';
 
     const onLoginData = (email: string) => {
-      logger.info(`[HuggingChat] Captured email from form: ${email}`);
       capturedEmail = email;
     };
 
-    proxyEvents.on('hugging-chat-login-data', onLoginData);
+    proxyEvents.on(HUGGINGCHAT_EVENTS.LOGIN_DATA, onLoginData);
 
     try {
-      return await loginService.login({
+      return await loginService.captureCredentialsViaCDP({
         providerId: 'huggingchat',
-        loginUrl: 'https://huggingface.co/chat/login',
+        loginUrl: `${BASE_URL}/chat/login`,
         partition: `huggingchat-${Date.now()}`,
-        cookieEvent: 'hugging-chat-cookies',
-        infoEvent: 'hugging-chat-login-data',
-        extraEvents: ['hugging-chat-login-data'],
+        cookieEvent: HUGGINGCHAT_EVENTS.COOKIES,
+        infoEvent: HUGGINGCHAT_EVENTS.LOGIN_DATA,
+        extraEvents: [HUGGINGCHAT_EVENTS.LOGIN_DATA],
         validate: async (data: {
           cookies: string;
           headers?: any;
@@ -47,7 +77,6 @@ export class HuggingChatProvider implements Provider {
         }) => {
           if (!data.cookies) return { isValid: false };
 
-          logger.debug('[HuggingChat] Validating session...');
           let identityEmail = '';
           let apiEmail = '';
 
@@ -73,19 +102,24 @@ export class HuggingChatProvider implements Provider {
               email: identityEmail,
             };
           }
+          logger.warn(
+            '[HuggingChat] Login validation failed: could not determine email',
+          );
           return { isValid: false };
         },
       });
     } finally {
-      proxyEvents.off('hugging-chat-login-data', onLoginData);
+      proxyEvents.off(HUGGINGCHAT_EVENTS.LOGIN_DATA, onLoginData);
     }
   }
+
+  // ─── Profile ────────────────────────────────────────────────────────
 
   async getProfile(
     credential: string,
   ): Promise<{ email: string | null; name?: string; id?: string }> {
     try {
-      const response = await fetch('https://huggingface.co/chat/api/v2/user', {
+      const response = await fetch(`${BASE_URL}/chat/api/v2/user`, {
         headers: {
           Cookie: credential,
           'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
@@ -95,6 +129,11 @@ export class HuggingChatProvider implements Provider {
 
       if (response.ok) {
         const chatUser = await response.json();
+        if (!chatUser.email && !chatUser.username) {
+          logger.warn(
+            '[HuggingChat] Get Profile response missing email/username',
+          );
+        }
         return {
           email:
             chatUser.email ||
@@ -103,12 +142,17 @@ export class HuggingChatProvider implements Provider {
           id: chatUser.id || chatUser._id,
         };
       }
+      logger.warn(
+        `[HuggingChat] Get Profile returned status ${response.status}`,
+      );
       return { email: null };
     } catch (e) {
       logger.error('[HuggingChat] Get Profile Error:', e);
       return { email: null };
     }
   }
+
+  // ─── Handle Message ─────────────────────────────────────────────────
 
   async handleMessage(options: SendMessageOptions): Promise<void> {
     const {
@@ -176,8 +220,7 @@ export class HuggingChatProvider implements Provider {
           headers: {
             Cookie: cookieHeader,
             'Content-Type': `multipart/form-data; boundary=${boundary}`,
-            'User-Agent':
-              'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
+            'User-Agent': USER_AGENT,
             Origin: BASE_URL,
             Referer: `${BASE_URL}/chat/conversation/${conversationId}`,
           },
@@ -238,14 +281,25 @@ export class HuggingChatProvider implements Provider {
             } else if (json.type === 'title' && json.title && onMetadata) {
               onMetadata({ conversation_title: json.title });
             }
-          } catch (e) {}
+          } catch (e) {
+            logger.warn('[HuggingChat] Failed to parse SSE line:', e);
+          }
         }
       }
       onDone();
     } catch (err: any) {
+      logger.error('[HuggingChat] Error in handleMessage:', err);
       onError(err);
     }
   }
+
+  // ─── Continue Message ───────────────────────────────────────────────
+
+  async continueMessage(options: SendMessageOptions): Promise<void> {
+    return this.handleMessage(options);
+  }
+
+  // ─── Get Models ─────────────────────────────────────────────────────
 
   async getModels(credential: string): Promise<any[]> {
     try {
@@ -277,19 +331,24 @@ export class HuggingChatProvider implements Provider {
     }
   }
 
+  // ─── Helpers ────────────────────────────────────────────────────────
+
   private createClient(cookie: string) {
     return new HttpClient({
       baseURL: BASE_URL,
       headers: {
         Cookie: cookie,
-        'User-Agent':
-          'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
+        'User-Agent': USER_AGENT,
         Accept: 'application/json',
       },
     });
   }
 
+  // ─── Routes ─────────────────────────────────────────────────────────
+
   registerRoutes(_router: Router) {}
+
+  // ─── Model Support ──────────────────────────────────────────────────
 
   isModelSupported(model: string): boolean {
     const m = model.toLowerCase();

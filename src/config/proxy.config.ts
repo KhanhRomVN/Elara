@@ -1,34 +1,53 @@
-import path from 'path';
-import fs from 'fs';  
-import os from 'os';
+/**
+ * ------------------------------------------------------------------
+ * Proxy Configuration
+ * ------------------------------------------------------------------
+ * Quản lý cấu hình proxy server.
+ * Lưu trữ config trong file JSON tại ~/.elara/proxy-config.json.
+ *
+ * Main exports:
+ * - getConfigManager()   : Lấy ConfigManager singleton
+ * - getProxyConfig()     : Lấy cấu hình proxy
+ * - updateProxyConfig()  : Cập nhật cấu hình proxy
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
+// ── Utils ──
 import { createLogger } from '../utils/logger';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('proxy-config');
 
-export interface ProxyConfig {
-  host: string; // Default: '127.0.0.1' or '0.0.0.0'
-  port: number; // Default: 8317
+const CONFIG_FILE = path.join(os.homedir(), '.elara', 'proxy-config.json');
 
+// ─── Types ──────────────────────────────────────────────────────────────
+
+export interface ProxyConfig {
+  host: string;
+  port: number;
   tls: {
     enable: boolean;
-    cert: string; // Path to cert file
-    key: string; // Path to key file
+    cert: string;
+    key: string;
   };
-
-  apiKeys: string[]; // API keys for authentication
-
+  apiKeys: string[];
   routing: {
     strategy: 'round-robin' | 'priority' | 'least-used';
   };
-
   cors: {
     enabled: boolean;
     origins: string[];
   };
-
-  // Allow localhost only
   localhostOnly: boolean;
 }
+
+// ─── Default Config ────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG: ProxyConfig = {
   host: '127.0.0.1',
@@ -49,7 +68,7 @@ const DEFAULT_CONFIG: ProxyConfig = {
   localhostOnly: true,
 };
 
-const CONFIG_FILE = path.join(os.homedir(), '.elara', 'proxy-config.json');
+// ─── Class ──────────────────────────────────────────────────────────────
 
 export class ConfigManager {
   private config: ProxyConfig;
@@ -57,6 +76,8 @@ export class ConfigManager {
   constructor() {
     this.config = this.loadConfig();
   }
+
+  // ─── Load ───────────────────────────────────────────────────────────
 
   private loadConfig(): ProxyConfig {
     try {
@@ -70,6 +91,8 @@ export class ConfigManager {
     return { ...DEFAULT_CONFIG };
   }
 
+  // ─── Save ───────────────────────────────────────────────────────────
+
   saveConfig(config: Partial<ProxyConfig>): void {
     try {
       this.config = { ...this.config, ...config };
@@ -80,9 +103,13 @@ export class ConfigManager {
     }
   }
 
+  // ─── Getters ────────────────────────────────────────────────────────
+
   getConfig(): ProxyConfig {
     return { ...this.config };
   }
+
+  // ─── Updates ────────────────────────────────────────────────────────
 
   updateConfig(updates: Partial<ProxyConfig>): void {
     this.saveConfig(updates);
@@ -94,7 +121,8 @@ export class ConfigManager {
   }
 }
 
-// Singleton instance
+// ─── Singleton ─────────────────────────────────────────────────────────
+
 let configManager: ConfigManager | null = null;
 
 export const getConfigManager = (): ConfigManager => {

@@ -1,18 +1,34 @@
+/**
+ * ------------------------------------------------------------------
+ * DeepSeek PoW (Proof of Work)
+ * ------------------------------------------------------------------
+ * Giải PoW challenge cho DeepSeek API sử dụng WASM.
+ * PoW được yêu cầu để chứng minh client không phải bot.
+ *
+ * Main functions:
+ * - DeepSeekHash.calculateHash() : Tính hash với WASM
+ * - solvePoW()                   : Giải PoW challenge
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import * as fs from 'fs';
+
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
+
+// ── Types ──
 import { PoWChallenge, PoWResponse } from './deepseek.types';
+
+// ── Constants ──
+import { BASE_URL } from './deepseek.constant';
+
+export { BASE_URL };
 
 const logger = createLogger('DeepSeekPoW');
 
-// =============================================================================
-// CONSTANTS
-// =============================================================================
-
-export const BASE_URL = 'https://chat.deepseek.com';
-
-// =============================================================================
-// POW HASH (WASM)
-// =============================================================================
+// ─── Class ──────────────────────────────────────────────────────────────
 
 export class DeepSeekHash {
   private instance: WebAssembly.Instance | null = null;
@@ -89,9 +105,7 @@ export class DeepSeekHash {
   }
 }
 
-// =============================================================================
-// PoW SOLVER
-// =============================================================================
+// ─── Functions ──────────────────────────────────────────────────────────
 
 export async function solvePoW(
   dsHash: DeepSeekHash,
@@ -103,6 +117,10 @@ export async function solvePoW(
     challenge.challenge,
     prefix,
   );
+
+  if (answer === null) {
+    logger.warn('[DeepSeek] PoW solver returned null answer, using 0');
+  }
 
   return {
     algorithm: challenge.algorithm,

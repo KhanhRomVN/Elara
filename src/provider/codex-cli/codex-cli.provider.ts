@@ -1,17 +1,54 @@
-import { Provider, SendMessageOptions } from '../../types';
-import fetch from 'node-fetch';
-import { createLogger } from '../../utils/logger';
-import { getDb } from '../../database';
-import { loginService } from '../../services/login/login.service';
-import { proxyService } from '../../services/proxy.service';
-import * as path from 'path';
-import * as os from 'os';
+/**
+ * ------------------------------------------------------------------
+ * Codex CLI Provider
+ * ------------------------------------------------------------------
+ * Provider implementation cho Codex CLI (OpenAI GPT-5 coding agent).
+ * Hỗ trợ login qua terminal CLI, refresh token, và chat completion
+ * với streaming response.
+ *
+ * Main features:
+ * - login()          : Đăng nhập qua Codex CLI với terminal
+ * - refreshToken()   : Refresh access token
+ * - handleMessage()  : Gửi tin nhắn với streaming response
+ * - isModelSupported(): Kiểm tra model có hỗ trợ không
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { spawn, execSync } from 'child_process';
+import fetch from 'node-fetch';
+
+// ── Types ──
+import { Provider, SendMessageOptions } from '../../types';
+
+// ── Services ──
+import { loginService } from '../../services/login.service';
+import { proxyService } from '../../services/proxy.service';
+
+// ── Database ──
+import { getDb } from '../../database';
+
+// ── Utils ──
+import { createLogger } from '../../utils/logger';
+
+// ── Codex Imports ──
 import { proxyHandler } from './codex-cli.proxy-handler';
+import {
+  CODEX_CLI_EVENTS,
+  CHATGPT_USAGE_URL,
+  CODEX_RESPONSES_URL,
+  AUTH_TOKEN_URL,
+  USER_AGENT,
+  CLIENT_ID,
+  ORIGINATOR,
+  DEFAULT_INSTRUCTIONS,
+} from './codex-cli.constant';
 
-export { proxyHandler };
-
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('CodexCLIProvider');
 
 // Lazy load zstd
@@ -20,38 +57,45 @@ try {
   compress = require('@mongodb-js/zstd').compress;
 } catch (e) {}
 
+// ─── Provider Class ────────────────────────────────────────────────────
+
 export class CodexCLIProvider implements Provider {
   name = 'codex-cli';
   proxyHandler = proxyHandler;
   defaultModel = 'gpt-5.3-codex';
 
+  // ─── Get Profile ────────────────────────────────────────────────────
+
   async getProfile(accessToken: string) {
     try {
-      const response = await fetch(
-        'https://chatgpt.com/backend-api/wham/usage',
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Accept: 'application/json',
-            'User-Agent':
-              'codex_cli_rs/0.104.0 (Ubuntu 24.4.0; x86_64) gnome-terminal',
-          },
+      const response = await fetch(CHATGPT_USAGE_URL, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+          'User-Agent': USER_AGENT,
         },
-      );
+      });
       if (response.ok) {
         const data = await response.json();
+        if (!data.email) {
+          logger.warn('[CodexCLI] Get Profile response missing email field');
+        }
         return {
           email: data.email || null,
           userId: data.user_id,
           accountId: data.account_id,
         };
       }
-    } catch (e) {}
+      logger.warn(`[CodexCLI] Get Profile returned status ${response.status}`);
+    } catch (e) {
+      logger.error('[CodexCLI] Get Profile Error:', e);
+    }
     return { email: null };
   }
 
+  // ─── Login ──────────────────────────────────────────────────────────
+
   async login() {
-    logger.info('Starting Codex CLI login with real CLI and terminal...');
     const tempHome = path.join(
       os.homedir(),
       '.elara',
@@ -81,6 +125,12 @@ export class CodexCLIProvider implements Provider {
         terminal = t;
         break;
       } catch (e) {}
+    }
+
+    if (!terminal) {
+      logger.warn(
+        '[CodexCLI] No supported terminal emulator found, falling back to bash',
+      );
     }
 
     const proxyUrl = `http://127.0.0.1:${port}`;
@@ -138,12 +188,15 @@ export class CodexCLIProvider implements Provider {
             capturedUrl = urlMatch[0];
             clearInterval(checkInterval);
             loginService
-              .login({
+              .captureCredentialsViaCDP({
                 providerId: 'codex-cli',
                 loginUrl: capturedUrl,
                 partition: 'codex-cli',
                 skipProxy: true,
-                extraEvents: ['codex-cli-tokens', 'codex-cli-user-info'],
+                extraEvents: [
+                  CODEX_CLI_EVENTS.TOKENS,
+                  CODEX_CLI_EVENTS.USER_INFO,
+                ],
                 validate: async (captured) => {
                   if (captured.cookies) {
                     try {
@@ -155,7 +208,12 @@ export class CodexCLIProvider implements Provider {
                         if (profile && profile.email)
                           return { isValid: true, email: profile.email };
                       }
-                    } catch (e) {}
+                    } catch (e) {
+                      logger.warn(
+                        '[CodexCLI] Failed to parse captured tokens:',
+                        e,
+                      );
+                    }
                   }
                   return captured.cookies && captured.email
                     ? { isValid: true }
@@ -177,8 +235,10 @@ export class CodexCLIProvider implements Provider {
     });
   }
 
+  // ─── Refresh Token ──────────────────────────────────────────────────
+
   async refreshToken(refreshTokenStr: string) {
-    const response = await fetch('https://auth.openai.com/oauth/token', {
+    const response = await fetch(AUTH_TOKEN_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -186,13 +246,20 @@ export class CodexCLIProvider implements Provider {
       },
       body: new URLSearchParams({
         grant_type: 'refresh_token',
-        client_id: 'app_EMoamEEZ73f0CkXaXp7hrann',
+        client_id: CLIENT_ID,
         refresh_token: refreshTokenStr,
       }),
     });
-    if (!response.ok) throw new Error('Failed to refresh Codex token');
+    if (!response.ok) {
+      logger.error(
+        `[CodexCLI] Token refresh failed with status ${response.status}`,
+      );
+      throw new Error('Failed to refresh Codex token');
+    }
     return await response.json();
   }
+
+  // ─── Handle Message ─────────────────────────────────────────────────
 
   async handleMessage(options: SendMessageOptions): Promise<void> {
     const {
@@ -211,10 +278,13 @@ export class CodexCLIProvider implements Provider {
     try {
       tokens = JSON.parse(credential);
     } catch (e) {
+      logger.warn(
+        '[CodexCLI] Credential is not valid JSON, treating as raw access token',
+      );
       tokens = { accessToken: credential };
     }
 
-    const url = 'https://chatgpt.com/backend-api/codex/responses';
+    const url = CODEX_RESPONSES_URL;
 
     const sendRequest = async (token: string) => {
       let chatgptAccountId = '';
@@ -224,11 +294,13 @@ export class CodexCLIProvider implements Provider {
         );
         chatgptAccountId =
           payload['https://api.openai.com/auth']?.chatgpt_account_id;
-      } catch (e) {}
+      } catch (e) {
+        logger.warn('[CodexCLI] Failed to decode JWT payload:', e);
+      }
 
       const bodyObj: any = {
         model: model || this.defaultModel,
-        instructions: 'You are Codex, a GPT-5 coding agent.',
+        instructions: DEFAULT_INSTRUCTIONS,
         input: messages.map((m: any) => ({
           type: 'message',
           role: m.role,
@@ -257,9 +329,8 @@ export class CodexCLIProvider implements Provider {
         Accept: 'text/event-stream',
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
-        'User-Agent':
-          'codex_cli_rs/0.104.0 (Ubuntu 24.4.0; x86_64) gnome-terminal',
-        originator: 'codex_cli_rs',
+        'User-Agent': USER_AGENT,
+        originator: ORIGINATOR,
       };
       if (chatgptAccountId) headers['chatgpt-account-id'] = chatgptAccountId;
 
@@ -268,7 +339,12 @@ export class CodexCLIProvider implements Provider {
           const compressed = await compress(Buffer.from(jsonBody));
           finalBody = compressed;
           headers['Content-Encoding'] = 'zstd';
-        } catch (e) {}
+        } catch (e) {
+          logger.warn(
+            '[CodexCLI] Failed to compress request body with zstd:',
+            e,
+          );
+        }
       }
 
       return await fetch(url, { method: 'POST', headers, body: finalBody });
@@ -287,7 +363,12 @@ export class CodexCLIProvider implements Provider {
               getDb()
                 .prepare('UPDATE accounts SET credential = ? WHERE id = ?')
                 .run(JSON.stringify(tokens), accountId);
-            } catch (e) {}
+            } catch (e) {
+              logger.error(
+                '[CodexCLI] Failed to persist refreshed token to DB:',
+                e,
+              );
+            }
           }
           response = await sendRequest(tokens.accessToken);
         } catch (e) {}
@@ -322,7 +403,9 @@ export class CodexCLIProvider implements Provider {
                     ? content
                     : JSON.stringify(content),
                 );
-            } catch (e) {}
+            } catch (e) {
+              logger.warn('[CodexCLI] Failed to parse SSE line:', e);
+            }
           }
         }
         onDone();
@@ -333,14 +416,20 @@ export class CodexCLIProvider implements Provider {
         onDone();
       }
     } catch (err: any) {
+      logger.error('[CodexCLI] Error in handleMessage:', err);
       onError(err);
     }
   }
 
+  // ─── Continue Message ───────────────────────────────────────────────
+  async continueMessage(options: SendMessageOptions): Promise<void> {
+    return this.handleMessage(options);
+  }
+
+  // ─── Misc ────────────────────────────────────────────────────────────
   isModelSupported(model: string): boolean {
     const m = model.toLowerCase();
     return m.includes('codex') || m.startsWith('gpt-5');
   }
 }
-
 export default new CodexCLIProvider();

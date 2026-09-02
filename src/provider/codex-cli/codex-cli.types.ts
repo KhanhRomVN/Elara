@@ -1,4 +1,19 @@
-// Codex CLI-specific types
+/**
+ * ------------------------------------------------------------------
+ * Codex CLI Types
+ * ------------------------------------------------------------------
+ * Type definitions cho Codex CLI API.
+ *
+ * Main exports:
+ * - CodexCLITokens       : Access/refresh token structure
+ * - CodexCLIMessagePart  : Message content part
+ * - CodexCLIMessage      : Message structure
+ * - CodexCLIRequestBody  : Request payload cho chat completion
+ * - CodexCLIStreamChunk  : Stream chunk structure
+ * ------------------------------------------------------------------
+ */
+
+// ─── Types ──────────────────────────────────────────────────────────────
 
 export interface CodexCLITokens {
   accessToken: string;

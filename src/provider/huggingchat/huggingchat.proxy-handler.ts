@@ -1,8 +1,30 @@
+/**
+ * ------------------------------------------------------------------
+ * HuggingChat Proxy Handler
+ * ------------------------------------------------------------------
+ * Proxy handler để capture cookies và email từ HuggingChat.
+ *
+ * Main features:
+ * - onRequest()       : Capture token cookie
+ * - onResponseBody()  : Capture email từ login response
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── Services ──
 import { ProxyHandler } from '../../services/proxy.service';
 import { proxyEvents } from '../../services/proxy.service';
+
+// ── Utils ──
 import { createLogger } from '../../utils/logger';
 
+// ── Constants ──
+import { HUGGINGCHAT_EVENTS } from './huggingchat.constant';
+
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('HuggingChatProvider');
+
+// ─── Proxy Handler ────────────────────────────────────────────────────
 
 export const proxyHandler: ProxyHandler = {
   onRequest: (ctx: any, callback: () => void) => {
@@ -11,7 +33,7 @@ export const proxyHandler: ProxyHandler = {
     if (host && host.includes('huggingface.co')) {
       const reqCookies = ctx.clientToProxyRequest.headers.cookie;
       if (reqCookies && reqCookies.includes('token')) {
-        proxyEvents.emit('hugging-chat-cookies', reqCookies);
+        proxyEvents.emit(HUGGINGCHAT_EVENTS.COOKIES, reqCookies);
       }
     }
     callback();
@@ -28,11 +50,12 @@ export const proxyHandler: ProxyHandler = {
     ) {
       try {
         const json = JSON.parse(body);
-        if (json.email) proxyEvents.emit('hugging-chat-login-data', json.email);
+        if (json.email)
+          proxyEvents.emit(HUGGINGCHAT_EVENTS.LOGIN_DATA, json.email);
       } catch (e) {
         const emailMatch = body.match(/"email":"([^"]+)"/);
         if (emailMatch && emailMatch[1]) {
-          proxyEvents.emit('hugging-chat-login-data', emailMatch[1]);
+          proxyEvents.emit(HUGGINGCHAT_EVENTS.LOGIN_DATA, emailMatch[1]);
         }
       }
     }

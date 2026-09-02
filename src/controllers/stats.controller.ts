@@ -1,16 +1,38 @@
+/**
+ * ------------------------------------------------------------------
+ * Stats Controller
+ * ------------------------------------------------------------------
+ * Xử lý request thống kê và ghi nhận metrics cho các cuộc gọi API.
+ * Hỗ trợ ghi nhận success/failure và lấy thống kê theo khoảng thời gian.
+ *
+ * Main functions:
+ * - recordMetrics() : Ghi nhận metrics cho một cuộc gọi thành công
+ * - getStats()      : Lấy thống kê usage, accounts, models theo period
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { Request, Response } from 'express';
+
+// ── Services ──
 import {
   recordSuccess,
   getUsageHistory,
   getAccountStatsByPeriod,
   getModelStatsByPeriod,
 } from '../services/stats.service';
+
+// ── Utils ──
 import { createLogger } from '../utils/logger';
 
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('StatsController');
 
-// POST /v1/chat/metrics
-export const recordMetricsController = async (req: Request, res: Response) => {
+// ─── Controller ─────────────────────────────────────────────────────────
+
+// ─── POST /v1/chat/metrics ──────────────────────────────────────────
+export const recordMetrics = async (req: Request, res: Response) => {
   try {
     const { account_id, provider_id, model_id, conversation_id, total_tokens } =
       req.body;
@@ -44,7 +66,7 @@ export const recordMetricsController = async (req: Request, res: Response) => {
   }
 };
 
-// GET /v1/stats
+// ─── GET /v1/stats ──────────────────────────────────────────────────
 export const getStats = async (req: Request, res: Response) => {
   try {
     const period =

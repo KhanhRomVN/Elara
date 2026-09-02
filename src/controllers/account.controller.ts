@@ -1,32 +1,57 @@
+/**
+ * ------------------------------------------------------------------
+ * Account Controller
+ * ------------------------------------------------------------------
+ * Xử lý các request liên quan đến tài khoản: import, thêm mới, xóa,
+ * cập nhật trạng thái memory, đăng nhập qua browser,
+ * và quản lý browser instance cho tài khoản.
+ *
+ * Main functions:
+ * - importAccounts()           : Import danh sách tài khoản từ file/bulk
+ * - addAccount()               : Thêm một tài khoản mới hoặc cập nhật credential
+ * - getAccounts()              : Lấy danh sách tài khoản với phân trang và filter
+ * - deleteAccount()            : Xóa tài khoản theo id
+ * - getAccountMemory()         : Lấy trạng thái memory của tài khoản
+ * - updateAccountMemory()      : Cập nhật trạng thái memory
+ * - getAccountBrowserStatus()  : Kiểm tra trạng thái browser của tài khoản
+ * - startAccountBrowser()      : Khởi động browser cho tài khoản
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { Request, Response } from 'express';
-import { createLogger } from '../utils/logger';
-import { providerRegistry } from '../provider/registry';
 import * as path from 'path';
 
+// ── Services ──
 import {
-  findAccountById,
-  findAccountByEmailAndProvider,
-  findAccountByIdOrEmailProvider,
-  listAccounts,
-  insertAccount,
-  insertAccountsBatch,
-  updateAccountCredential,
-  updateAccountMemory,
-  deleteAccount as deleteAccountRow,
-} from '../repositories/account.repository';
-import { ensureProviderExists, findProviderById } from '../repositories/provider.repository';
-import { getBrowserStatus, startBrowserForAccount } from '../services/browser-instance-manager';
+  getBrowserStatus,
+  startBrowserForAccount,
+} from '../services/browser-instance-manager';
+import {
+  getAccountById,
+  getAccountByEmailAndProvider,
+  getAccountByIdOrEmailProvider,
+  getAccounts as getAccountsService,
+  createAccount,
+  updateAccount,
+  updateAccountUserDataDir,
+  updateMemoryState,
+  removeAccount,
+  importAccounts as importAccountsService,
+  getProviderConfig,
+  type AccountInput,
+} from '../services/account.service';
 
+// ── Utils ──
+import { createLogger } from '../utils/logger';
+
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('AccountController');
 
-interface AccountInput {
-  id: string;
-  provider_id: string;
-  email: string;
-  credential: string;
-}
+// ─── Controller ─────────────────────────────────────────────────────────
 
-// POST /v1/accounts/import
+// ─── POST /v1/accounts/import ──────────────────────────────────────
 export const importAccounts = async (
   req: Request,
   res: Response,
@@ -57,64 +82,21 @@ export const importAccounts = async (
       return;
     }
 
-    const duplicates: AccountInput[] = [];
-    const toInsert: AccountInput[] = [];
+    try {
+      const result = importAccountsService(accounts);
 
-    for (const account of accounts) {
-      const existing = findAccountByEmailAndProvider(
-        account.email,
-        account.provider_id,
-      );
-      if (existing) {
-        duplicates.push(account);
-      } else {
-        toInsert.push(account);
-      }
-    }
-
-    if (toInsert.length > 0) {
-      try {
-        insertAccountsBatch(toInsert);
-
-        const providerIds = [...new Set(toInsert.map((a) => a.provider_id))];
-        for (const pid of providerIds) {
-          ensureProviderExists(pid.toLowerCase(), pid);
-        }
-
-        res.status(200).json({
-          success: true,
-          message: `Successfully imported ${toInsert.length} account(s)`,
-          data: {
-            imported: toInsert.length,
-            skipped: duplicates.length,
-            duplicates: duplicates.map((d) => ({
-              email: d.email,
-              provider_id: d.provider_id,
-            })),
-          },
-          meta: { timestamp: new Date().toISOString() },
-        });
-      } catch (err) {
-        logger.error('Error inserting accounts', err);
-        res.status(500).json({
-          success: false,
-          message: 'Failed to import accounts',
-          error: { code: 'DATABASE_ERROR' },
-          meta: { timestamp: new Date().toISOString() },
-        });
-      }
-    } else {
       res.status(200).json({
         success: true,
-        message: 'All accounts were duplicates',
-        data: {
-          imported: 0,
-          skipped: duplicates.length,
-          duplicates: duplicates.map((d) => ({
-            email: d.email,
-            provider_id: d.provider_id,
-          })),
-        },
+        message: `Successfully imported ${result.imported} account(s)`,
+        data: result,
+        meta: { timestamp: new Date().toISOString() },
+      });
+    } catch (err) {
+      logger.error('Error importing accounts', err);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to import accounts',
+        error: { code: 'DATABASE_ERROR' },
         meta: { timestamp: new Date().toISOString() },
       });
     }
@@ -136,7 +118,7 @@ export const getAccountMemory = async (
 ): Promise<void> => {
   try {
     const { id } = req.params;
-    const account = findAccountById(id);
+    const account = getAccountById(id);
 
     if (!account) {
       res.status(404).json({
@@ -168,7 +150,7 @@ export const getAccountMemory = async (
 };
 
 // PUT /v1/accounts/:id/memory
-export const updateAccountMemoryController = async (
+export const updateAccountMemory = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
@@ -186,7 +168,7 @@ export const updateAccountMemoryController = async (
       return;
     }
 
-    const account = findAccountById(id);
+    const account = getAccountById(id);
     if (!account) {
       res.status(404).json({
         success: false,
@@ -197,9 +179,7 @@ export const updateAccountMemoryController = async (
       return;
     }
 
-    updateAccountMemory(id, is_memory_enabled);
-
-    logger.info(`Memory state updated for account ${id}: ${is_memory_enabled}`);
+    updateMemoryState(id, is_memory_enabled);
 
     res.status(200).json({
       success: true,
@@ -210,7 +190,7 @@ export const updateAccountMemoryController = async (
       meta: { timestamp: new Date().toISOString() },
     });
   } catch (error) {
-    logger.error('Error in updateAccountMemoryController', error);
+    logger.error('Error in updateAccountMemory', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error',
@@ -241,17 +221,22 @@ export const addAccount = async (
       return;
     }
 
-    if (!account.provider_id || !account.email || !account.credential) {
+    if (
+      !account.provider_id ||
+      !account.email ||
+      (!account.credential && !account.user_data_dir)
+    ) {
       res.status(400).json({
         success: false,
-        message: 'Missing required fields: provider_id, email, credential',
+        message:
+          'Missing required fields: provider_id, email, and either credential or user_data_dir',
         error: { code: 'INVALID_INPUT' },
         meta: { timestamp: new Date().toISOString() },
       });
       return;
     }
 
-    const existing = findAccountByIdOrEmailProvider(
+    const existing = getAccountByIdOrEmailProvider(
       account.id,
       account.email,
       account.provider_id,
@@ -259,7 +244,12 @@ export const addAccount = async (
 
     if (existing) {
       try {
-        updateAccountCredential(existing.id, account.credential);
+        if (account.credential) {
+          updateAccount(existing.id, account.credential);
+        }
+        if (account.user_data_dir) {
+          updateAccountUserDataDir(existing.id, account.user_data_dir);
+        }
         res.status(200).json({
           success: true,
           message: 'Account credential updated successfully',
@@ -282,18 +272,8 @@ export const addAccount = async (
       return;
     }
 
-    const id = account.id || require('crypto').randomUUID();
     try {
-      insertAccount({
-        id,
-        provider_id: account.provider_id,
-        email: account.email,
-        credential: account.credential,
-      });
-      ensureProviderExists(
-        account.provider_id.toLowerCase(),
-        account.provider_id,
-      );
+      const id = createAccount(account);
 
       res.status(201).json({
         success: true,
@@ -339,7 +319,7 @@ export const getAccounts = async (
     const order =
       (req.query.order as string)?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
 
-    const { rows, total } = listAccounts({
+    const { rows, total } = getAccountsService({
       page,
       limit,
       email,
@@ -394,7 +374,7 @@ export const deleteAccount = async (
       return;
     }
 
-    const account = findAccountById(id);
+    const account = getAccountById(id);
     if (!account) {
       res.status(404).json({
         success: false,
@@ -406,11 +386,7 @@ export const deleteAccount = async (
     }
 
     try {
-      deleteAccountRow(id);
-      ensureProviderExists(
-        account.provider_id.toLowerCase(),
-        account.provider_id,
-      );
+      removeAccount(id, account.provider_id);
 
       res.status(200).json({
         success: true,
@@ -438,137 +414,6 @@ export const deleteAccount = async (
   }
 };
 
-// POST /v1/accounts/:provider/login
-export const login = async (req: Request, res: Response): Promise<void> => {
-  logger.info(`[Login] ========== LOGIN REQUEST RECEIVED ==========`);
-  logger.info(`[Login] Full URL: ${req.method} ${req.originalUrl}`);
-  logger.info(`[Login] Params: ${JSON.stringify(req.params)}`);
-  logger.info(`[Login] Body: ${JSON.stringify(req.body)}`);
-  
-  try {
-    const { provider: providerId } = req.params;
-    const { method } = req.body;
-    
-    logger.info(`[Login] Provider ID from params: "${providerId}"`);
-    logger.info(`[Login] Method: ${method || 'basic'}`);
-
-    const provider = providerRegistry.getProvider(providerId);
-    logger.info(`[Login] Provider found: ${provider ? provider.name : 'null'}`);
-    
-    if (!provider) {
-      logger.warn(`[Login] Provider not found: ${providerId}`);
-      res.status(404).json({ success: false, message: 'Provider not found' });
-      return;
-    }
-
-    logger.info(
-      `Browser login started — provider: ${providerId}, method: ${method || 'basic'}`,
-    );
-
-    if (!provider.login) {
-      logger.warn(`[Login] Provider ${providerId} has no login method`);
-      res
-        .status(400)
-        .json({
-          success: false,
-          message: `Browser login not supported for ${providerId}`,
-        });
-      return;
-    }
-
-    logger.info(`[Login] Calling provider.login() for ${providerId}`);
-    const result = await provider.login({
-      method: method === 'google' ? 'google' : 'basic',
-    });
-    
-    logger.info(`[Login] Login successful, result keys: ${Object.keys(result).join(', ')}`);
-    logger.info(`[Login] Email: ${(result as any).email}, Cookies length: ${(result as any).cookies?.length || 0}`);
-
-    const accountResponse: any = {
-      provider_id: providerId,
-      email: (result as any).email || '',
-      credential: (result as any).cookies,
-      headers: (result as any).headers,
-    };
-    
-    // Include pending info for browser providers
-    if ((result as any).pending) {
-      accountResponse.pending = (result as any).pending;
-      accountResponse.tempSessionId = (result as any).tempSessionId;
-    }
-    
-    res.status(200).json({
-      success: true,
-      account: accountResponse,
-    });
-  } catch (error: any) {
-    logger.error('[Login] Login failed with error:', error);
-    logger.error(`[Login] Error message: ${error.message}`);
-    logger.error(`[Login] Error stack: ${error.stack}`);
-    res
-      .status(500)
-      .json({ success: false, message: error.message || 'Login failed' });
-  }
-};
-
-// POST /v1/accounts/:id/switch
-export const switchAccount = async (
-  req: Request,
-  res: Response,
-): Promise<void> => {
-  try {
-    const { id } = req.params;
-    const account = findAccountById(id);
-
-    if (!account) {
-      res.status(404).json({ success: false, message: 'Account not found' });
-      return;
-    }
-
-    const provider = providerRegistry.getProvider(account.provider_id);
-    if (!provider) {
-      res
-        .status(400)
-        .json({
-          success: false,
-          message: `Provider ${account.provider_id} not found`,
-        });
-      return;
-    }
-
-    if (typeof provider.switchAccount !== 'function') {
-      res.status(400).json({
-        success: false,
-        message: `Switching accounts is not supported for provider ${account.provider_id}`,
-      });
-      return;
-    }
-
-    logger.info(
-      `Switching to account ${account.email} (${account.provider_id})`,
-    );
-    await provider.switchAccount(id);
-
-    res.status(200).json({
-      success: true,
-      message: `Successfully switched to account ${account.email}`,
-      data: {
-        id: account.id,
-        email: account.email,
-        provider_id: account.provider_id,
-      },
-    });
-  } catch (error: any) {
-    logger.error('Error in switchAccount:', error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || 'Failed to switch account',
-      });
-  }
-};
-
 // GET /v1/accounts/:id/browser/status
 export const getAccountBrowserStatus = async (
   req: Request,
@@ -576,13 +421,13 @@ export const getAccountBrowserStatus = async (
 ): Promise<void> => {
   try {
     const { id } = req.params;
-    const account = findAccountById(id);
-    
+    const account = getAccountById(id);
+
     if (!account) {
       res.status(404).json({ success: false, message: 'Account not found' });
       return;
     }
-    
+
     // Check if this is a browser provider (has user_data_dir)
     if (!account.user_data_dir) {
       res.status(200).json({
@@ -595,7 +440,7 @@ export const getAccountBrowserStatus = async (
       });
       return;
     }
-    
+
     const status = await getBrowserStatus(account.user_data_dir);
     res.status(200).json({
       success: true,
@@ -603,7 +448,9 @@ export const getAccountBrowserStatus = async (
         has_profile: true,
         is_running: status.isRunning,
         user_data_dir: account.user_data_dir,
-        message: status.isRunning ? 'Browser is running' : 'Browser is not running',
+        message: status.isRunning
+          ? 'Browser is running'
+          : 'Browser is not running',
       },
     });
   } catch (error: any) {
@@ -622,39 +469,41 @@ export const startAccountBrowser = async (
 ): Promise<void> => {
   try {
     const { id } = req.params;
-    const account = findAccountById(id);
-    
+    const account = getAccountById(id);
+
     if (!account) {
       res.status(404).json({ success: false, message: 'Account not found' });
       return;
     }
-    
+
     if (!account.user_data_dir) {
       res.status(400).json({
         success: false,
-        message: 'No browser profile associated with this account. Please complete login first.',
+        message:
+          'No browser profile associated with this account. Please complete login first.',
       });
       return;
     }
-    
+
     // Get provider config to find extension folder
-    const provider = findProviderById(account.provider_id);
+    const provider = getProviderConfig(account.provider_id);
     let extensionPath: string | null = null;
-    
+
     if (provider?.browser_extension_folder) {
-      extensionPath = path.join(__dirname, '../../extensions', provider.browser_extension_folder);
-      logger.info(`[AccountController] Using extension from: ${extensionPath}`);
-    } else {
-      logger.info(`[AccountController] No browser_extension_folder configured for ${account.provider_id}`);
+      extensionPath = path.join(
+        __dirname,
+        '../../extensions',
+        provider.browser_extension_folder,
+      );
     }
-    
+
     const result = await startBrowserForAccount(
-      account.user_data_dir, 
+      account.user_data_dir,
       account.provider_id,
       undefined, // loginUrl will use default
-      extensionPath || undefined
+      extensionPath || undefined,
     );
-    
+
     res.status(200).json({
       success: true,
       data: result,

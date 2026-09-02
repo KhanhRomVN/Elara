@@ -1,15 +1,43 @@
-import * as fs from 'fs';
-import * as path from 'path';
+/**
+ * ------------------------------------------------------------------
+ * Provider Registry
+ * ------------------------------------------------------------------
+ * Quản lý đăng ký và truy xuất các provider instances.
+ * Hỗ trợ alias cho các provider, đăng ký proxy handlers,
+ * và tự động load providers từ các module con.
+ *
+ * Main functions:
+ * - register()            : Đăng ký một provider và các alias
+ * - getProvider()         : Lấy provider theo tên
+ * - getAllProviders()     : Lấy danh sách tất cả provider
+ * - getProviderForModel() : Tìm provider hỗ trợ một model
+ * - loadProviders()       : Load tất cả provider từ các module
+ * - registerAllRoutes()   : Đăng ký routes cho tất cả provider
+ * ------------------------------------------------------------------
+ */
+
+// ─── Imports ────────────────────────────────────────────────────────────
+// ── External ──
 import { Router } from 'express';
+
+// ── Types ──
 import { Provider } from '../types/index';
-import { createLogger } from '../utils/logger';
+
+// ── Services ──
 import { proxyService } from '../services/proxy.service';
 
+// ── Utils ──
+import { createLogger } from '../utils/logger';
+
+// ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('ProviderRegistry');
+
+// ─── Class ──────────────────────────────────────────────────────────────
 
 class ProviderRegistry {
   private providers: Map<string, Provider> = new Map();
 
+  // ─── Register ──────────────────────────────────────────────────────
   register(provider: Provider) {
     const key = provider.name.toLowerCase();
     this.providers.set(key, provider);
@@ -48,6 +76,7 @@ class ProviderRegistry {
     }
   }
 
+  // ─── Getters ────────────────────────────────────────────────────────
   getProvider(name: string): Provider | undefined {
     const key = name.toLowerCase();
     const provider = this.providers.get(key);
@@ -67,6 +96,7 @@ class ProviderRegistry {
     return undefined;
   }
 
+  // ─── Load Providers ────────────────────────────────────────────────
   async loadProviders() {
     try {
       const { default: ClaudeProvider } = require('./claude');
@@ -120,6 +150,7 @@ class ProviderRegistry {
     }
   }
 
+  // ─── Register Routes ────────────────────────────────────────────────
   registerAllRoutes(router: Router) {
     this.providers.forEach((provider) => {
       if (provider.registerRoutes) {
