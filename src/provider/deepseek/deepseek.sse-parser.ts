@@ -179,6 +179,8 @@ export async function parseSSEStream(
               },
             );
             const err: any = new Error(hintMsg);
+            if (finishReason) err.code = finishReason;
+            err.isDeepSeekFatalHint = true; // marker: must propagate through the JSON.parse catch below
             throw err;
           }
           currentEventType = '';
@@ -385,6 +387,11 @@ export async function parseSSEStream(
         }
       } catch (e) {
         const err = e as any;
+        // Fatal server hint errors must propagate to the provider's onError —
+        // they are NOT JSON parse errors, so don't swallow them here.
+        if (err?.isDeepSeekFatalHint) {
+          throw err;
+        }
         logger.error(
           `[DeepSeek] SSE parse error | session=${sessionId} | line="${line.slice(0, 200)}"`,
           {

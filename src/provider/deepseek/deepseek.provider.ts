@@ -334,7 +334,6 @@ export class DeepSeekProvider implements Provider {
         parentMessageId = await this.getLastMessageId(client, sessionId);
       }
 
-
       const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
       const randomPart = crypto.randomBytes(8).toString('hex');
       const clientStreamId = `${date}-${randomPart}`;
@@ -420,6 +419,9 @@ export class DeepSeekProvider implements Provider {
         continuationCount < MAX_CONTINUATIONS
       ) {
         continuationCount++;
+        logger.info(
+          `[DeepSeek] Auto-continue attempt ${continuationCount}/${MAX_CONTINUATIONS} | session=${sessionId} | msgId=${responseMessageId}`,
+        );
 
         if (onMetadata) {
           onMetadata({
@@ -443,7 +445,9 @@ export class DeepSeekProvider implements Provider {
         }
 
         if (!continueResponse.body) {
-          logger.warn('[DeepSeek] /chat/continue returned no body, stopping');
+          logger.warn(
+            '[DeepSeek] /chat/continue returned no body, stopping continuation',
+          );
           break;
         }
 
@@ -467,11 +471,14 @@ export class DeepSeekProvider implements Provider {
         if (continueResult.responseMessageId !== null) {
           responseMessageId = continueResult.responseMessageId;
         }
+        logger.info(
+          `[DeepSeek] Auto-continue attempt ${continuationCount} result | incomplete=${continueResult.incomplete} | newMsgId=${continueResult.responseMessageId ?? 'unchanged'} | session=${sessionId}`,
+        );
       }
 
       if (continuationCount >= MAX_CONTINUATIONS && incomplete) {
         logger.warn(
-          `[DeepSeek] Max continuations reached | session=${sessionId}`,
+          `[DeepSeek] Max continuations reached | session=${sessionId} | totalAttempts=${continuationCount}`,
         );
       }
 
@@ -490,6 +497,7 @@ export class DeepSeekProvider implements Provider {
         stack: err.stack,
         code: err.code,
         status: err.status,
+        response: err.response,
         sessionId: sessionId || 'unknown',
         model: currentModel || 'unknown',
       });
@@ -561,10 +569,10 @@ export class DeepSeekProvider implements Provider {
         return lastAssistant?.message_id || null;
       }
       logger.warn(
-        `[DeepSeek] Failed to fetch history messages: HTTP ${res.status}`,
+        `[DeepSeek] Failed to fetch history messages: HTTP ${res.status} | session=${sessionId}`,
       );
     } catch (e) {
-      logger.warn('[DeepSeek] Failed to fetch last message ID:', e);
+      logger.warn(`[DeepSeek] Failed to fetch last message ID | session=${sessionId}:`, e);
     }
     return null;
   }
