@@ -147,14 +147,40 @@ export async function parseSSEStream(
           continue;
         }
 
+        // ── event: hint ───────────────────────────────────────────────────
+        // DeepSeek sends `event: hint` for server-side notices, e.g. length limits or busy warnings
         if (currentEventType === 'hint') {
           if (json.type === 'error') {
             const hintMsg =
               json.content || 'Unknown DeepSeek server hint error';
+            const finishReason = json.finish_reason || '';
+
+            // Check if this is a non-fatal length limit notification (DeepSeek still generates truncated response)
+            if (
+              finishReason === 'context_length_exceeded' ||
+              hintMsg.toLowerCase().includes('length limit') ||
+              hintMsg.toLowerCase().includes('can only read')
+            ) {
+              logger.warn(
+                `[DeepSeek] Server context length limit hint (non-fatal warning): ${hintMsg} | session=${sessionId}`,
+              );
+              currentEventType = '';
+              continue; // Don't abort the stream! Let DeepSeek continue streaming the generated response!
+            }
+
+            // Log full error details with logger.error for fatal errors
             logger.error(
-              `[DeepSeek] Server hint error | session=${sessionId} | message=${hintMsg}`,
+              `[DeepSeek] Fatal server hint error | session=${sessionId} | finish_reason=${finishReason} | message=${hintMsg}`,
+              {
+                fullJson: json,
+                sessionId,
+                finishReason,
+                hintMsg,
+              },
             );
             const err: any = new Error(hintMsg);
+            if (finishReason) err.code = finishReason;
+            err.isDeepSeekFatalHint = true; // marker: must propagate through the JSON.parse catch below
             throw err;
           }
           currentEventType = '';
@@ -361,6 +387,11 @@ export async function parseSSEStream(
         }
       } catch (e) {
         const err = e as any;
+        // Fatal server hint errors must propagate to the provider's onError —
+        // they are NOT JSON parse errors, so don't swallow them here.
+        if (err?.isDeepSeekFatalHint) {
+          throw err;
+        }
         logger.error(
           `[DeepSeek] SSE parse error | session=${sessionId} | line="${line.slice(0, 200)}"`,
           {

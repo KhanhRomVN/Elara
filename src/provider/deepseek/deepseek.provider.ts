@@ -47,6 +47,7 @@ import {
   MAX_CONTINUATIONS,
   GOOGLE_OAUTH_LOGIN_URL,
 } from './deepseek.constant';
+import { preparePromptAndAttachments } from '../../utils/prompt-uploader';
 
 // ─── Constants ──────────────────────────────────────────────────────────
 const logger = createLogger('DeepSeekProvider');
@@ -333,50 +334,27 @@ export class DeepSeekProvider implements Provider {
         parentMessageId = await this.getLastMessageId(client, sessionId);
       }
 
-      // ── PoW Challenge ──────────────────────────────────────────────────
-      const challengeClient = new HttpClient({
-        baseURL: BASE_URL,
-        headers: {
-          ...baseHeaders,
-          Referer: `${BASE_URL}/a/chat/s/${sessionId}`,
-        },
-      });
-
-      const challengeRes = await challengeClient.post(
-        '/api/v0/chat/create_pow_challenge',
-        { target_path: '/api/v0/chat/completion' },
-      );
-      let powResponseBase64 = '';
-      if (challengeRes.ok) {
-        try {
-          const rawText = await challengeRes.text();
-          const challengeJson = JSON.parse(rawText);
-          const challengeData: PoWChallenge =
-            challengeJson?.data?.biz_data?.challenge;
-          if (challengeData) {
-            const dsHash = await this.getDsHash();
-            const powAnswer = await solvePoW(dsHash, challengeData);
-            powResponseBase64 = Buffer.from(JSON.stringify(powAnswer)).toString(
-              'base64',
-            );
-          }
-        } catch (e) {
-          logger.warn(
-            `[DeepSeek] Failed to parse PoW challenge response | session=${sessionId}`,
-          );
-        }
-      }
-
       const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
       const randomPart = crypto.randomBytes(8).toString('hex');
       const clientStreamId = `${date}-${randomPart}`;
 
+      // Run Chat PoW challenge solving and large payload auto-upload in parallel to eliminate sequential lag
+      const [powResponseBase64, { promptText, refFileIds }] = await Promise.all([
+        this.solveChatPoW(baseHeaders, sessionId),
+        preparePromptAndAttachments({
+          providerId: 'deepseek',
+          messages,
+          refFileIds: options.ref_file_ids,
+          uploadFn: (file) => this.uploadFile(credential, file),
+        }),
+      ]);
+
       const requestPayload: ChatPayload = {
         chat_session_id: sessionId,
         parent_message_id: parentMessageId || null || undefined,
-        prompt: messages[messages.length - 1].content,
+        prompt: promptText,
         messages: [],
-        ref_file_ids: options.ref_file_ids || [],
+        ref_file_ids: refFileIds,
         thinking_enabled: options.thinking ?? model === 'deepseek-reasoner',
         search_enabled: options.search || false,
         client_stream_id: clientStreamId,
@@ -441,6 +419,9 @@ export class DeepSeekProvider implements Provider {
         continuationCount < MAX_CONTINUATIONS
       ) {
         continuationCount++;
+        logger.info(
+          `[DeepSeek] Auto-continue attempt ${continuationCount}/${MAX_CONTINUATIONS} | session=${sessionId} | msgId=${responseMessageId}`,
+        );
 
         if (onMetadata) {
           onMetadata({
@@ -464,7 +445,9 @@ export class DeepSeekProvider implements Provider {
         }
 
         if (!continueResponse.body) {
-          logger.warn('[DeepSeek] /chat/continue returned no body, stopping');
+          logger.warn(
+            '[DeepSeek] /chat/continue returned no body, stopping continuation',
+          );
           break;
         }
 
@@ -488,11 +471,14 @@ export class DeepSeekProvider implements Provider {
         if (continueResult.responseMessageId !== null) {
           responseMessageId = continueResult.responseMessageId;
         }
+        logger.info(
+          `[DeepSeek] Auto-continue attempt ${continuationCount} result | incomplete=${continueResult.incomplete} | newMsgId=${continueResult.responseMessageId ?? 'unchanged'} | session=${sessionId}`,
+        );
       }
 
       if (continuationCount >= MAX_CONTINUATIONS && incomplete) {
         logger.warn(
-          `[DeepSeek] Max continuations reached | session=${sessionId}`,
+          `[DeepSeek] Max continuations reached | session=${sessionId} | totalAttempts=${continuationCount}`,
         );
       }
 
@@ -511,11 +497,57 @@ export class DeepSeekProvider implements Provider {
         stack: err.stack,
         code: err.code,
         status: err.status,
+        response: err.response,
         sessionId: sessionId || 'unknown',
         model: currentModel || 'unknown',
       });
       onError(err);
     }
+  }
+
+  // ─── PoW Solver ──────────────────────────────────────────────────────
+
+  private async solveChatPoW(baseHeaders: any, sessionId: string): Promise<string> {
+    try {
+      const challengeClient = new HttpClient({
+        baseURL: BASE_URL,
+        headers: {
+          ...baseHeaders,
+          Referer: `${BASE_URL}/a/chat/s/${sessionId}`,
+        },
+      });
+
+      const challengeRes = await challengeClient.post(
+        '/api/v0/chat/create_pow_challenge',
+        { target_path: '/api/v0/chat/completion' },
+      );
+
+      if (challengeRes.ok) {
+        const rawText = await challengeRes.text();
+        const challengeJson = JSON.parse(rawText);
+        const challengeData: PoWChallenge =
+          challengeJson?.data?.biz_data?.challenge;
+        if (challengeData) {
+          const dsHash = await this.getDsHash();
+          const powAnswer = await solvePoW(dsHash, challengeData);
+          return Buffer.from(JSON.stringify(powAnswer)).toString('base64');
+        } else {
+          logger.warn(
+            `[DeepSeek] PoW challenge data missing from response | session=${sessionId} | body=${rawText.slice(0, 200)}`,
+          );
+        }
+      } else {
+        const errText = await challengeRes.text().catch(() => '<unreadable>');
+        logger.warn(
+          `[DeepSeek] PoW challenge request failed | status=${challengeRes.status} | session=${sessionId} | body=${errText.slice(0, 200)}`,
+        );
+      }
+    } catch (e) {
+      logger.warn(
+        `[DeepSeek] Failed to parse PoW challenge response | session=${sessionId} | error=${e}`,
+      );
+    }
+    return '';
   }
 
   // ─── History ─────────────────────────────────────────────────────────
@@ -537,10 +569,10 @@ export class DeepSeekProvider implements Provider {
         return lastAssistant?.message_id || null;
       }
       logger.warn(
-        `[DeepSeek] Failed to fetch history messages: HTTP ${res.status}`,
+        `[DeepSeek] Failed to fetch history messages: HTTP ${res.status} | session=${sessionId}`,
       );
     } catch (e) {
-      logger.warn('[DeepSeek] Failed to fetch last message ID:', e);
+      logger.warn(`[DeepSeek] Failed to fetch last message ID | session=${sessionId}:`, e);
     }
     return null;
   }
